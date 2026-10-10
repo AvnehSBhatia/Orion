@@ -1,0 +1,250 @@
+import type { CaptureResponse, CodeIngestResponse, ImageStatus, SourceKind } from "@/contract/types";
+import { SOURCE_TEXT_MAX, sourceId, type GraphUpdate, type Store } from "@/db/store";
+import type { Embedder } from "@/llm/embed";
+import { cardLines, cardsToUpdate, type CaptureInput, type CodeInput, type ExtractContext, type Extractor, type KnownNode } from "@/llm/extract";
+import type { LlmClient } from "@/llm/openrouter";
+import { htmlToText, slugify } from "@/lib/text";
+import { HttpError } from "@/server/http";
+import { maintainInBackground } from "@/pseudo/maintain";
+import { recomputeUserVectors } from "@/steer/users";
+import { prepareScreenshot, pruneImage, type OcrFn } from "./image";
+
+export type IngestDeps = {
+  store: Store;
+  embedder: Embedder;
+  extractor: Extractor;
+  /** Org maintenance (labels, retrain, clusters, digests) and screenshot pruning after each ingest. Off when absent. */
+  background?: { llm: LlmClient; model: string } | null;
+  ocr?: OcrFn;
+};
+
+/** Paths that never go to the model, whatever the sender filtered. */
+const ALWAYS_EXCLUDE = [
+  /(^|\/)\.env[^/]*$/,
+  /\.(pem|key)$/,
+  /(^|\/)node_modules\//,
+  /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|Cargo\.lock|poetry\.lock|Gemfile\.lock|go\.sum)$/,
+];
+
+/** Visible page text sent to the extractor. */
+const MAX_PAGE_TEXT = 30_000;
+/** The extension sends every 5 seconds; a repeat of the sender's last capture of a URL within this window is skipped. */
+export const CAPTURE_REPEAT_MS = 30 * 60_000;
+
+export function isAlwaysExcluded(path: string): boolean {
+  return ALWAYS_EXCLUDE.some((re) => re.test(path));
+}
+
+const NOTHING: GraphUpdate = { nodes: [], edges: [] };
+
+/** Null when the model is unavailable: the document is then stored unjudged, since it may well be useful context. */
+async function extractOrNull(run: () => Promise<GraphUpdate>): Promise<GraphUpdate | null> {
+  try {
+    return await run();
+  } catch (err) {
+    if (!(err instanceof HttpError)) throw err;
+    console.warn(`Extraction skipped (${err.status}: ${err.message}). Storing the source without graph changes.`);
+    return null;
+  }
+}
+
+const isEmpty = (u: GraphUpdate) => !u.nodes.length && !u.edges.length;
+
+/**
+ * Pages the model found no work in, per store, so an open inbox is not re-sent to the model every few seconds.
+ * In memory only: after a restart a page is judged once more.
+ */
+const notWork = new WeakMap<Store, Map<string, { words: Set<string>; at: number }>>();
+/** Share of words two captures of a not-work page must have in common to count as the same page. */
+export const NOT_WORK_SAME_PAGE = 0.8;
+
+const wordSet = (text: string) => new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (!a.size && !b.size) return 1;
+  let both = 0;
+  for (const w of a) if (b.has(w)) both++;
+  return both / (a.size + b.size - both);
+}
+
+function seenAsNotWork(store: Store, key: string, words: Set<string>, now: number): boolean {
+  const hit = notWork.get(store)?.get(key);
+  return !!hit && now - hit.at <= CAPTURE_REPEAT_MS && jaccard(hit.words, words) >= NOT_WORK_SAME_PAGE;
+}
+
+function rememberNotWork(store: Store, key: string, words: Set<string>, now: number): void {
+  let seen = notWork.get(store);
+  if (!seen) notWork.set(store, (seen = new Map()));
+  seen.set(key, { words, at: now });
+  if (seen.size > 500) for (const [k, v] of seen) if (now - v.at > CAPTURE_REPEAT_MS) seen.delete(k);
+}
+
+function aboutFor(store: Store, userId?: string): ExtractContext {
+  const u = userId ? store.getUser(userId) : null;
+  return { org: store.getOrg(), author: u ? { name: u.name, role: u.role } : null };
+}
+
+function known(store: Store): KnownNode[] {
+  return store.listNodes().map(({ id, label, type, domain }) => ({ id, label, type, domain }));
+}
+
+type SourceDoc = {
+  kind: SourceKind;
+  ref: string;
+  title: string;
+  text: string;
+  image: Buffer | null;
+  ocrText?: string;
+  imageStatus?: ImageStatus;
+};
+
+/**
+ * Upsert the extracted graph, store the document with what it changed, record who touched it,
+ * embed what is new (nodes as text, the document as text plus screenshot, both with their author's role),
+ * project to the org space, refit every person's gravity, and schedule org maintenance.
+ */
+export async function applyUpdate(
+  deps: IngestDeps,
+  update: GraphUpdate,
+  source: SourceDoc,
+  userId?: string,
+  now = new Date().toISOString(),
+): Promise<{ nodesTouched: string[]; sourceId: string }> {
+  const { store } = deps;
+  const author = userId && store.getUser(userId) ? userId : null;
+  const { touched, changes } = store.upsertGraph(update, { sourceKind: source.kind, sourceRef: source.ref, now });
+  const id = sourceId(source.kind, source.ref, now);
+  store.saveSource({ id, ...source, authorId: author, createdAt: now }, changes);
+  if (author && touched.length) store.addTouches(author, touched);
+  await recomputeUserVectors(store, deps.embedder);
+  if (deps.background) maintainInBackground(store, deps.embedder, deps.background.llm, deps.background.model);
+  return { nodesTouched: touched, sourceId: id };
+}
+
+let pruning: Promise<unknown> = Promise.resolve();
+
+/** One screenshot at a time: a prune embeds 17 crops, and the embedder interleaves live queries between them. */
+function pruneInBackground(deps: IngestDeps, id: string, image: Buffer): void {
+  const { store, embedder, background } = deps;
+  pruning = pruning.then(async () => {
+    try {
+      const r = await pruneImage(embedder, image);
+      console.log(`screenshot ${id}: ${r.status}, dropped ${r.dropped} tiles, sim ${r.sim?.toFixed(3) ?? "n/a"}, ${r.ms}ms`);
+      if (r.status !== "pruned" || !store.getSource(id)) return;
+      store.replaceSourceImage(id, r.image, "pruned");
+      await recomputeUserVectors(store, embedder);
+      if (background) maintainInBackground(store, embedder, background.llm, background.model);
+    } catch (err) {
+      console.error(`screenshot prune failed for ${id}`, err);
+    }
+  });
+}
+
+const visual = (status: ImageStatus) => status === "kept" || status === "pruned";
+
+/** Same page text, and same screenshot text when the screenshot carried something the page did not. */
+function repeatOf(
+  deps: IngestDeps,
+  body: { url: string; userId: string },
+  text: string,
+  shot: { ocrText: string; status: ImageStatus },
+  now: number,
+) {
+  const prev = deps.store.lastSourceBy("extension", body.url, body.userId);
+  if (!prev || now - Date.parse(prev.createdAt) > CAPTURE_REPEAT_MS) return null;
+  if (prev.text !== text.slice(0, SOURCE_TEXT_MAX)) return null;
+  const ocr = (s: { ocrText: string; status: ImageStatus }) => (visual(s.status) ? s.ocrText.slice(0, SOURCE_TEXT_MAX) : "");
+  return ocr({ ocrText: prev.ocrText, status: prev.imageStatus }) === ocr(shot) ? prev : null;
+}
+
+/**
+ * The screenshot goes through OCR first. If its text is already on the page it is dropped (text only);
+ * otherwise it is trimmed and shrunk, the extractor reads its OCR text, and it is pruned in the background.
+ * A repeat of the sender's last capture of the same URL is answered from that capture without calling the model.
+ * A page the model finds no work in is not stored at all (`notWork`), and is not re-judged while it stays the same.
+ */
+export async function ingestCapture(
+  deps: IngestDeps,
+  body: Omit<CaptureInput, "text"> & { html: string; screenshotB64: string; userId: string },
+  now = Date.now(),
+): Promise<CaptureResponse> {
+  const text = htmlToText(body.html).slice(0, MAX_PAGE_TEXT);
+  const title = body.title || body.url;
+  const raw = body.screenshotB64 ? Buffer.from(body.screenshotB64, "base64") : null;
+  const shot = raw?.length ? await prepareScreenshot(deps.embedder, { title, pageText: text, image: raw }, deps.ocr) : null;
+  const prev = repeatOf(deps, body, text, { ocrText: shot?.ocrText ?? "", status: shot?.status ?? "none" }, now);
+  if (prev) return { nodesTouched: [], sourceId: prev.id, imageStatus: prev.imageStatus, duplicateOf: prev.id };
+  const seen = shot?.status === "kept" && shot.ocrText ? `${text}\n\nText in the screenshot:\n${shot.ocrText}` : text;
+  const imageStatus: ImageStatus = shot?.status ?? "none";
+  const key = `${body.userId}\n${body.url}`;
+  const words = wordSet(seen);
+  if (seenAsNotWork(deps.store, key, words, now)) return { nodesTouched: [], sourceId: null, imageStatus, notWork: true };
+
+  const update = await extractOrNull(() =>
+    deps.extractor.fromCapture(
+      { url: body.url, title: body.title, text: seen.slice(0, MAX_PAGE_TEXT) },
+      known(deps.store),
+      aboutFor(deps.store, body.userId),
+    ),
+  );
+  if (update && isEmpty(update)) {
+    rememberNotWork(deps.store, key, words, now);
+    return { nodesTouched: [], sourceId: null, imageStatus, notWork: true };
+  }
+  const res = await applyUpdate(
+    deps,
+    update ?? NOTHING,
+    { kind: "extension", ref: body.url, title, text, image: shot?.image ?? null, ocrText: shot?.ocrText ?? "", imageStatus },
+    body.userId,
+    new Date(now).toISOString(),
+  );
+  if (shot?.image && deps.background) pruneInBackground(deps, res.sourceId, shot.image);
+  return { ...res, imageStatus };
+}
+
+/** The person behind a commit: the given userId if known, else the person whose id or name matches the git author. */
+export function commitAuthor(store: Store, userId?: string, author?: { name: string; email?: string }): string | undefined {
+  if (userId && store.getUser(userId)) return userId;
+  if (!author) return undefined;
+  const name = author.name.trim().toLowerCase();
+  const local = author.email?.split("@")[0]?.toLowerCase();
+  return store
+    .listUsers()
+    .find((u) => u.name.toLowerCase() === name || u.id === slugify(author.name) || (!!local && u.id === slugify(local)))?.id;
+}
+
+export async function ingestCode(
+  deps: IngestDeps,
+  body: CodeInput & { userId?: string; author?: { name: string; email?: string } },
+  maxDiffChars: number,
+): Promise<CodeIngestResponse> {
+  const files = body.files
+    .filter((f) => !isAlwaysExcluded(f.path))
+    .map((f) => ({ path: f.path, diff: f.diff.slice(0, maxDiffChars) }));
+  const cards = (body.cards ?? []).filter((c) => !c.paths.some(isAlwaysExcluded));
+  if (!files.length && !cards.length) return { nodesTouched: [], sourceId: null };
+
+  const userId = commitAuthor(deps.store, body.userId, body.author);
+  const update = await extractOrNull(() =>
+    deps.extractor.fromCode({ repo: body.repo, commitSha: body.commitSha, files, cards }, known(deps.store), aboutFor(deps.store, userId)),
+  );
+  const short = body.commitSha.slice(0, 7);
+  const names = files.length ? files.map((f) => f.path) : cards.map((c) => c.label);
+  const text = [
+    cards.length ? `Feature cards:\n${cardLines(cards)}` : "",
+    ...files.map((f) => `--- ${f.path}\n${f.diff}`),
+  ].filter(Boolean);
+  const fromCards = cards.length && (!update || isEmpty(update)) ? cardsToUpdate(cards) : null;
+  return applyUpdate(
+    deps,
+    fromCards ?? update ?? NOTHING,
+    {
+      kind: "code",
+      ref: `${body.repo}@${body.commitSha}`,
+      title: `${body.repo} ${short}: ${names.slice(0, 3).join(", ")}${names.length > 3 ? ` and ${names.length - 3} more` : ""}`,
+      text: text.join("\n\n"),
+      image: null,
+    },
+    userId,
+  );
+}

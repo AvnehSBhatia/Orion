@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Orion</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { width: 340px; padding: 16px 16px 14px; }
+    body.hiding { width: 720px; }
+
+    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+
+    .view { display: none; }
+    body:not(.setup):not(.hiding) #main { display: block; }
+    body.setup:not(.hiding) #setup { display: block; }
+    body.hiding #hide-panel { display: block; }
+    body.setup #links #hide, body.hiding #links { display: none; }
+    body.setup .pill { visibility: hidden; }
+
+    #setup h2 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+    #setup .lede { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; }
+    #setup .primary { margin-top: 14px; }
+
+    /* Capture toggle */
+    .capture { position: relative; }
+    .capture .ripple {
+      position: absolute; inset: 0; border-radius: 16px; pointer-events: none;
+      border: 1.5px solid var(--violet); opacity: 0;
+    }
+    body.recording .capture .ripple { border-color: var(--live); }
+    #toggle {
+      position: relative; width: 100%; height: 58px; border-radius: 16px;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      font-size: 15px;
+    }
+    #toggle .glyph { width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: border-radius 0.25s ease, transform 0.25s ease; }
+    body.recording #toggle {
+      background: linear-gradient(100deg, rgba(255, 92, 122, 0.16), rgba(255, 92, 122, 0.08));
+      border: 1px solid rgba(255, 92, 122, 0.45);
+      box-shadow: 0 8px 28px -10px rgba(255, 92, 122, 0.6);
+    }
+    body.recording #toggle .glyph { border-radius: 3px; background: var(--live); transform: scale(0.9); }
+
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+    .stat { padding: 10px 12px; }
+    .stat .value { font-size: 18px; font-weight: 620; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+    .stat .name { color: var(--faint); font-size: 11.5px; font-weight: 550; }
+
+    #status { min-height: 20px; margin: 12px 2px 10px; color: var(--muted); font-size: 12.5px; }
+    #status[data-tone="ok"] { color: var(--text); }
+    #status[data-tone="error"] { color: var(--alert); }
+
+    #links { padding-top: 10px; border-top: 1px solid var(--panel-edge); }
+    body.recording #hide { visibility: hidden; }
+
+    #shot { display: block; width: 100%; max-height: 420px; object-fit: contain; border-radius: 12px; cursor: crosshair; touch-action: none; border: 1px solid var(--panel-edge); }
+    #hide-panel .row { margin-top: 12px; }
+    #hide-panel .primary { width: auto; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div id="logo" class="logo" aria-hidden="true"></div>
+      <div class="brand-text">
+        <h1 class="wordmark reveal">Orion</h1>
+        <div id="who" class="subtle reveal">Not joined yet</div>
+      </div>
+    </div>
+    <div class="pill reveal" aria-live="polite"><span class="dot"><span class="ring"></span></span><span id="pill-text">Paused</span></div>
+  </header>
+
+  <section id="setup" class="view">
+    <form id="setup-form" class="card reveal" novalidate>
+      <h2>Join your org</h2>
+      <p class="lede">Once per browser. Orion uses this to file what you work on.</p>
+      <label for="org-id">Org id</label>
+      <input id="org-id" required autocomplete="off" spellcheck="false" placeholder="demo" />
+      <div id="org-hint" class="hint"></div>
+      <label for="name">Your name</label>
+      <input id="name" required autocomplete="name" placeholder="Priya Shah" />
+      <label for="role">What you do, in one sentence</label>
+      <textarea id="role" required maxlength="400" placeholder="I run paid ads and own the launch budget."></textarea>
+      <button id="join" type="submit" class="primary">Join</button>
+    </form>
+  </section>
+
+  <section id="main" class="view">
+    <div class="capture reveal">
+      <span id="ripple" class="ripple"></span>
+      <button id="toggle" class="primary"><span class="glyph"></span><span id="toggle-text">Start capturing</span></button>
+    </div>
+    <div class="stats">
+      <div class="stat card reveal"><div id="sent" class="value">0</div><div class="name">Sent</div></div>
+      <div class="stat card reveal"><div id="shared" class="value">0</div><div class="name" title="Captures Orion kept as work. Repeats and pages with no work on them are not kept.">Kept</div></div>
+      <div class="stat card reveal"><div id="last" class="value">--</div><div class="name">Last sent</div></div>
+    </div>
+  </section>
+
+  <section id="hide-panel" class="view">
+    <canvas id="shot"></canvas>
+    <div class="row">
+      <div class="row">
+        <button id="undo" class="secondary">Undo</button>
+        <button id="cancel" class="secondary">Cancel</button>
+      </div>
+      <button id="send-hidden" class="primary">Send with hidden areas</button>
+    </div>
+  </section>
+
+  <div id="status" class="reveal" role="status"></div>
+
+  <nav id="links" class="row reveal">
+    <a id="hide" class="link" href="#">Hide something</a>
+    <a id="settings" class="link" href="#">Settings</a>
+  </nav>
+
+  <script src="popup.js"></script>
+</body>
+</html>
