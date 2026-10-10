@@ -5,7 +5,7 @@
 // 5 second timer, because timers in a minimized window get throttled.
 
 import { getRecording, onRecordingChange, patchRecording } from './recording';
-import type { BgRequest, RecordingState, ScreenFrame } from './types';
+import type { BgRequest, BgResult, RecordingState, ScreenFrame } from './types';
 
 const MAX_WIDTH = 1920;
 const MAX_HEIGHT = 1200;
@@ -39,10 +39,6 @@ const shared = new Map<string, Shared>();
 const counts = { window: 0, screen: 0 };
 let nextId = 1;
 let state: RecordingState | null = null;
-
-function tell(msg: BgRequest) {
-  return chrome.runtime.sendMessage(msg).catch(() => {});
-}
 
 // Windows and screens
 
@@ -187,7 +183,14 @@ function setStatus(message: string) {
   statusEl.textContent = message;
 }
 
-toggleBtn.addEventListener('click', () => tell({ type: state?.recording ? 'stop' : 'sources-start' }));
+toggleBtn.addEventListener('click', async () => {
+  toggleBtn.disabled = true;
+  const res = (await chrome.runtime
+    .sendMessage<BgRequest, BgResult<unknown>>({ type: state?.recording ? 'stop' : 'sources-start' })
+    .catch(() => undefined)) as BgResult<unknown> | undefined;
+  toggleBtn.disabled = false;
+  if (!res?.ok) setStatus('Could not start. Reload Constellation in chrome://extensions, then try again.');
+});
 
 function emptyNote(text: string) {
   const p = document.createElement('p');

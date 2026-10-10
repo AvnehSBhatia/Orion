@@ -19,7 +19,7 @@ import type {
 } from './types';
 
 const CAPTURE_INTERVAL_MS = 5_000;
-const CAPTURE_WINDOW = { width: 520, height: 640 };
+const CAPTURE_WINDOW = { width: 680, height: 860 };
 // A thumbnail pixel counts as changed past this grayscale delta, and a window
 // or screen counts as changed past this share of pixels. Tuned so the cursor and the menu
 // bar clock alone do not trigger a send.
@@ -72,6 +72,10 @@ async function handle(msg: BgRequest): Promise<unknown> {
       return takeScreenshot(msg.windowId);
     case 'capture':
       return post(await buildPayload(await chrome.tabs.get(msg.tabId), msg));
+    default:
+      // Usually a page built from newer code than this worker. Fail loudly so
+      // the page can tell the user to reload the extension.
+      throw new CaptureError('unknown', `unknown message ${(msg as { type: string }).type}`);
   }
 }
 

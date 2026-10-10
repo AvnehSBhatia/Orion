@@ -5,8 +5,8 @@
   <title>Constellation: choose what to share</title>
   <link rel="stylesheet" href="styles.css" />
   <style>
-    body { padding: 16px; }
-    h1 { font-size: 20px; margin-bottom: 8px; }
+    body { padding: 24px 24px 0; }
+    h1 { font-size: 24px; margin-bottom: 8px; }
     h2 { font-size: 18px; font-weight: 600; margin: 24px 0 8px; }
     .muted { color: var(--muted); font-size: 16px; margin: 0 0 8px; }
     .list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
@@ -19,13 +19,21 @@
       border-radius: 10px;
       font-size: 16px;
     }
-    .item video { width: 96px; height: 54px; object-fit: cover; border-radius: 6px; background: #000; }
+    .item video { width: 160px; height: 90px; object-fit: cover; border-radius: 6px; background: #000; }
     .item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .item .host { color: var(--muted); font-size: 14px; }
     .item input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
     label.item { cursor: pointer; }
     .empty { color: var(--muted); font-size: 14px; margin: 0; }
-    .footer { margin-top: 24px; }
+    /* Keep start and stop visible however long the tab list gets. */
+    .footer {
+      position: sticky;
+      bottom: 0;
+      margin-top: 24px;
+      padding: 16px 0 24px;
+      background: var(--bg);
+      border-top: 1px solid var(--panel);
+    }
     #status { color: var(--muted); font-size: 16px; min-height: 24px; margin: 0 0 8px; }
     #toggle.stop { background: var(--alert); }
   </style>
