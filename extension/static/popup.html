@@ -8,18 +8,21 @@
     body.hiding { width: 720px; }
 
     #status { min-height: 24px; margin: 16px 0 8px; font-size: 16px; color: var(--muted); }
-    body[data-state="done"] #status { color: var(--text); }
-    body[data-state="error"] #status { color: var(--alert); }
+    #status[data-tone="ok"] { color: var(--text); }
+    #status[data-tone="error"] { color: var(--alert); }
 
     .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 
+    body.recording #toggle { background: var(--alert); }
+    body.recording #hide { visibility: hidden; }
+
     #hide-panel { display: none; }
     body.hiding #hide-panel { display: block; }
-    body.hiding #capture, body.hiding #links { display: none; }
+    body.hiding #toggle, body.hiding #links { display: none; }
 
     #setup { display: none; }
     body.setup #setup { display: block; }
-    body.setup #capture, body.setup #hide { display: none; }
+    body.setup #toggle, body.setup #hide { display: none; }
 
     #shot {
       display: block;
@@ -33,10 +36,10 @@
     #hide-panel .row { margin-top: 16px; }
   </style>
 </head>
-<body data-state="idle">
+<body>
   <h1>Constellation</h1>
 
-  <button id="capture" class="primary">Capture this page</button>
+  <button id="toggle" class="primary">Start capturing</button>
 
   <form id="setup">
     <label for="user-id">Your user id</label>

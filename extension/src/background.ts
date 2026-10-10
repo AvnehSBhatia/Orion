@@ -1,12 +1,18 @@
-// Service worker. Does the actual capture and upload so the request still
-// finishes if the popup closes, and so the fetch is not subject to page CORS.
+// Service worker. While recording, sends a screenshot plus the page HTML of the
+// active tab every few seconds. Lives here, not in the popup, so it keeps going
+// after the popup closes and the fetch is not subject to page CORS.
 
 import { readPage, type PageData } from './content';
+import { getRecording, patchRecording } from './recording';
 import { getSettings } from './settings';
-import type { BgRequest, BgResult, CapturePayload, CaptureResponse, ErrorCode } from './types';
+import type { BgRequest, BgResult, CapturePayload, CaptureResponse, ErrorCode, Rect } from './types';
 
+const CAPTURE_INTERVAL_MS = 5_000;
+const WATCHDOG_ALARM = 'capture-watchdog';
+const WATCHDOG_PERIOD_MIN = 0.5; // the shortest period Chrome allows
+const BADGE_COLOR = '#FF5C7A';
 const MAX_SCREENSHOT_B64 = 2_000_000;
-const REQUEST_TIMEOUT_MS = 18_000; // popup gives up at 20s
+const REQUEST_TIMEOUT_MS = 18_000;
 const CAPTURE_QUOTA_WAIT_MS = 600;
 // Fallback re-encodes, tried in order, for screenshots over the size limit.
 const SHRINK_STEPS: [scale: number, quality: number][] = [
@@ -21,51 +27,134 @@ class CaptureError extends Error {
   }
 }
 
+function codeOf(err: unknown): ErrorCode {
+  const code = err instanceof CaptureError ? err.code : 'unknown';
+  // Missing user id and chrome:// pages are normal, not errors worth flagging.
+  const expected = code === 'no_user' || code === 'restricted';
+  (expected ? console.info : console.error)('[constellation]', err);
+  return code;
+}
+
 chrome.runtime.onMessage.addListener((msg: BgRequest, _sender, sendResponse) => {
   handle(msg).then(
     (data) => sendResponse({ ok: true, data } satisfies BgResult<unknown>),
-    (err) => {
-      const code = err instanceof CaptureError ? err.code : 'unknown';
-      // Missing user id and chrome:// pages are normal, not errors worth flagging.
-      const expected = code === 'no_user' || code === 'restricted';
-      (expected ? console.info : console.error)('[constellation]', err);
-      sendResponse({ ok: false, code } satisfies BgResult<unknown>);
-    },
+    (err) => sendResponse({ ok: false, code: codeOf(err) } satisfies BgResult<unknown>),
   );
   return true; // keep the channel open for the async response
 });
 
 async function handle(msg: BgRequest): Promise<unknown> {
   switch (msg.type) {
+    case 'start':
+      return startRecording();
+    case 'stop':
+      return stopRecording();
     case 'screenshot':
       return takeScreenshot(msg.windowId);
     case 'capture':
-      return capture(msg);
+      return post(await buildPayload(await chrome.tabs.get(msg.tabId), msg));
   }
 }
 
-async function capture(msg: Extract<BgRequest, { type: 'capture' }>): Promise<CaptureResponse> {
+// Recording loop
+
+let timer: ReturnType<typeof setInterval> | undefined;
+let inFlight = false;
+let lastSent: CapturePayload | null = null;
+
+// Chrome can stop an idle service worker. Pick the loop back up when it wakes,
+// and keep an alarm running so it does wake while recording.
+getRecording().then((s) => s.recording && startLoop());
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === WATCHDOG_ALARM) getRecording().then((s) => s.recording && startLoop());
+});
+
+async function startRecording(): Promise<void> {
   const settings = await getSettings();
   if (!settings.userId.trim()) throw new CaptureError('no_user');
+  await patchRecording({ recording: true, sent: 0, lastSentAt: null, lastError: null });
+  await chrome.alarms.create(WATCHDOG_ALARM, { periodInMinutes: WATCHDOG_PERIOD_MIN });
+  await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
+  await chrome.action.setBadgeText({ text: 'ON' });
+  startLoop();
+}
 
-  const tab = await chrome.tabs.get(msg.tabId);
-  if (!tab.url || !/^https?:/.test(tab.url)) throw new CaptureError('restricted', tab.url);
+async function stopRecording(): Promise<void> {
+  clearInterval(timer);
+  timer = undefined;
+  lastSent = null;
+  await chrome.alarms.clear(WATCHDOG_ALARM);
+  await chrome.action.setBadgeText({ text: '' });
+  await patchRecording({ recording: false });
+}
+
+function startLoop() {
+  if (timer) return;
+  timer = setInterval(tick, CAPTURE_INTERVAL_MS);
+  tick();
+}
+
+async function tick() {
+  if (inFlight) return; // previous send is still going, skip this beat
+  inFlight = true;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (!tab) return;
+    const payload = await buildPayload(tab);
+    // A screen that has not changed encodes to the same bytes. Skip it so the
+    // backend does not reprocess identical captures every 5 seconds.
+    if (
+      lastSent &&
+      payload.url === lastSent.url &&
+      payload.html === lastSent.html &&
+      payload.screenshotB64 === lastSent.screenshotB64
+    ) {
+      return;
+    }
+    await post(payload);
+    lastSent = payload;
+    const state = await getRecording();
+    if (state.recording) {
+      await patchRecording({ sent: state.sent + 1, lastSentAt: Date.now(), lastError: null });
+    }
+  } catch (err) {
+    const code = codeOf(err);
+    if ((await getRecording()).recording) await patchRecording({ lastError: code });
+  } finally {
+    inFlight = false;
+  }
+}
+
+// Capture and send
+
+async function buildPayload(
+  tab: chrome.tabs.Tab,
+  hidden?: { screenshotDataUrl: string; redactions: Rect[] },
+): Promise<CapturePayload> {
+  const settings = await getSettings();
+  if (!settings.userId.trim()) throw new CaptureError('no_user');
+  if (tab.id === undefined || !tab.url || !/^https?:/.test(tab.url)) {
+    throw new CaptureError('restricted', tab.url);
+  }
 
   const [screenshotDataUrl, page] = await Promise.all([
-    msg.screenshotDataUrl ?? takeScreenshot(msg.windowId),
-    readTab(msg.tabId),
+    hidden?.screenshotDataUrl ?? takeScreenshot(tab.windowId),
+    readTab(tab.id),
   ]);
 
-  const payload: CapturePayload = {
+  return {
     userId: settings.userId.trim(),
     url: tab.url,
     title: tab.title ?? '',
     html: page.html,
     screenshotB64: await fitScreenshot(stripDataUrlPrefix(screenshotDataUrl)),
-    redactions: msg.redactions ?? [],
+    redactions: hidden?.redactions ?? [],
   };
+}
 
-  const endpoint = settings.backendUrl.replace(/\/+$/, '') + '/api/ingest/capture';
+async function post(payload: CapturePayload): Promise<CaptureResponse> {
+  const { backendUrl } = await getSettings();
+  const endpoint = backendUrl.replace(/\/+$/, '') + '/api/ingest/capture';
   let res: Response;
   try {
     res = await fetch(endpoint, {
@@ -97,13 +186,14 @@ async function takeScreenshot(windowId: number, retried = false): Promise<string
   }
 }
 
+// HTML is best effort. Some pages refuse script injection; the screenshot still goes.
 async function readTab(tabId: number): Promise<PageData> {
   try {
     const [injection] = await chrome.scripting.executeScript({ target: { tabId }, func: readPage });
-    return injection.result as PageData;
+    return (injection?.result as PageData | undefined) ?? { html: '', textOnly: true };
   } catch (err) {
-    // Chrome Web Store, PDF viewer, and similar pages refuse script injection.
-    throw new CaptureError('restricted', String(err));
+    console.info('[constellation] could not read page html', err);
+    return { html: '', textOnly: true };
   }
 }
 

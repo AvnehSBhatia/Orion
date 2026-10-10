@@ -1,20 +1,29 @@
+import { getRecording, onRecordingChange } from './recording';
 import { getSettings, saveSettings } from './settings';
-import type { BgRequest, BgResult, CaptureResponse, ErrorCode, Rect } from './types';
+import type { BgRequest, BgResult, ErrorCode, Rect, RecordingState } from './types';
 
 const POPUP_TIMEOUT_MS = 20_000;
-const CLOSE_DELAY_MS = 1_500;
 const MIN_RECT_PX = 4;
 
 const ERROR_COPY: Record<ErrorCode, string> = {
   no_user: 'Add your user id in settings first.',
   restricted: 'This page cannot be captured.',
   timeout: 'That took too long. Try again.',
-  backend: 'Could not capture. Try again.',
+  backend: 'Could not reach the backend. Try again.',
   unknown: 'Could not capture. Try again.',
 };
 
+// Shown under the button while recording, based on how the last attempt went.
+const RECORDING_ERROR_COPY: Record<ErrorCode, string> = {
+  no_user: 'Add your user id in settings.',
+  restricted: 'Skipping this page. It cannot be captured.',
+  timeout: 'The backend is slow. Still trying.',
+  backend: 'Could not reach the backend. Still trying.',
+  unknown: 'Last capture failed. Still trying.',
+};
+
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-const captureBtn = $<HTMLButtonElement>('capture');
+const toggleBtn = $<HTMLButtonElement>('toggle');
 const statusEl = $('status');
 const hideLink = $('hide');
 const settingsLink = $('settings');
@@ -25,14 +34,9 @@ const cancelBtn = $<HTMLButtonElement>('cancel');
 const setupForm = $<HTMLFormElement>('setup');
 const userIdInput = $<HTMLInputElement>('user-id');
 
-type State = 'idle' | 'capturing' | 'done' | 'error';
-
-function setState(state: State, message = '') {
-  document.body.dataset.state = state;
-  captureBtn.disabled = state === 'capturing' || state === 'done';
-  sendHiddenBtn.disabled = captureBtn.disabled;
-  captureBtn.textContent = state === 'capturing' ? 'Capturing...' : 'Capture this page';
+function setStatus(message: string, tone: 'muted' | 'ok' | 'error' = 'muted') {
   statusEl.textContent = message;
+  statusEl.dataset.tone = tone;
 }
 
 async function activeTab(): Promise<chrome.tabs.Tab> {
@@ -50,33 +54,42 @@ function send<T>(req: BgRequest): Promise<BgResult<T>> {
   return Promise.race([call, timeout]);
 }
 
-async function runCapture(hidden?: { screenshotDataUrl: string; redactions: Rect[] }) {
-  setState('capturing');
-  const tab = await activeTab();
-  if (tab?.id === undefined) return setState('error', ERROR_COPY.restricted);
+// Start and stop. The service worker owns the loop and writes its progress to
+// session storage, which this popup renders.
 
-  const res = await send<CaptureResponse>({
-    type: 'capture',
-    tabId: tab.id,
-    windowId: tab.windowId,
-    ...hidden,
-  });
-  if (!res.ok) {
-    if (res.code === 'no_user') return showSetup();
-    return setState('error', ERROR_COPY[res.code]);
+let recording = false;
+
+function render(state: RecordingState) {
+  const wasRecording = recording;
+  recording = state.recording;
+  document.body.classList.toggle('recording', recording);
+  toggleBtn.textContent = recording ? 'Stop capturing' : 'Start capturing';
+
+  if (!recording) {
+    if (wasRecording) setStatus('Stopped. Nothing is being sent.');
+    return;
   }
-
-  const n = res.data.nodesTouched.length;
-  setState('done', `Captured. Updated ${n} ${n === 1 ? 'item' : 'items'}.`);
-  setTimeout(() => window.close(), CLOSE_DELAY_MS);
+  if (state.lastError) return setStatus(RECORDING_ERROR_COPY[state.lastError], 'error');
+  if (!state.lastSentAt) return setStatus('Capturing every 5 seconds.', 'ok');
+  const at = new Date(state.lastSentAt).toLocaleTimeString();
+  setStatus(`Capturing every 5 seconds. Sent ${state.sent}, last at ${at}.`, 'ok');
 }
+
+toggleBtn.addEventListener('click', async () => {
+  toggleBtn.disabled = true;
+  const res = await send<void>({ type: recording ? 'stop' : 'start' });
+  toggleBtn.disabled = false;
+  if (res.ok) return;
+  if (res.code === 'no_user') return showSetup();
+  setStatus(ERROR_COPY[res.code], 'error');
+});
 
 // First run: ask for the user id right in the popup instead of sending
 // people to the options page.
 
 function showSetup() {
   document.body.classList.add('setup');
-  setState('idle', 'Add your user id once, then capture.');
+  setStatus('Add your user id once, then start capturing.');
   userIdInput.focus();
 }
 
@@ -86,11 +99,11 @@ setupForm.addEventListener('submit', async (e) => {
   if (!userId) return;
   await saveSettings({ ...(await getSettings()), userId });
   document.body.classList.remove('setup');
-  setState('idle', 'Saved. You can capture now.');
+  setStatus('Saved. You can start capturing now.');
 });
 
-// "Hide something": show the screenshot, let the user drag black boxes over it,
-// then send that painted screenshot instead of taking a fresh one.
+// "Hide something": a one off send while not recording. Show the screenshot,
+// let the user drag black boxes over it, then send that painted screenshot.
 
 const ctx = canvas.getContext('2d')!;
 let shot: HTMLImageElement | null = null;
@@ -101,7 +114,7 @@ async function startHide() {
   const tab = await activeTab();
   if (!tab) return;
   const res = await send<string>({ type: 'screenshot', windowId: tab.windowId });
-  if (!res.ok) return setState('error', ERROR_COPY[res.code]);
+  if (!res.ok) return setStatus(ERROR_COPY[res.code], 'error');
 
   const img = new Image();
   img.src = res.data;
@@ -112,14 +125,35 @@ async function startHide() {
   canvas.height = img.naturalHeight;
   draw();
   document.body.classList.add('hiding');
-  setState('idle', 'Drag over anything you want blacked out.');
+  setStatus('Drag over anything you want blacked out.');
 }
 
 function stopHide() {
   document.body.classList.remove('hiding');
   shot = null;
   rects = [];
-  setState('idle');
+}
+
+async function sendHidden() {
+  const tab = await activeTab();
+  if (tab?.id === undefined) return setStatus(ERROR_COPY.restricted, 'error');
+  draw(); // make sure no drag preview is baked in
+  sendHiddenBtn.disabled = true;
+  setStatus('Sending...');
+  const res = await send<unknown>({
+    type: 'capture',
+    tabId: tab.id,
+    screenshotDataUrl: canvas.toDataURL('image/jpeg', 0.7),
+    redactions: rects,
+  });
+  sendHiddenBtn.disabled = false;
+  if (!res.ok) {
+    if (res.code !== 'no_user') return setStatus(ERROR_COPY[res.code], 'error');
+    stopHide();
+    return showSetup();
+  }
+  stopHide();
+  setStatus('Sent with hidden areas.', 'ok');
 }
 
 function draw(preview?: Rect) {
@@ -163,7 +197,6 @@ canvas.addEventListener('pointerup', (e) => {
   draw();
 });
 
-captureBtn.addEventListener('click', () => runCapture());
 hideLink.addEventListener('click', (e) => {
   e.preventDefault();
   startHide();
@@ -176,13 +209,14 @@ undoBtn.addEventListener('click', () => {
   rects.pop();
   draw();
 });
-cancelBtn.addEventListener('click', stopHide);
-sendHiddenBtn.addEventListener('click', () => {
-  draw(); // make sure no drag preview is baked in
-  runCapture({ screenshotDataUrl: canvas.toDataURL('image/jpeg', 0.7), redactions: rects });
+cancelBtn.addEventListener('click', () => {
+  stopHide();
+  setStatus('');
 });
+sendHiddenBtn.addEventListener('click', sendHidden);
 
-setState('idle');
+onRecordingChange(render);
+getRecording().then(render);
 getSettings().then((s) => {
   if (!s.userId.trim()) showSetup();
 });
