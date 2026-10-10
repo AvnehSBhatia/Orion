@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Constellation",
-  "description": "Sends what you are working on to your company context map every few seconds.",
-  "version": "0.2.0",
+  "description": "Shares your screen with your company context map every few seconds.",
+  "version": "0.3.0",
   "action": { "default_popup": "popup.html", "default_title": "Constellation" },
   "options_page": "options.html",
-  "permissions": ["activeTab", "scripting", "storage", "alarms"],
+  "permissions": ["activeTab", "scripting", "storage", "alarms", "desktopCapture"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" }
 }

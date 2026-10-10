@@ -50,7 +50,7 @@ createServer(async (req, res) => {
     return json(res, 400, { error: String(err) });
   }
 
-  const { userId, url, title, html, screenshotB64, redactions = [] } = body;
+  const { userId, url, title, html, screenshotB64, redactions = [], source = 'browser' } = body;
   const problems = [];
   if (typeof userId !== 'string' || !userId) problems.push('userId missing');
   if (typeof url !== 'string' || !url) problems.push('url missing');
@@ -72,7 +72,7 @@ createServer(async (req, res) => {
   );
 
   console.log(
-    `${new Date().toLocaleTimeString()}  ${userId}  ${url}\n` +
+    `${new Date().toLocaleTimeString()}  ${userId}  [${source}]  ${url}\n` +
       `  title: ${title}\n  html: ${html.length} chars  screenshot: ${Math.round(screenshotB64.length / 1024)} KB b64  redactions: ${redactions.length}`,
   );
 

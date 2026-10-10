@@ -1,13 +1,31 @@
-// Service worker. While recording, sends a screenshot plus the page HTML of the
-// active tab every few seconds. Lives here, not in the popup, so it keeps going
-// after the popup closes and the fetch is not subject to page CORS.
+// Service worker. While recording, sends a frame of the whole screen every few
+// seconds, plus the page HTML when a Chrome tab is in front. The screen share
+// itself lives in capture.html; this worker runs the timer and does the upload,
+// so it keeps going after the popup closes and the fetch is not subject to CORS.
 
 import { readPage, type PageData } from './content';
 import { getRecording, patchRecording } from './recording';
 import { getSettings } from './settings';
-import type { BgRequest, BgResult, CapturePayload, CaptureResponse, ErrorCode, Rect } from './types';
+import type {
+  BgRequest,
+  BgResult,
+  CapturePayload,
+  CaptureResponse,
+  ErrorCode,
+  Rect,
+  ScreenFrame,
+} from './types';
 
 const CAPTURE_INTERVAL_MS = 5_000;
+const CAPTURE_WINDOW = { width: 420, height: 240 };
+// Placeholders when another app is in front and there is no tab to describe.
+const DESKTOP_URL = 'desktop://screen';
+const DESKTOP_TITLE = 'Desktop';
+// A thumbnail pixel counts as changed past this grayscale delta, and the screen
+// counts as changed past this share of pixels. Tuned so the cursor and the menu
+// bar clock alone do not trigger a send.
+const PIXEL_DELTA = 24;
+const CHANGED_FRACTION = 0.002;
 const WATCHDOG_ALARM = 'capture-watchdog';
 const WATCHDOG_PERIOD_MIN = 0.5; // the shortest period Chrome allows
 const BADGE_COLOR = '#FF5C7A';
@@ -48,7 +66,10 @@ async function handle(msg: BgRequest): Promise<unknown> {
     case 'start':
       return startRecording();
     case 'stop':
+    case 'screen-ended':
       return stopRecording();
+    case 'screen-ready':
+      return onScreenReady();
     case 'screenshot':
       return takeScreenshot(msg.windowId);
     case 'capture':
@@ -61,6 +82,7 @@ async function handle(msg: BgRequest): Promise<unknown> {
 let timer: ReturnType<typeof setInterval> | undefined;
 let inFlight = false;
 let lastSent: CapturePayload | null = null;
+let lastThumb: number[] | null = null;
 
 // Chrome can stop an idle service worker. Pick the loop back up when it wakes,
 // and keep an alarm running so it does wake while recording.
@@ -69,9 +91,31 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === WATCHDOG_ALARM) getRecording().then((s) => s.recording && startLoop());
 });
 
+// Closing the capture window ends the screen share, so stop.
+chrome.windows.onRemoved.addListener(async (windowId) => {
+  if ((await getRecording()).captureWindowId === windowId) await stopRecording();
+});
+
+// Opens the capture window, which asks the user to pick a screen. Recording
+// actually starts when that window reports 'screen-ready'.
 async function startRecording(): Promise<void> {
   const settings = await getSettings();
   if (!settings.userId.trim()) throw new CaptureError('no_user');
+
+  const { captureWindowId } = await getRecording();
+  if (captureWindowId !== null) {
+    try {
+      await chrome.windows.update(captureWindowId, { focused: true });
+      return;
+    } catch {
+      // The window is gone. Open a new one.
+    }
+  }
+  const win = await chrome.windows.create({ url: 'capture.html', type: 'popup', focused: true, ...CAPTURE_WINDOW });
+  await patchRecording({ captureWindowId: win?.id ?? null });
+}
+
+async function onScreenReady(): Promise<void> {
   await patchRecording({ recording: true, sent: 0, lastSentAt: null, lastError: null });
   await chrome.alarms.create(WATCHDOG_ALARM, { periodInMinutes: WATCHDOG_PERIOD_MIN });
   await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
@@ -83,9 +127,12 @@ async function stopRecording(): Promise<void> {
   clearInterval(timer);
   timer = undefined;
   lastSent = null;
+  lastThumb = null;
+  const { captureWindowId } = await getRecording();
+  await patchRecording({ recording: false, captureWindowId: null });
+  if (captureWindowId !== null) await chrome.windows.remove(captureWindowId).catch(() => {});
   await chrome.alarms.clear(WATCHDOG_ALARM);
   await chrome.action.setBadgeText({ text: '' });
-  await patchRecording({ recording: false });
 }
 
 function startLoop() {
@@ -98,21 +145,26 @@ async function tick() {
   if (inFlight) return; // previous send is still going, skip this beat
   inFlight = true;
   try {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    if (!tab) return;
-    const payload = await buildPayload(tab);
-    // A screen that has not changed encodes to the same bytes. Skip it so the
-    // backend does not reprocess identical captures every 5 seconds.
+    const frame = await requestFrame();
+    if (!frame) {
+      // The capture window is gone or the share ended.
+      await stopRecording();
+      return;
+    }
+    const payload = await buildScreenPayload(frame, (await getRecording()).captureWindowId);
+    // Skip near identical screens so the backend does not reprocess the same
+    // thing every 5 seconds.
     if (
       lastSent &&
       payload.url === lastSent.url &&
       payload.html === lastSent.html &&
-      payload.screenshotB64 === lastSent.screenshotB64
+      !screenChanged(lastThumb, frame.thumb)
     ) {
       return;
     }
     await post(payload);
     lastSent = payload;
+    lastThumb = frame.thumb;
     const state = await getRecording();
     if (state.recording) {
       await patchRecording({ sent: state.sent + 1, lastSentAt: Date.now(), lastError: null });
@@ -127,6 +179,51 @@ async function tick() {
 
 // Capture and send
 
+async function requestFrame(): Promise<ScreenFrame | null> {
+  try {
+    return await chrome.runtime.sendMessage<{ type: 'grab-frame' }, ScreenFrame | null>({ type: 'grab-frame' });
+  } catch {
+    return null; // no capture window listening
+  }
+}
+
+function screenChanged(before: number[] | null, after: number[]): boolean {
+  if (!before || before.length !== after.length) return true;
+  let changed = 0;
+  for (let i = 0; i < after.length; i++) {
+    if (Math.abs(before[i] - after[i]) > PIXEL_DELTA) changed++;
+  }
+  return changed / after.length > CHANGED_FRACTION;
+}
+
+// The Chrome tab in front of the user, or null when another app (or our own
+// capture window) has focus.
+async function focusedChromeTab(captureWindowId: number | null): Promise<chrome.tabs.Tab | null> {
+  const win = await chrome.windows.getLastFocused({ populate: true });
+  if (!win.focused || win.id === captureWindowId) return null;
+  return win.tabs?.find((t) => t.active) ?? null;
+}
+
+async function buildScreenPayload(frame: ScreenFrame, captureWindowId: number | null): Promise<CapturePayload> {
+  const settings = await getSettings();
+  if (!settings.userId.trim()) throw new CaptureError('no_user');
+
+  const tab = await focusedChromeTab(captureWindowId);
+  const readable = tab?.id !== undefined && /^https?:/.test(tab.url ?? '');
+  const page = readable ? await readTab(tab.id!) : { html: '' };
+
+  return {
+    userId: settings.userId.trim(),
+    url: tab?.url || DESKTOP_URL,
+    title: tab?.title || DESKTOP_TITLE,
+    html: page.html,
+    screenshotB64: await fitScreenshot(stripDataUrlPrefix(frame.dataUrl)),
+    redactions: [],
+    source: tab ? 'browser' : 'desktop',
+  };
+}
+
+// One off tab capture, used by the "Hide something" flow.
 async function buildPayload(
   tab: chrome.tabs.Tab,
   hidden?: { screenshotDataUrl: string; redactions: Rect[] },
@@ -149,6 +246,7 @@ async function buildPayload(
     html: page.html,
     screenshotB64: await fitScreenshot(stripDataUrlPrefix(screenshotDataUrl)),
     redactions: hidden?.redactions ?? [],
+    source: 'browser',
   };
 }
 
