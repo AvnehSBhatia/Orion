@@ -1,22 +1,33 @@
-// Shapes shared with the backend (spec section 1.3) and between popup and service worker.
+// Shapes shared with the backend (spec section 1.3) and between popup, capture
+// window, and service worker.
 
 export type Rect = { x: number; y: number; w: number; h: number };
+
+// What the user allowed this capture to come from.
+// 'tab': a Chrome tab they ticked. url, title, and html are that tab's.
+// 'window': an app window they picked. html is empty.
+// 'screen': a whole screen they picked. html is empty.
+export type SourceKind = 'tab' | 'window' | 'screen';
 
 export type CapturePayload = {
   userId: string;
   url: string;
   title: string;
-  html: string; // empty when the page cannot be read or another app is in front
+  html: string; // empty when the page cannot be read or the source is not a tab
   screenshotB64: string;
   redactions?: Rect[];
-  // 'browser': Chrome was in front, url/title/html are that tab's.
-  // 'desktop': another app was in front, the screenshot is all there is.
-  source?: 'browser' | 'desktop';
+  source?: SourceKind;
 };
 
-// A frame from the screen share, plus a tiny grayscale copy used to tell
-// whether the screen changed enough to be worth sending.
-export type ScreenFrame = { dataUrl: string; thumb: number[] };
+// A frame from one shared window or screen, plus a tiny grayscale copy used to
+// tell whether it changed enough to be worth sending.
+export type ScreenFrame = {
+  sourceId: string;
+  kind: 'window' | 'screen';
+  label: string; // "Window 2", "Entire screen"
+  dataUrl: string;
+  thumb: number[];
+};
 
 export type CaptureResponse = { nodesTouched: string[] };
 
@@ -31,15 +42,14 @@ export type RecordingState = {
   sent: number;
   lastSentAt: number | null;
   lastError: ErrorCode | null;
-  captureWindowId: number | null; // the small window holding the screen share
+  captureWindowId: number | null; // the window where the user picks what to share
+  allowedTabIds: number[]; // Chrome tabs the user ticked
 };
 
 export type BgRequest =
-  | { type: 'start' }
+  | { type: 'start' } // open the capture window
+  | { type: 'sources-start' } // the user picked sources and pressed start
   | { type: 'stop' }
-  // From the capture window: the screen share started, or it ended.
-  | { type: 'screen-ready' }
-  | { type: 'screen-ended' }
   | { type: 'screenshot'; windowId: number }
   | {
       // One off send from the "Hide something" flow, with black boxes already painted.

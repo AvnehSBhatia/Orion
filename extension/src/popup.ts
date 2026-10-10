@@ -70,9 +70,9 @@ function render(state: RecordingState) {
     return;
   }
   if (state.lastError) return setStatus(RECORDING_ERROR_COPY[state.lastError], 'error');
-  if (!state.lastSentAt) return setStatus('Capturing your screen every 5 seconds.', 'ok');
+  if (!state.lastSentAt) return setStatus('Capturing what you shared every 5 seconds.', 'ok');
   const at = new Date(state.lastSentAt).toLocaleTimeString();
-  setStatus(`Capturing your screen every 5 seconds. Sent ${state.sent}, last at ${at}.`, 'ok');
+  setStatus(`Capturing what you shared every 5 seconds. Sent ${state.sent}, last at ${at}.`, 'ok');
 }
 
 toggleBtn.addEventListener('click', async () => {
@@ -81,7 +81,7 @@ toggleBtn.addEventListener('click', async () => {
   const res = await send<void>({ type: recording ? 'stop' : 'start' });
   toggleBtn.disabled = false;
   if (res.ok) {
-    if (starting) setStatus('Pick your entire screen in the window that opened.');
+    if (starting) setStatus('Choose what to share in the window that opened.');
     return;
   }
   if (res.code === 'no_user') return showSetup();

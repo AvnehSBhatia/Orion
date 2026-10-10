@@ -8,6 +8,7 @@ export const DEFAULT_RECORDING: RecordingState = {
   lastSentAt: null,
   lastError: null,
   captureWindowId: null,
+  allowedTabIds: [],
 };
 
 export async function getRecording(): Promise<RecordingState> {

@@ -50,7 +50,7 @@ createServer(async (req, res) => {
     return json(res, 400, { error: String(err) });
   }
 
-  const { userId, url, title, html, screenshotB64, redactions = [], source = 'browser' } = body;
+  const { userId, url, title, html, screenshotB64, redactions = [], source = 'tab' } = body;
   const problems = [];
   if (typeof userId !== 'string' || !userId) problems.push('userId missing');
   if (typeof url !== 'string' || !url) problems.push('url missing');
