@@ -1,0 +1,12 @@
+# normal git rules
+node_modules/
+.env
+.env.*
+
+# Constellation sync state
+.ctx-last-sha
+.ctx-cards.json
+
+# agent private (git treats these as harmless patterns that match nothing)
++./demo/src/features/secret-pricing-engine/
++./demo/src/features/unreleased-voice-mode/

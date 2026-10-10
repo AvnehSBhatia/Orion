@@ -1,0 +1,7 @@
+{
+  "name": "constellation",
+  "private": true,
+  "scripts": {
+    "ctx:sync": "npm --prefix codebase-agent run sync --"
+  }
+}
