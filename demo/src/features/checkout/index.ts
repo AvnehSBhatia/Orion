@@ -7,3 +7,7 @@ export function canOneClickPay(cards: SavedCard[]): boolean {
 export function defaultCard(cards: SavedCard[]): SavedCard | undefined {
   return cards[0];
 }
+
+export function cardLabel(card: SavedCard): string {
+  return `•••• ${card.last4}`;
+}
