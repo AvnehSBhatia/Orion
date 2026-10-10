@@ -17,6 +17,10 @@
     body.hiding #hide-panel { display: block; }
     body.hiding #capture, body.hiding #links { display: none; }
 
+    #setup { display: none; }
+    body.setup #setup { display: block; }
+    body.setup #capture, body.setup #hide { display: none; }
+
     #shot {
       display: block;
       width: 100%;
@@ -33,6 +37,12 @@
   <h1>Constellation</h1>
 
   <button id="capture" class="primary">Capture this page</button>
+
+  <form id="setup">
+    <label for="user-id">Your user id</label>
+    <input id="user-id" required autocomplete="off" placeholder="for example, priya-pm" />
+    <button type="submit" class="primary">Save</button>
+  </form>
 
   <div id="hide-panel">
     <canvas id="shot"></canvas>

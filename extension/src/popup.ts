@@ -1,3 +1,4 @@
+import { getSettings, saveSettings } from './settings';
 import type { BgRequest, BgResult, CaptureResponse, ErrorCode, Rect } from './types';
 
 const POPUP_TIMEOUT_MS = 20_000;
@@ -21,6 +22,8 @@ const canvas = $<HTMLCanvasElement>('shot');
 const sendHiddenBtn = $<HTMLButtonElement>('send-hidden');
 const undoBtn = $<HTMLButtonElement>('undo');
 const cancelBtn = $<HTMLButtonElement>('cancel');
+const setupForm = $<HTMLFormElement>('setup');
+const userIdInput = $<HTMLInputElement>('user-id');
 
 type State = 'idle' | 'capturing' | 'done' | 'error';
 
@@ -58,12 +61,33 @@ async function runCapture(hidden?: { screenshotDataUrl: string; redactions: Rect
     windowId: tab.windowId,
     ...hidden,
   });
-  if (!res.ok) return setState('error', ERROR_COPY[res.code]);
+  if (!res.ok) {
+    if (res.code === 'no_user') return showSetup();
+    return setState('error', ERROR_COPY[res.code]);
+  }
 
   const n = res.data.nodesTouched.length;
   setState('done', `Captured. Updated ${n} ${n === 1 ? 'item' : 'items'}.`);
   setTimeout(() => window.close(), CLOSE_DELAY_MS);
 }
+
+// First run: ask for the user id right in the popup instead of sending
+// people to the options page.
+
+function showSetup() {
+  document.body.classList.add('setup');
+  setState('idle', 'Add your user id once, then capture.');
+  userIdInput.focus();
+}
+
+setupForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const userId = userIdInput.value.trim();
+  if (!userId) return;
+  await saveSettings({ ...(await getSettings()), userId });
+  document.body.classList.remove('setup');
+  setState('idle', 'Saved. You can capture now.');
+});
 
 // "Hide something": show the screenshot, let the user drag black boxes over it,
 // then send that painted screenshot instead of taking a fresh one.
@@ -159,3 +183,6 @@ sendHiddenBtn.addEventListener('click', () => {
 });
 
 setState('idle');
+getSettings().then((s) => {
+  if (!s.userId.trim()) showSetup();
+});
