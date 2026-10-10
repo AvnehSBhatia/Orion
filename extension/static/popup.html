@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { width: 340px; padding: 16px; }
+    body.hiding { width: 720px; }
+
+    #status { min-height: 24px; margin: 16px 0 8px; font-size: 16px; color: var(--muted); }
+    body[data-state="done"] #status { color: var(--text); }
+    body[data-state="error"] #status { color: var(--alert); }
+
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+    #hide-panel { display: none; }
+    body.hiding #hide-panel { display: block; }
+    body.hiding #capture, body.hiding #links { display: none; }
+
+    #shot {
+      display: block;
+      width: 100%;
+      max-height: 420px;
+      object-fit: contain;
+      border-radius: 10px;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    #hide-panel .row { margin-top: 16px; }
+  </style>
+</head>
+<body data-state="idle">
+  <h1>Constellation</h1>
+
+  <button id="capture" class="primary">Capture this page</button>
+
+  <div id="hide-panel">
+    <canvas id="shot"></canvas>
+    <div class="row">
+      <div class="row">
+        <button id="undo" class="secondary">Undo</button>
+        <button id="cancel" class="secondary">Cancel</button>
+      </div>
+      <button id="send-hidden" class="secondary">Send with hidden areas</button>
+    </div>
+  </div>
+
+  <div id="status" role="status"></div>
+
+  <div id="links" class="row">
+    <a id="hide" class="link" href="#">Hide something</a>
+    <a id="settings" class="link" href="#">Settings</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

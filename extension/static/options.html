@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Constellation settings</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { padding: 32px 16px; }
+    main { max-width: 480px; margin: 0 auto; }
+    h1 { font-size: 24px; }
+    #status { margin-left: 16px; color: var(--muted); font-size: 16px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Constellation settings</h1>
+    <form id="form">
+      <label for="userId">Your user id</label>
+      <input id="userId" required autocomplete="off" placeholder="for example, priya-pm" />
+
+      <label for="backendUrl">Backend URL</label>
+      <input id="backendUrl" type="url" required placeholder="http://localhost:3000" />
+
+      <button type="submit" class="secondary">Save</button>
+      <span id="status" role="status"></span>
+    </form>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>

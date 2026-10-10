@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Constellation",
+  "description": "One click sends the page you are on to your company context map.",
+  "version": "0.1.0",
+  "action": { "default_popup": "popup.html", "default_title": "Capture this page" },
+  "options_page": "options.html",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" }
+}
