@@ -33,6 +33,8 @@ const undoBtn = $<HTMLButtonElement>('undo');
 const cancelBtn = $<HTMLButtonElement>('cancel');
 const setupForm = $<HTMLFormElement>('setup');
 const userIdInput = $<HTMLInputElement>('user-id');
+const statSent = $('stat-sent');
+const statLast = $('stat-last');
 
 function setStatus(message: string, tone: 'muted' | 'ok' | 'error' = 'muted') {
   statusEl.textContent = message;
@@ -69,10 +71,12 @@ function render(state: RecordingState) {
     if (wasRecording) setStatus('Stopped. Nothing is being sent.');
     return;
   }
+  statSent.textContent = String(state.sent);
+  statLast.textContent = state.lastSentAt
+    ? new Date(state.lastSentAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })
+    : 'Waiting';
   if (state.lastError) return setStatus(RECORDING_ERROR_COPY[state.lastError], 'error');
-  if (!state.lastSentAt) return setStatus('Capturing what you shared every 5 seconds.', 'ok');
-  const at = new Date(state.lastSentAt).toLocaleTimeString();
-  setStatus(`Capturing what you shared every 5 seconds. Sent ${state.sent}, last at ${at}.`, 'ok');
+  setStatus('Capturing what you shared every 5 seconds.', 'ok');
 }
 
 toggleBtn.addEventListener('click', async () => {

@@ -4,32 +4,82 @@
   <meta charset="utf-8" />
   <link rel="stylesheet" href="styles.css" />
   <style>
-    body { width: 400px; padding: 24px; }
+    body { width: 400px; min-height: 0; padding: 24px; }
     body.hiding { width: 720px; }
 
-    #status { min-height: 24px; margin: 16px 0 8px; font-size: 16px; color: var(--muted); }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+
+    /* "Live" pill with a pulsing dot, shown only while recording. */
+    .live {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: rgba(255, 92, 122, 0.12);
+      border: 1px solid rgba(255, 92, 122, 0.35);
+      color: #ffb3c1;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    body.recording .live { display: inline-flex; }
+    .live .dot { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--alert); }
+    .live .dot::after {
+      content: "";
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      border: 2px solid var(--alert);
+      animation: pulse 1.6s ease-out infinite;
+    }
+    @keyframes pulse {
+      from { transform: scale(0.6); opacity: 0.9; }
+      to { transform: scale(1.6); opacity: 0; }
+    }
+
+    body.recording #toggle {
+      background: var(--alert);
+      color: #1a0b10;
+      box-shadow: 0 8px 24px -12px rgba(255, 92, 122, 0.8);
+    }
+
+    /* Two stat tiles while recording. */
+    .stats { display: none; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+    body.recording .stats { display: grid; }
+    .stat { padding: 12px 16px; }
+    .stat .label { display: block; color: var(--muted); font-size: 14px; }
+    .stat .value { display: block; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+    #status { min-height: 24px; margin: 16px 0 0; font-size: 16px; color: var(--muted); }
+    #status:empty { display: none; }
     #status[data-tone="ok"] { color: var(--text); }
     #status[data-tone="error"] { color: var(--alert); }
 
     .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 
-    body.recording #toggle { background: var(--alert); }
+    footer {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
     body.recording #hide { visibility: hidden; }
 
     #hide-panel { display: none; }
     body.hiding #hide-panel { display: block; }
-    body.hiding #toggle, body.hiding #links { display: none; }
+    body.hiding #toggle, body.hiding footer, body.hiding .stats { display: none; }
 
     #setup { display: none; }
     body.setup #setup { display: block; }
     body.setup #toggle, body.setup #hide { display: none; }
+    #setup .primary { margin-top: 0; }
 
     #shot {
       display: block;
       width: 100%;
       max-height: 420px;
       object-fit: contain;
-      border-radius: 10px;
+      border-radius: 12px;
       cursor: crosshair;
       touch-action: none;
     }
@@ -37,7 +87,26 @@
   </style>
 </head>
 <body>
-  <h1>Constellation</h1>
+  <header>
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+        <line x1="6" y1="29" x2="15" y2="14" />
+        <line x1="15" y1="14" x2="26" y2="19" />
+        <line x1="26" y1="19" x2="34" y2="7" />
+        <line x1="26" y1="19" x2="31" y2="33" />
+        <circle cx="6" cy="29" r="2.5" fill="#E3C26B" />
+        <circle cx="15" cy="14" r="3" fill="#6EA8FF" />
+        <circle cx="26" cy="19" r="3.5" fill="#F2F4F8" />
+        <circle cx="34" cy="7" r="2.5" fill="#5EEAD4" />
+        <circle cx="31" cy="33" r="2.5" fill="#FF9F6E" />
+      </svg>
+      <div>
+        <h1>Constellation</h1>
+        <p class="tagline">Your work, on the team map</p>
+      </div>
+    </div>
+    <span class="live" aria-hidden="true"><span class="dot"></span>Live</span>
+  </header>
 
   <button id="toggle" class="primary">Start capturing</button>
 
@@ -46,6 +115,17 @@
     <input id="user-id" required autocomplete="off" placeholder="for example, priya-pm" />
     <button type="submit" class="primary">Save</button>
   </form>
+
+  <div class="stats">
+    <div class="stat card">
+      <span class="label">Sent</span>
+      <span id="stat-sent" class="value">0</span>
+    </div>
+    <div class="stat card">
+      <span class="label">Last capture</span>
+      <span id="stat-last" class="value">Waiting</span>
+    </div>
+  </div>
 
   <div id="hide-panel">
     <canvas id="shot"></canvas>
@@ -60,10 +140,10 @@
 
   <div id="status" role="status"></div>
 
-  <div id="links" class="row">
+  <footer id="links" class="row">
     <a id="hide" class="link" href="#">Hide something</a>
     <a id="settings" class="link" href="#">Settings</a>
-  </div>
+  </footer>
 
   <script src="popup.js"></script>
 </body>

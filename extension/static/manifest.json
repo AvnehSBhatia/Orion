@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Constellation",
   "description": "Shares your screen with your company context map every few seconds.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "action": { "default_popup": "popup.html", "default_title": "Constellation" },
   "options_page": "options.html",
   "permissions": ["activeTab", "scripting", "storage", "alarms", "desktopCapture"],

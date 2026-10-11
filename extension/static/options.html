@@ -8,12 +8,26 @@
     body { padding: 32px 16px; }
     main { max-width: 480px; margin: 0 auto; }
     h1 { font-size: 24px; }
+    .brand { margin-bottom: 32px; }
     #status { margin-left: 16px; color: var(--muted); font-size: 16px; }
   </style>
 </head>
 <body>
   <main>
-    <h1>Constellation settings</h1>
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+        <line x1="6" y1="29" x2="15" y2="14" />
+        <line x1="15" y1="14" x2="26" y2="19" />
+        <line x1="26" y1="19" x2="34" y2="7" />
+        <line x1="26" y1="19" x2="31" y2="33" />
+        <circle cx="6" cy="29" r="2.5" fill="#E3C26B" />
+        <circle cx="15" cy="14" r="3" fill="#6EA8FF" />
+        <circle cx="26" cy="19" r="3.5" fill="#F2F4F8" />
+        <circle cx="34" cy="7" r="2.5" fill="#5EEAD4" />
+        <circle cx="31" cy="33" r="2.5" fill="#FF9F6E" />
+      </svg>
+      <h1>Constellation settings</h1>
+    </div>
     <form id="form">
       <label for="userId">Your user id</label>
       <input id="userId" required autocomplete="off" placeholder="for example, priya-pm" />

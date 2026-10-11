@@ -1,9 +1,18 @@
+/* Shared theme for the popup, chooser window, and settings page: deep space,
+   a faint nebula, and a slow twinkling starfield. Domain colors from the spec
+   are used for the constellation mark. */
+
 :root {
-  --bg: #0f1626;
-  --panel: #17203a;
+  --bg: #0b1020;
+  --panel: rgba(23, 32, 58, 0.78);
+  --panel-solid: #17203a;
+  --border: rgba(242, 244, 248, 0.08);
   --text: #f2f4f8;
   --muted: #a8b0c4;
   --accent: #6ea8ff;
+  --teal: #5eead4;
+  --orange: #ff9f6e;
+  --gold: #e3c26b;
   --alert: #ff5c7a;
 }
 
@@ -11,33 +20,92 @@
 
 body {
   margin: 0;
-  background: var(--bg);
   color: var(--text);
   font: 18px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 70% 50% at 10% 0%, rgba(110, 168, 255, 0.16), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(94, 234, 212, 0.1), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 85% 15%, rgba(255, 159, 110, 0.07), transparent 70%);
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
-h1 { font-size: 18px; font-weight: 600; margin: 0 0 16px; }
+/* Two star layers. The small one sits still; the brighter one twinkles. */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+body::before {
+  background-image:
+    radial-gradient(1px 1px at 23px 41px, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 97px 13px, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 151px 87px, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1px 1px at 61px 139px, rgba(255, 255, 255, 0.45), transparent),
+    radial-gradient(1px 1px at 183px 171px, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(1px 1px at 131px 199px, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1px 1px at 11px 187px, rgba(255, 255, 255, 0.5), transparent);
+  background-size: 210px 210px;
+}
+body::after {
+  background-image:
+    radial-gradient(1.5px 1.5px at 47px 77px, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 213px 29px, rgba(110, 168, 255, 0.9), transparent),
+    radial-gradient(1.5px 1.5px at 271px 223px, #fff, transparent),
+    radial-gradient(2px 2px at 139px 263px, rgba(94, 234, 212, 0.8), transparent),
+    radial-gradient(1.5px 1.5px at 307px 131px, rgba(255, 255, 255, 0.8), transparent);
+  background-size: 330px 330px;
+  animation: twinkle 7s ease-in-out infinite alternate;
+}
+@keyframes twinkle {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
+
+/* Content sits above the stars. */
+body > * { position: relative; z-index: 1; }
+
+h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: 0.01em; }
+
+/* Brand row: constellation mark, name, and a one line tagline. */
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand .logo { width: 40px; height: 40px; flex: none; }
+.brand .tagline { color: var(--muted); font-size: 14px; margin: 0; }
+.brand .logo line { stroke: rgba(242, 244, 248, 0.35); stroke-width: 1; }
 
 button {
   font: inherit;
   border: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease, background-color 120ms ease;
 }
-button:disabled { cursor: default; opacity: 0.6; }
+button:hover:not(:disabled) { filter: brightness(1.08); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { cursor: default; opacity: 0.5; }
+button:focus-visible, a:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 .primary {
   width: 100%;
   height: 56px;
-  background: var(--accent);
-  color: var(--bg);
+  background: linear-gradient(135deg, #7fb3ff 0%, var(--accent) 45%, #58c9d6 100%);
+  color: #0b1020;
   font-weight: 600;
+  box-shadow: 0 8px 24px -12px rgba(110, 168, 255, 0.7);
 }
 
 .secondary {
   height: 40px;
   padding: 0 16px;
   background: var(--panel);
+  border: 1px solid var(--border);
   color: var(--text);
   font-size: 16px;
 }
@@ -54,11 +122,22 @@ input {
   height: 48px;
   padding: 0 16px;
   margin: 8px 0 16px;
-  border: 1px solid #2a3557;
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   background: var(--panel);
   color: var(--text);
   font: inherit;
 }
+input::placeholder { color: rgba(168, 176, 196, 0.6); }
 
 label { color: var(--muted); font-size: 16px; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
