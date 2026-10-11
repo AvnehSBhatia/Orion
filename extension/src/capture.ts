@@ -172,7 +172,7 @@ function renderControls() {
     setStatus(
       n === 0
         ? 'Nothing selected, so nothing is being sent.'
-        : `Capturing ${n} ${n === 1 ? 'source' : 'sources'} every 5 seconds. You can minimize this window.`,
+        : `Capturing ${n} ${n === 1 ? 'source' : 'sources'} every 5 seconds. Stop from the Constellation icon in your toolbar.`,
     );
   } else {
     setStatus(n === 0 ? 'Pick at least one window, screen, or tab.' : 'Press start when you are done choosing.');

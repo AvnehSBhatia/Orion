@@ -115,7 +115,7 @@ async function startRecording(): Promise<void> {
   const { captureWindowId } = await getRecording();
   if (captureWindowId !== null) {
     try {
-      await chrome.windows.update(captureWindowId, { focused: true });
+      await chrome.windows.update(captureWindowId, { state: 'normal', focused: true });
       return;
     } catch {
       // The window is gone. Open a new one.
@@ -131,6 +131,17 @@ async function onSourcesStart(): Promise<void> {
   await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
   await chrome.action.setBadgeText({ text: 'ON' });
   startLoop();
+
+  // Get the chooser out of the way. It holds the window and screen shares, so
+  // it is minimized rather than closed.
+  const { captureWindowId } = await getRecording();
+  if (captureWindowId !== null) {
+    await chrome.windows.update(captureWindowId, { state: 'minimized' }).catch(() => {});
+  }
+  // Show the small toolbar popup so the user sees it is live and where to stop.
+  // Chrome may refuse (no normal window in front); the ON badge still shows.
+  const win = await chrome.windows.getLastFocused({ windowTypes: ['normal'] }).catch(() => null);
+  if (win?.id !== undefined) await chrome.action.openPopup({ windowId: win.id }).catch(() => {});
 }
 
 async function stopRecording(): Promise<void> {

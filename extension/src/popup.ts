@@ -33,8 +33,7 @@ const undoBtn = $<HTMLButtonElement>('undo');
 const cancelBtn = $<HTMLButtonElement>('cancel');
 const setupForm = $<HTMLFormElement>('setup');
 const userIdInput = $<HTMLInputElement>('user-id');
-const statSent = $('stat-sent');
-const statLast = $('stat-last');
+const changeLink = $('change');
 
 function setStatus(message: string, tone: 'muted' | 'ok' | 'error' = 'muted') {
   statusEl.textContent = message;
@@ -71,10 +70,6 @@ function render(state: RecordingState) {
     if (wasRecording) setStatus('Stopped. Nothing is being sent.');
     return;
   }
-  statSent.textContent = String(state.sent);
-  statLast.textContent = state.lastSentAt
-    ? new Date(state.lastSentAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })
-    : 'Waiting';
   if (state.lastError) return setStatus(RECORDING_ERROR_COPY[state.lastError], 'error');
   setStatus('Capturing what you shared every 5 seconds.', 'ok');
 }
@@ -208,6 +203,11 @@ canvas.addEventListener('pointerup', (e) => {
 hideLink.addEventListener('click', (e) => {
   e.preventDefault();
   startHide();
+});
+// 'start' while recording brings the minimized chooser window back.
+changeLink.addEventListener('click', (e) => {
+  e.preventDefault();
+  send<void>({ type: 'start' });
 });
 settingsLink.addEventListener('click', (e) => {
   e.preventDefault();
