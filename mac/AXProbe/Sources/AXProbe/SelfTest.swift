@@ -38,7 +38,36 @@ enum SelfTest {
             print("Chrome: \(pids.count) process(es) including helpers, \(snapshot.count) readable, \(Matrix.fmt(ProcessStats.footprintMB(snapshot), 0)) MB, type \(Apps.kind(of: chrome).rawValue)")
         }
         print("Accessibility permission for this terminal: \(AXIsProcessTrusted() ? "granted" : "not granted yet")")
-        print(abs(ratio - 1) < 0.15 ? "PASS" : "CHECK: CPU readings disagree by more than 15%")
+
+        let offMain = AXReader.offMain { !Thread.isMainThread }
+        print("Reads run off the main thread: \(offMain ? "yes" : "NO")")
+        let urlOK = checkURLShapes()
+        print("Address bar URL detection: \(urlOK ? "ok" : "WRONG")")
+
+        print(abs(ratio - 1) < 0.15 && offMain && urlOK ? "PASS" : "CHECK the lines above")
+    }
+
+    /// Formats Chrome and Safari show in the address bar, and text that is not a URL.
+    static func checkURLShapes() -> Bool {
+        let cases: [(String, (Bool, Bool)?)] = [
+            ("mail.google.com/mail/u/0/#inbox", (true, true)),
+            ("https://docs.google.com/document/d/abc/edit", (true, true)),
+            ("github.com", (true, false)),
+            ("https://example.com/", (true, false)),
+            ("localhost:3000/api", (true, true)),
+            ("Search Google or type a URL", nil),
+            ("version 1.2.3", nil),
+            ("", nil),
+        ]
+        var ok = true
+        for (text, expected) in cases {
+            let got = Browser.urlShape(text).map { ($0.hasDomain, $0.hasPath) }
+            if got?.0 != expected?.0 || got?.1 != expected?.1 {
+                print("  url check failed for \"\(text)\"")
+                ok = false
+            }
+        }
+        return ok
     }
 
     static func ownCPUSeconds() -> Double {

@@ -4,15 +4,30 @@ import Foundation
 // The coverage matrix from spec section 12 (M0): for each app, how much text the
 // Accessibility API gives us and what reading it costs. Output is numbers only.
 
+/// How a row treats the app's accessibility tree.
+enum FlagMode {
+    case electronFlag // Chromium and Electron apps get AXManualAccessibility (spec 5.4); native apps get nothing
+    case enhancedUI // test only: AXEnhancedUserInterface, which the spec bans for the app
+    case none // set nothing, e.g. when the user turned Chrome's tree on in chrome://accessibility
+}
+
+struct Target {
+    let name: String
+    var mode: FlagMode = .electronFlag
+    var prep: String?
+}
+
 struct Row {
     var target: String
     var skipped = false
     var app = "-"
     var kind = "-"
-    var tree = "-" // Chromium/Electron: AXManualAccessibility before, and the result of turning it on
-    var firstChars = 0 // first, cold walk: what a capture right after switching to the app gets
+    var tree = "n/a" // flag used, its state before, and the result of setting it
+    var firstChars = 0 // cold first walk: what a capture right after switching to the app gets
     var firstMs = 0.0
-    var charsBefore: Int? // Chromium/Electron: a warm walk before the tree flag was set
+    var rereadChars = 0 // Timing.rereadSeconds later (or after the tree flag was set)
+    var rereadMs = 0.0
+    var charsBefore: Int? // flagged rows: a warm walk before the flag was set
     var chars = 0
     var contentChars = 0
     var quality = 0
@@ -20,7 +35,9 @@ struct Row {
     var walkMaxMs = 0.0
     var nodes = 0
     var stoppedBy = "-"
-    var webURL = "-"
+    var titleChars = 0
+    var webURL = "-" // where a page URL is readable: "page" (web area AXURL), "window" (AXDocument), or "no"
+    var addressBar = "-"
     var secureSkipped = 0
     var cpuBase = 0.0
     var cpuCapture = 0.0
@@ -31,13 +48,27 @@ struct Row {
 }
 
 enum Matrix {
-    static let defaultTargets = [
-        "Safari", "Chrome", "Slack", "VS Code", "Notion", "Google Docs in Chrome", "Gmail in Chrome",
-        "Figma", "Xcode", "Mail", "Terminal", "Linear or Jira in browser", "Zoom chat",
+    static let restartChrome = "Quit Chrome with Cmd+Q and reopen it first, so no tree is left on from an earlier row."
+
+    // Round 2 list, per the decisions after round 1.
+    static let defaultTargets: [Target] = [
+        Target(name: "Terminal (real output)", prep: "Open a second Terminal window (Cmd+N) and fill it with real output, for example ls -la in a busy folder. Switch to that window during the countdown."),
+        Target(name: "Slack", prep: "Quit and reopen Slack first, then open a channel with messages."),
+        Target(name: "Zoom", prep: "Open a meeting chat or Team Chat with messages."),
+        Target(name: "Excel", prep: "Open a sheet with data."),
+        Target(name: "Word", prep: "Open a document with text."),
+        Target(name: "Outlook", prep: "Open an email."),
+        Target(name: "Preview", prep: "Open a PDF with text."),
+        Target(name: "QuickBooks", prep: "Open a screen with data. If you use QuickBooks Online in a browser instead, measure it in Safari and say so in the notes."),
+        Target(name: "Chrome (title and URL)", prep: "\(restartChrome) Then open a normal web page."),
+        Target(name: "Chrome with AXEnhancedUserInterface (test only)", mode: .enhancedUI,
+               prep: "\(restartChrome) Then open a normal web page. While it runs, move or resize the window and note anything odd with animations or window tiling."),
+        Target(name: "Chrome with chrome://accessibility on (test only)", mode: .none,
+               prep: "\(restartChrome) Open chrome://accessibility and turn on the global toggles at the top (Native accessibility API support and Web accessibility). Then open a normal web page in another tab and stay on it."),
     ]
 
     /// Guided run: one app at a time, then the table.
-    static func run(targets: [String]) {
+    static func run(targets: [Target]) {
         printIntro()
         let home = Apps.frontmost() // the terminal this runs in
         var rows: [Row] = []
@@ -45,25 +76,26 @@ enum Matrix {
 
         while index < targets.count {
             let target = targets[index]
-            print("\n[\(index + 1)/\(targets.count)] \(target)")
-            print("  Open it, then press Enter here. Type s to skip, q to finish now.")
+            print("\n[\(index + 1)/\(targets.count)] \(target.name)")
+            if let prep = target.prep { print("  \(prep)") }
+            print("  When ready, press Enter here. Type s to skip, q to finish now.")
             guard let line = readLine() else { break }
             let answer = line.trimmingCharacters(in: .whitespaces).lowercased()
             if answer == "q" { break }
             if answer == "s" {
-                rows.append(Row(target: target, skipped: true))
+                rows.append(Row(target: target.name, skipped: true))
                 index += 1
                 continue
             }
 
-            countdown(target)
+            countdown(target.name)
             guard let front = Apps.frontmost() else {
                 print("  Could not tell which app is in front. Trying again.")
                 continue
             }
-            if let home, front.pid == home.pid, !target.lowercased().contains("terminal") {
+            if let home, front.pid == home.pid, !target.name.lowercased().contains("terminal") {
                 print("  \(front.name) is still in front (\(Apps.diagnose())).")
-                print("  Switch to \(target) during the countdown. Trying again.")
+                print("  Switch to \(target.name) during the countdown. Trying again.")
                 continue
             }
 
@@ -90,7 +122,10 @@ enum Matrix {
         countdown("the app to measure")
         guard let front = Apps.frontmost() else { print("Could not tell which app is in front."); return }
         print("  Measuring \(front.name). Keep it in front for about \(Int(Timing.totalSeconds)) seconds.")
-        guard let row = measure(front, target: front.name) else { print("  You switched away. Run it again."); return }
+        guard let row = measure(front, target: Target(name: front.name)) else {
+            print("  You switched away. Run it again.")
+            return
+        }
         printSummary(row)
         print()
         printTable([row])
@@ -98,20 +133,37 @@ enum Matrix {
 
     // MARK: Measuring one app
 
-    static func measure(_ front: FrontApp, target: String) -> Row? {
+    static func measure(_ front: FrontApp, target: Target) -> Row? {
         let app = AXUIElementCreateApplication(front.pid)
         AXUIElementSetMessagingTimeout(app, Limits.axTimeoutSeconds)
-        var row = Row(target: target)
+        var row = Row(target: target.name)
         row.app = front.name
         row.kind = front.kind.rawValue
 
-        let usesTreeFlag = front.kind != .native
-        let prior = usesTreeFlag ? ManualAccessibility.read(app) : "n/a"
+        let flag: TreeFlag? = switch target.mode {
+        case .electronFlag: front.kind == .native ? nil : .manual
+        case .enhancedUI: .enhanced
+        case .none: nil
+        }
+        let prior = flag?.read(app) ?? "n/a"
         var turnedOn = false
         // Put the app back the way it was, even if the run is thrown out.
-        defer { if turnedOn && prior != "on" { _ = ManualAccessibility.set(app, false) } }
+        defer { if let flag, turnedOn, prior != "on" { _ = flag.set(app, false) } }
 
-        // Phase 1: the app's own CPU and memory, with no Accessibility calls at all.
+        // Right after the switch: the cold first walk, the way the app's first
+        // capture after an app switch sees it.
+        let first = AXReader.read(app: app)
+        row.firstChars = first.chars
+        row.firstMs = first.ms
+        if flag == nil {
+            // The re-read the app does 1 to 2 seconds after a switch.
+            Thread.sleep(forTimeInterval: Timing.rereadSeconds)
+            let reread = AXReader.read(app: app)
+            row.rereadChars = reread.chars
+            row.rereadMs = reread.ms
+        }
+
+        // Phase 1: the app's own CPU and memory, with no Accessibility calls.
         print("  1 of 2: baseline, not reading (\(Int(Timing.baselineSeconds)) s)")
         let baselinePids = ProcessStats.family(front.pid)
         let a0 = ProcessStats.snapshot(baselinePids)
@@ -120,26 +172,18 @@ enum Matrix {
         row.cpuBase = ProcessStats.cpuPercent(from: a0, to: a1, seconds: Timing.baselineSeconds)
         row.memBase = ProcessStats.footprintMB(a1)
 
-        // The first walk is cold: the app builds its Accessibility objects on
-        // demand, so this is slow and may hit the time limit. It is what the real
-        // app gets on the capture right after you switch apps.
-        let first = AXReader.walk(app: app)
-        row.firstChars = first.chars
-        row.firstMs = first.ms
-
-        if usesTreeFlag {
-            // A warm walk before touching the flag: what Chromium gives unasked.
-            Thread.sleep(forTimeInterval: 0.5)
-            row.charsBefore = AXReader.walk(app: app).chars
-            let result = ManualAccessibility.set(app, true)
+        if let flag {
+            // A warm walk before the flag: what the app gives without being asked.
+            row.charsBefore = AXReader.read(app: app).chars
+            let result = flag.set(app, true)
             turnedOn = result == .success
-            row.tree = "was \(prior), set \(axName(result))"
-            Thread.sleep(forTimeInterval: Timing.settleSeconds)
-        } else {
-            row.tree = "n/a"
+            row.tree = "\(flag.rawValue): was \(prior), set \(axName(result))"
+            Thread.sleep(forTimeInterval: Timing.rereadSeconds)
+        } else if target.mode == .none {
+            row.tree = "none set (chrome://accessibility)"
         }
 
-        // Phase 2: read every few seconds and measure the app's cost while we do.
+        // Phase 2: read every few seconds, off the main thread, and measure the cost.
         print("  2 of 2: reading every \(Int(Timing.walkEverySeconds)) s (\(Int(Timing.captureSeconds)) s)")
         let capturePids = ProcessStats.family(front.pid)
         let c0 = ProcessStats.snapshot(capturePids)
@@ -148,7 +192,7 @@ enum Matrix {
         var walks: [WalkResult] = []
         while Date().timeIntervalSince(start) < Timing.captureSeconds {
             guard isInFront(front.pid) else { return nil }
-            walks.append(AXReader.walk(app: app))
+            walks.append(AXReader.read(app: app))
             Thread.sleep(forTimeInterval: Timing.walkEverySeconds)
         }
         let elapsed = Date().timeIntervalSince(start)
@@ -159,6 +203,11 @@ enum Matrix {
         row.memCapture = ProcessStats.footprintMB(c1)
         if let p0, let p1 { row.probeCPU = Double(p1.cpuNs - p0.cpuNs) / (elapsed * 1e9) * 100 }
 
+        if flag != nil, let firstAfterFlag = walks.first {
+            // With a flag, the re-read is the first walk after turning the tree on.
+            row.rereadChars = firstAfterFlag.chars
+            row.rereadMs = firstAfterFlag.ms
+        }
         let best = walks.max { $0.chars < $1.chars } ?? WalkResult()
         row.chars = best.chars
         row.contentChars = best.contentChars
@@ -168,9 +217,16 @@ enum Matrix {
         row.nodes = best.nodes
         row.stoppedBy = best.stoppedBy ?? "-"
         row.secureSkipped = walks.map(\.skippedSecure).max() ?? 0
-        if walks.contains(where: \.webAreaHasURL) {
-            row.webURL = "yes"
-        } else if walks.contains(where: \.hasWebArea) {
+
+        let browser = Browser.inspect(app: app, isBrowser: front.isBrowser)
+        row.titleChars = browser.titleChars
+        if front.isBrowser { row.addressBar = browser.addressBar }
+        var urlSources: [String] = []
+        if walks.contains(where: \.webAreaHasURL) { urlSources.append("page") }
+        if browser.windowDocument { urlSources.append("window") }
+        if !urlSources.isEmpty {
+            row.webURL = urlSources.joined(separator: ", ")
+        } else if front.isBrowser || walks.contains(where: \.hasWebArea) {
             row.webURL = "no"
         }
         if !best.foundWindow { row.notes = "no focused window found" }
@@ -230,31 +286,37 @@ enum Matrix {
     }
 
     static func printSummary(_ row: Row) {
-        let tree = row.kind == "Native" ? "" : " Tree flag: \(row.tree)."
-        let before = row.charsBefore.map { ", \($0) before the tree flag" } ?? ""
+        let tree = row.tree == "n/a" ? "" : " Tree: \(row.tree)."
+        let before = row.charsBefore.map { " Before the flag: \($0) chars." } ?? ""
+        let browser = row.addressBar == "-" ? "" : " Address bar: \(row.addressBar). Page URL from: \(row.webURL)."
         print("""
           Done: \(row.app) (\(row.kind)).\(tree)
-          First walk (cold): \(row.firstChars) chars in \(fmt(row.firstMs)) ms\(before).
-          Text: \(row.chars) chars, \(row.contentChars) in sentences, quality \(row.quality)/5.
+          First walk (cold): \(row.firstChars) chars in \(fmt(row.firstMs)) ms. Re-read: \(row.rereadChars) chars in \(fmt(row.rereadMs)) ms.\(before)
+          Text: \(row.chars) chars, \(row.contentChars) in sentences, quality \(row.quality)/5. Window title: \(row.titleChars) chars.\(browser)
           Walk: \(fmt(row.walkAvgMs)) ms avg, \(fmt(row.walkMaxMs)) ms max, \(row.nodes) nodes, limit hit: \(row.stoppedBy).
           App CPU \(fmt(row.cpuBase))% -> \(fmt(row.cpuCapture))%, memory \(fmt(row.memBase, 0)) -> \(fmt(row.memCapture, 0)) MB. Probe CPU \(fmt(row.probeCPU))%.
         """)
     }
 
     static func printTable(_ rows: [Row]) {
-        print("| Target | App | Type | First walk chars / ms | Chars before flag | Chars | Sentence chars | Quality 0-5 | Walk ms avg / max | Nodes | Limit hit | Web URL | Secure skipped | Tree flag | App CPU % base / reading | App MB base / reading | Probe CPU % | Notes |")
-        print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        let headers = [
+            "Target", "App", "Type", "First walk chars / ms", "Re-read chars / ms", "Chars before flag", "Chars",
+            "Sentence chars", "Quality 0-5", "Walk ms avg / max", "Nodes", "Limit hit", "Title chars", "Page URL from",
+            "Address bar", "Secure skipped", "Tree", "App CPU % base / reading", "App MB base / reading", "Probe CPU %", "Notes",
+        ]
+        print("| " + headers.joined(separator: " | ") + " |")
+        print("|" + String(repeating: "---|", count: headers.count))
         for r in rows {
             if r.skipped {
-                print("| \(r.target) | skipped | | | | | | | | | | | | | | | | |")
+                print("| \(r.target) | skipped |" + String(repeating: " |", count: headers.count - 2))
                 continue
             }
             let cells = [
-                r.target, r.app, r.kind, "\(r.firstChars) / \(fmt(r.firstMs))", r.charsBefore.map(String.init) ?? "n/a",
-                "\(r.chars)", "\(r.contentChars)", "\(r.quality)",
-                "\(fmt(r.walkAvgMs)) / \(fmt(r.walkMaxMs))", "\(r.nodes)", r.stoppedBy, r.webURL, "\(r.secureSkipped)",
-                r.tree, "\(fmt(r.cpuBase)) / \(fmt(r.cpuCapture))", "\(fmt(r.memBase, 0)) / \(fmt(r.memCapture, 0))",
-                fmt(r.probeCPU), r.notes,
+                r.target, r.app, r.kind, "\(r.firstChars) / \(fmt(r.firstMs))", "\(r.rereadChars) / \(fmt(r.rereadMs))",
+                r.charsBefore.map(String.init) ?? "n/a", "\(r.chars)", "\(r.contentChars)", "\(r.quality)",
+                "\(fmt(r.walkAvgMs)) / \(fmt(r.walkMaxMs))", "\(r.nodes)", r.stoppedBy, "\(r.titleChars)", r.webURL,
+                r.addressBar, "\(r.secureSkipped)", r.tree, "\(fmt(r.cpuBase)) / \(fmt(r.cpuCapture))",
+                "\(fmt(r.memBase, 0)) / \(fmt(r.memCapture, 0))", fmt(r.probeCPU), r.notes,
             ]
             print("| " + cells.joined(separator: " | ") + " |")
         }

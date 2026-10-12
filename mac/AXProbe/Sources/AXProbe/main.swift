@@ -7,7 +7,7 @@ import Foundation
 let usage = """
 Usage: ax-probe <command>
 
-  matrix [--apps "Safari,Chrome"]   Guided run over the spec's app list (or your own), then the coverage table.
+  matrix [--apps "Safari,Mail"]     Guided run over the round 2 app list (or your own), then the coverage table.
   once                              Measure whatever app is in front after a 5 second countdown.
   front                             After a 5 second countdown, show which app the probe thinks is in front.
   selftest                          Check that CPU and memory readings work. Reads no app text.
@@ -39,6 +39,7 @@ case "matrix":
         .split(separator: ",")
         .map { $0.trimmingCharacters(in: .whitespaces) }
         .filter { !$0.isEmpty }
+        .map { Target(name: $0) }
     Matrix.run(targets: targets ?? Matrix.defaultTargets)
 case "once":
     requireAccessibility()

@@ -11,7 +11,12 @@ enum AppKind: String {
 struct FrontApp {
     let pid: pid_t
     let name: String
+    let bundleId: String
     let kind: AppKind
+
+    var isBrowser: Bool {
+        Apps.chromiumBrowsers.contains(bundleId) || bundleId.hasPrefix("com.apple.Safari")
+    }
 }
 
 enum Apps {
@@ -67,7 +72,9 @@ enum Apps {
 
     static func describe(_ pid: pid_t) -> FrontApp? {
         guard let app = NSRunningApplication(processIdentifier: pid) else { return nil }
-        return FrontApp(pid: pid, name: app.localizedName ?? "pid \(pid)", kind: kind(of: app))
+        return FrontApp(
+            pid: pid, name: app.localizedName ?? "pid \(pid)", bundleId: app.bundleIdentifier ?? "", kind: kind(of: app)
+        )
     }
 
     static func kind(of app: NSRunningApplication) -> AppKind {
@@ -81,20 +88,23 @@ enum Apps {
     }
 }
 
-/// Electron's switch for turning its accessibility tree on, used instead of
-/// AXEnhancedUserInterface (spec 5.4). Whether Chrome itself honors it is one of
-/// the things M0 finds out, so every result is recorded rather than assumed.
-enum ManualAccessibility {
-    static let attribute = "AXManualAccessibility" as CFString
+/// App-level switches that turn a Chromium or Electron accessibility tree on.
+/// AXManualAccessibility is Electron's, and what the spec uses (5.4). Chrome
+/// rejected it in M0 round 1. AXEnhancedUserInterface is banned by the spec for
+/// the app (it can break window animations and tiling tools) and is used here
+/// only in a test-only Chrome row.
+enum TreeFlag: String {
+    case manual = "AXManualAccessibility"
+    case enhanced = "AXEnhancedUserInterface"
 
-    static func read(_ app: AXUIElement) -> String {
+    func read(_ app: AXUIElement) -> String {
         var value: CFTypeRef?
-        let error = AXUIElementCopyAttributeValue(app, attribute, &value)
+        let error = AXUIElementCopyAttributeValue(app, rawValue as CFString, &value)
         guard error == .success else { return axName(error) }
         return (value as? Bool) == true ? "on" : "off"
     }
 
-    static func set(_ app: AXUIElement, _ on: Bool) -> AXError {
-        AXUIElementSetAttributeValue(app, attribute, (on ? kCFBooleanTrue : kCFBooleanFalse)!)
+    func set(_ app: AXUIElement, _ on: Bool) -> AXError {
+        AXUIElementSetAttributeValue(app, rawValue as CFString, (on ? kCFBooleanTrue : kCFBooleanFalse)!)
     }
 }

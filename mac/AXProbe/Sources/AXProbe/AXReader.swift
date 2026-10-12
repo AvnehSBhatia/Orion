@@ -44,6 +44,26 @@ enum AXReader {
         return nil
     }
 
+    // Reads run on this queue, never the main thread, as they will in the app.
+    static let queue = DispatchQueue(label: "constellation.ax-reader", qos: .utility)
+
+    /// Run `body` on the reader queue and wait for it. (DispatchQueue.sync would
+    /// usually run it on the calling thread, so async plus a semaphore is used.)
+    static func offMain<T>(_ body: @escaping () -> T) -> T {
+        var result: T?
+        let done = DispatchSemaphore(value: 0)
+        queue.async {
+            result = body()
+            done.signal()
+        }
+        done.wait()
+        return result!
+    }
+
+    static func read(app: AXUIElement) -> WalkResult {
+        offMain { walk(app: app) }
+    }
+
     static func walk(app: AXUIElement) -> WalkResult {
         let start = DispatchTime.now()
         var result = collect(app: app, start: start)
