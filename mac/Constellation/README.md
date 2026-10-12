@@ -24,7 +24,7 @@ When it starts, Terminal prints "Constellation is running" and stays busy. That 
 - **Event driven capture** of the front app, only if it is turned on: app switch, focused window change, title change (rapid changes folded into one), content change (at most once per 10 s per window), and return from 2 minutes idle. A **re-read 1.5 s after every app or window switch**, because M0 showed the first read can be partial. Never while off, paused, locked, in the screensaver, or with the display or Mac asleep. Low Power Mode doubles every delay.
 - **Reads off the main thread** on a background queue, with a 100 ms budget per read (depth 30, 2,000 nodes, 8,000 chars). Secure text fields, menus, toolbars, and window controls are never read. Electron apps get `AXManualAccessibility`, never `AXEnhancedUserInterface`.
 - **Browsers** (Safari, Chrome and other Chromium browsers, Firefox): tab title plus **domain and path only**. Query strings, fragments, user names, passwords, and ports are dropped before anything is kept. Page text is never read.
-- **Private windows**: a window whose title contains "Private Browsing" or "Incognito" is skipped before anything else is read.
+- **Private windows** are skipped before anything else is read: by title ("Private Browsing", "Incognito"), which catches Safari, and by the toolbar's profile button ("Incognito", "Guest", "InPrivate"), which catches Chrome incognito and guest windows and Edge InPrivate. Chrome keeps a normal page title in incognito, so the title alone missed it. Both verified by hand in M1.
 - **Segmentation** into activity records: a new record when the app, window title, or browser page changes, or after a 2 minute gap. Within a record only new lines are kept, up to 4,000 chars.
 - **Debug view** ("Debug view…"): per app, captures, characters (last and average), title length, whether a URL was found, read time (last, average, max), last trigger, and skips with the reason. **Counts only**: no text, titles, or URLs are shown.
 
@@ -39,7 +39,7 @@ When it starts, Terminal prints "Constellation is running" and stays busy. That 
 1. Run it. The Apps window opens, and the menu bar shows the crossed-out eye.
 2. Turn on Mail and Safari in the list, then switch on **Capture** at the top of the window. The icon becomes an eye.
 3. Click **Debug view** and switch between Mail and Safari. Each switch adds captures (app switch, then re-read). Mail shows characters; Safari shows 0 characters, a title length, and URL yes.
-4. Open a Safari private window (Shift+Cmd+N). The Safari row should show a skip with "private window". **Needs checking:** whether Safari's private window title actually contains "Private Browsing" once a page is open. If it doesn't, it is captured as title plus URL, and we need another way to detect it.
+4. Open a Safari private window (Shift+Cmd+N) or a Chrome incognito window (Shift+Cmd+N in Chrome) with a page loaded. The row should show skips with "private window" and no new captures.
 5. Add a word to "Always skip windows containing" that appears in an open email: that window shows "skipped word" skips.
 6. "Pause for 1 hour": no new captures. "Resume": captures come back.
 7. "Delete all captured data": records and counts go to 0.
