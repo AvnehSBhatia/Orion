@@ -175,7 +175,13 @@ struct LiveBackendTests {
             appName: "Mail", windowTitle: "Live test", domainPath: nil, text: "Live test block with [EMAIL]",
             textHash: "", redactionCount: 1, status: .approved, snapshotCount: 1
         )
-        let first = try await client.postWorkBlocks([WorkBlockPayload(record)], credentials: credentials)
+        let clients = try await client.fetchClients(since: nil, credentials: credentials)
+        #expect(!clients.clients.isEmpty)
+        let matcher = ClientMatcher(clients: clients.clients)
+        let first = try await client.postWorkBlocks(
+            [WorkBlockPayload(record, clientId: matcher.match(title: record.windowTitle, domainPath: record.domainPath, text: record.text)?.client.id)],
+            credentials: credentials
+        )
         #expect(first.accepted == [record.id.uuidString])
         let again = try await client.postWorkBlocks([WorkBlockPayload(record)], credentials: credentials) // resend is safe
         #expect(again.accepted == [record.id.uuidString])

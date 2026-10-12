@@ -79,7 +79,7 @@ Request:
 | `domain_path` | Browsers only, e.g. `docs.google.com/document/d/[SECRET]/edit`. `null` otherwise. |
 | `text` | Redacted text from the window, up to 4,000 characters. Empty for browsers. May have been edited by the person before sending. |
 | `redaction_count` | How many markers the block contains. |
-| `client_id` | From on-device client matching against `GET /v1/clients` (next step). `null` until then, or when nothing matched. |
+| `client_id` | From on-device client matching against `GET /v1/clients`. `null` when no client clearly matched. |
 
 No other fields are sent.
 
@@ -94,6 +94,37 @@ Response `200`:
 
 The app marks only `accepted` ids as sent, and shows the time and destination in the person's Outbox. Rejected blocks stay approved and are tried again, so reject only for problems a retry can fix, or the app keeps resending. `rejected` may be omitted.
 
+## GET /v1/clients?since=
+
+The client list, for matching work blocks to clients **on the device**. Fetched when the person connects and then every 15 minutes, with `since` set to the last `next_since` (omitted on the first call).
+
+Response `200`:
+
+```json
+{
+  "clients": [
+    {
+      "id": "c_acme",
+      "name": "Acme Corp",
+      "aliases": ["Acme", "ACME Inc"],
+      "domains": ["acme.com", "acme.atlassian.net"],
+      "project_codes": ["ACM-", "P-1042"],
+      "updated_at": "2026-10-01T09:00:00Z",
+      "deleted": false
+    }
+  ],
+  "next_since": "2026-10-12T18:00:00Z"
+}
+```
+
+- With `since`, return only clients created, changed, or deleted after it. A client with the same `id` replaces the device's copy; `"deleted": true` removes it. Returning the full list every time also works.
+- `aliases`, `domains`, `project_codes`, `updated_at`, and `deleted` are optional.
+- `domains` match the domain and its subdomains (`acme.com` matches `app.acme.com`).
+- A project code ending in `-` is a prefix (`ACM-` matches `ACM-12`); otherwise it must match exactly (`P-1042`).
+- Names and aliases match as whole words, ignoring case; names under 3 characters are ignored.
+
+How the device matches (so the backend knows what `client_id` means): it scores each client against the block's browser page domain, window title, browser path, and text. Domain of the browser page is the strongest signal, then a project code or name in the title, then signals in the text. It sends a `client_id` only if one client clearly wins; a tie, or only weak signals such as a name mentioned once in body text, sends `null`. Email addresses are redacted before matching, so email domains don't count. The client list is stored encrypted on the device, and client names are exempt from the optional name masking.
+
 ## DELETE /v1/me/data
 
 Deletes everything this device sent. Response `204` with an empty body. (The app has the call; the button for it comes later.)
@@ -102,6 +133,5 @@ Deletes everything this device sent. Response `204` with an empty body. (The app
 
 These arrive with the next steps, and their bodies will be added here then:
 
-- `GET /v1/clients?since=`: client list for on-device matching (names, aliases, domains, project codes).
 - `GET /v1/drafts/today` and `POST /v1/drafts/entries/:id/review`: the daily draft review screen (accept, edit, reject, change client).
 - `POST /v1/baseline`

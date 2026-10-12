@@ -128,6 +128,22 @@ public final class RecordStore: @unchecked Sendable { // every database call run
         }.first) ?? Totals()
     }
 
+    // MARK: Client list
+
+    /// Saved sealed, so client names are encrypted at rest but readable in the app.
+    public func saveClientList(_ list: ClientList) throws {
+        try queue.sync {
+            try run("INSERT INTO meta (key, sealed) VALUES ('clients', ?) ON CONFLICT(key) DO UPDATE SET sealed = excluded.sealed",
+                    [.blob(try seal(list))])
+        }
+    }
+
+    public func loadClientList() throws -> ClientList? {
+        try queue.sync {
+            try query("SELECT sealed FROM meta WHERE key = 'clients'", []) { try open($0.blob(0), as: ClientList.self) }.first
+        }
+    }
+
     // MARK: Outbox (M5)
 
     /// Close records that are no longer being written: they move to the Outbox
@@ -306,6 +322,13 @@ public final class RecordStore: @unchecked Sendable { // every database call run
             PRAGMA user_version = 3;
             """)
         }
+        if version < 4 {
+            // Client list for on-device matching, sealed like everything else.
+            try exec("""
+            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, sealed BLOB NOT NULL);
+            PRAGMA user_version = 4;
+            """)
+        }
     }
 
     private func upsert(_ record: ActivityRecord) throws {
@@ -332,7 +355,7 @@ public final class RecordStore: @unchecked Sendable { // every database call run
 
     // MARK: Encryption
 
-    private func seal(_ value: Sealed) throws -> Data {
+    private func seal<T: Encodable>(_ value: T) throws -> Data {
         guard let combined = try AES.GCM.seal(JSONEncoder().encode(value), using: key).combined else {
             throw StoreError.sql("seal failed")
         }
@@ -340,8 +363,12 @@ public final class RecordStore: @unchecked Sendable { // every database call run
     }
 
     private func open(_ data: Data) throws -> Sealed {
+        try open(data, as: Sealed.self)
+    }
+
+    private func open<T: Decodable>(_ data: Data, as type: T.Type) throws -> T {
         let box = try AES.GCM.SealedBox(combined: data)
-        return try JSONDecoder().decode(Sealed.self, from: AES.GCM.open(box, using: key))
+        return try JSONDecoder().decode(T.self, from: AES.GCM.open(box, using: key))
     }
 
     // MARK: SQLite helpers

@@ -1,0 +1,34 @@
+[
+  {
+    "id": "c_acme",
+    "name": "Acme Corp",
+    "aliases": ["Acme", "ACME Inc"],
+    "domains": ["acme.com", "acme.atlassian.net"],
+    "project_codes": ["ACM-"],
+    "updated_at": "2026-10-01T09:00:00Z"
+  },
+  {
+    "id": "c_globex",
+    "name": "Globex",
+    "aliases": ["Globex Corporation"],
+    "domains": ["globex.com"],
+    "project_codes": ["GLX-", "P-1042"],
+    "updated_at": "2026-10-01T09:00:00Z"
+  },
+  {
+    "id": "c_initech",
+    "name": "Initech",
+    "aliases": [],
+    "domains": ["initech.com"],
+    "project_codes": ["INI-"],
+    "updated_at": "2026-10-01T09:00:00Z"
+  },
+  {
+    "id": "c_apple",
+    "name": "Apple",
+    "aliases": ["Apple Support", "Apple ID"],
+    "domains": ["apple.com", "icloud.com"],
+    "project_codes": [],
+    "updated_at": "2026-10-01T09:00:00Z"
+  }
+]

@@ -2,7 +2,7 @@
 
 Menu bar app that reads on-screen text from apps the user turns on, redacts it on the device, and (from M5 on) sends approved work records to the backend. `mac/AXProbe` is the separate M0 measurement tool.
 
-**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, M2 redaction, M3 encrypted store, M4 welcome and permission screen, M5 Outbox, **sender (current)**, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
+**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, M2 redaction, M3 encrypted store, M4 welcome and permission screen, M5 Outbox, sender, **client matching (current)**, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
 
 ## Run it
 
@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 63 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 78 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -75,15 +75,31 @@ Sends **approved** Outbox items to the backend. Request and response shapes are 
 - If the backend can't be reached, it tries again after 30 s, then 1, 2, 4 ... minutes, up to 15 minutes. If the backend rejects the token (401 or 403), the app disconnects and asks to connect again. Approved items keep waiting either way.
 - Log only mode now means: items close, are approved, and are sent within a minute.
 
+## Client matching
+
+Each work block is matched to a client **on the Mac**, and only the client's id is sent (`client_id`).
+
+- The client list comes from `GET /v1/clients?since=` when you connect and every 15 minutes after ("Sync clients" in the Backend box forces it). Only changes are fetched after the first sync. The list is saved **encrypted** in the store; client names are readable in the app and are **never masked** by "Replace people's names".
+- Each client has a name, aliases, domains, and project codes. A block is scored on its browser page domain (strongest), then project codes, names, and domains in the window title, then the browser path, then the body text. A client is sent only if it clearly wins: a tie, or only a weak signal such as a name mentioned once in body text, sends no client. Email addresses are redacted before matching, so email domains don't count.
+- The Outbox shows the matched client for each item and why ("matched by domain acme.com"), and "What will be sent" includes the `client_id`.
+- Delete all clears the client list too; the next sync fetches it again.
+
 ### Mock backend
 
 ```sh
 node ~/Documents/constellation-mac/mac/mock-backend/server.mjs     # port 8787, no packages needed
 ```
 
-It implements register, work blocks, and delete my data per the contract, prints one line per received block (app, times, size, redaction count), warns if anything that looks like an unredacted email, phone number, or key arrives, and saves everything to `mac/mock-backend/data/` (git ignored) so you can read exactly what arrived. Registered devices survive a restart of the mock.
+It implements register, work blocks, clients, and delete my data per the contract, prints one line per received block (app, times, size, redaction count), warns if anything that looks like an unredacted email, phone number, or key arrives, and saves everything to `mac/mock-backend/data/` (git ignored) so you can read exactly what arrived. Registered devices survive a restart of the mock.
 
-Live test against it: `CONSTELLATION_LIVE_BACKEND=http://localhost:8787 swift test --filter LiveBackendTests`.
+Its clients come from `mac/mock-backend/clients.json`: sample clients (Acme, Globex, Initech, and Apple, so Apple emails match). Edit it to try your own; it's read on every sync. Mark a client `"deleted": true` to remove it from the Mac.
+
+Live test, on its own port and data folder so it doesn't touch a mock you're running:
+
+```sh
+PORT=8799 MOCK_DATA_DIR=/tmp/mock-test node mac/mock-backend/server.mjs &
+CONSTELLATION_LIVE_BACKEND=http://localhost:8799 swift test --filter LiveBackendTests
+```
 
 ## Welcome and permission (M4)
 
@@ -122,7 +138,7 @@ It fails if the label is gone. Without the variable it is skipped.
 
 ## Not built yet
 
-- Client matching and the daily draft review come next. Until client matching exists, `client_id` is always null.
+- The daily draft review screen comes next.
 
 ## Check it by hand
 

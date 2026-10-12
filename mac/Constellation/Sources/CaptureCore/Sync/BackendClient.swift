@@ -146,6 +146,14 @@ public struct BackendClient: Sendable {
                        token: credentials.token)
     }
 
+    /// GET /v1/clients?since=  Only changes since the last sync, once a cursor exists.
+    public func fetchClients(since: String?, credentials: DeviceCredentials) async throws -> ClientsResponse {
+        var components = URLComponents()
+        components.path = "/v1/clients"
+        if let since { components.queryItems = [URLQueryItem(name: "since", value: since)] }
+        return try await send("GET", components.string ?? "/v1/clients", body: Empty?.none, token: credentials.token)
+    }
+
     /// DELETE /v1/me/data
     public func deleteMyData(credentials: DeviceCredentials) async throws {
         let _: Empty = try await send("DELETE", "/v1/me/data", body: Empty?.none, token: credentials.token)

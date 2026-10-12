@@ -10,11 +10,16 @@
 import { createServer } from 'node:http';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 
 const PORT = Number(process.env.PORT ?? 8787);
-const DATA = new URL('./data/', import.meta.url);
+// MOCK_DATA_DIR lets tests use their own folder instead of mock-backend/data/.
+const DATA = process.env.MOCK_DATA_DIR
+  ? pathToFileURL(process.env.MOCK_DATA_DIR.replace(/\/?$/, '/'))
+  : new URL('./data/', import.meta.url);
 const DEVICES_FILE = new URL('devices.json', DATA);
 const BLOCKS_FILE = new URL('work-blocks.jsonl', DATA);
+const CLIENTS_FILE = new URL('./clients.json', import.meta.url); // edit it to try your own clients
 const MAX_BODY = 5_000_000;
 
 const BLOCK_FIELDS = {
@@ -134,6 +139,17 @@ async function handle(req, res) {
     return send(res, 200, { accepted, rejected });
   }
 
+  if (route === 'GET /v1/clients') {
+    const device = deviceFor(req);
+    if (!device) return send(res, 401, { error: 'unknown or missing device token' });
+    // Read fresh every time, so edits to clients.json show up on the next sync.
+    // The mock ignores ?since= and returns the whole list; mark a client
+    // "deleted": true to remove it from devices.
+    const clients = JSON.parse(await readFile(CLIENTS_FILE, 'utf8'));
+    console.log(`clients for ${device.device_id}: ${clients.length} (since ${url.searchParams.get('since') ?? 'the start'})`);
+    return send(res, 200, { clients, next_since: new Date().toISOString() });
+  }
+
   if (route === 'DELETE /v1/me/data') {
     const device = deviceFor(req);
     if (!device) return send(res, 401, { error: 'unknown or missing device token' });
@@ -144,8 +160,8 @@ async function handle(req, res) {
     return res.end();
   }
 
-  // The rest of the contract arrives with client matching and the daily draft.
-  if (['GET /v1/clients', 'GET /v1/drafts/today', 'POST /v1/baseline'].includes(route) ||
+  // The rest of the contract arrives with the daily draft.
+  if (['GET /v1/drafts/today', 'POST /v1/baseline'].includes(route) ||
       /^POST \/v1\/drafts\/entries\/[^/]+\/review$/.test(route)) {
     return send(res, 501, { error: 'not in the mock yet' });
   }
@@ -156,5 +172,5 @@ await load();
 createServer((req, res) => {
   handle(req, res).catch((error) => send(res, 400, { error: String(error.message ?? error) }));
 }).listen(PORT, () => {
-  console.log(`Constellation mock backend on http://localhost:${PORT} (${devices.size} known devices). Data in mac/mock-backend/data/.`);
+  console.log(`Constellation mock backend on http://localhost:${PORT} (${devices.size} known devices). Data in ${DATA.pathname}`);
 });

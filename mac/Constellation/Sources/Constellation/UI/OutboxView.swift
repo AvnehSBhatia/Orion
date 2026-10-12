@@ -29,7 +29,7 @@ struct OutboxView: View {
                 }
             }
 
-            ConnectionBox(sender: sender, settings: settings)
+            ConnectionBox(sender: sender, settings: settings, directory: sender.directory)
 
             if !model.available {
                 Text("The encrypted store is unavailable, so there is nothing to show.").foregroundStyle(.orange)
@@ -79,7 +79,8 @@ private struct BatchSection: View {
                 DisclosureGroup {
                     VStack(alignment: .leading, spacing: 10) {
                         ForEach(batch.items) { item in
-                            ItemCard(item: item, onEdit: { editing = item }, onDelete: { model.delete([item.id]) })
+                            ItemCard(item: item, match: model.match(item), preview: model.preview(item),
+                                     onEdit: { editing = item }, onDelete: { model.delete([item.id]) })
                         }
                     }
                     .padding(.top, 6)
@@ -102,6 +103,8 @@ private struct BatchSection: View {
 
 private struct ItemCard: View {
     let item: OutboxItem
+    let match: ClientMatch?
+    let preview: String
     let onEdit: () -> Void
     let onDelete: () -> Void
     @State private var title: AttributedString?
@@ -124,6 +127,14 @@ private struct ItemCard: View {
             }
             .foregroundStyle(.primary)
 
+            field("Client") {
+                if let match {
+                    Text(match.client.name).font(.body.weight(.medium))
+                    Text("matched by \(match.reason)").foregroundStyle(.secondary)
+                } else {
+                    Text("No client matched").foregroundStyle(.secondary)
+                }
+            }
             field("Title") { Text(title ?? AttributedString(item.record.windowTitle)) }
             if let domainPath = item.record.domainPath {
                 field("Web address") { Text(domainPath) }
@@ -140,7 +151,7 @@ private struct ItemCard: View {
                 }
             }
             DisclosureGroup("What will be sent") {
-                Text(item.payload.preview)
+                Text(preview)
                     .font(.caption.monospaced())
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
@@ -168,6 +179,7 @@ private struct ItemCard: View {
 private struct ConnectionBox: View {
     @ObservedObject var sender: Sender
     @ObservedObject var settings: Settings
+    @ObservedObject var directory: ClientDirectory
     @State private var url = ""
     @State private var code = ""
 
@@ -193,6 +205,12 @@ private struct ConnectionBox: View {
                 Label(status, systemImage: icon)
                     .foregroundStyle(color)
                     .fixedSize(horizontal: false, vertical: true)
+                if sender.isConnected {
+                    HStack {
+                        Text(clientsStatus).foregroundStyle(directory.syncError == nil ? Color.secondary : Color.orange)
+                        Button("Sync clients") { Task { await sender.syncClients() } }
+                    }
+                }
             }
             .padding(4)
         }
@@ -212,6 +230,13 @@ private struct ConnectionBox: View {
             }
             return text
         }
+    }
+
+    private var clientsStatus: String {
+        if let error = directory.syncError { return "Clients: couldn't sync. \(error)" }
+        let count = directory.list.clients.count
+        guard let at = directory.list.syncedAt else { return "Clients: not synced yet." }
+        return "Clients: \(count) synced \(at.formatted(date: .omitted, time: .shortened))."
     }
 
     private var icon: String {

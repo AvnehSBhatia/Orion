@@ -24,6 +24,7 @@ struct CaptureStatus: Equatable {
     let names = NameMasker() // stable [Person N] tokens for this session; the Outbox uses it for edits
     /// Refreshed when records move into the Outbox.
     var outbox: OutboxModel?
+    var directory: ClientDirectory?
     private var outboxTimer: Timer?
     @Published private(set) var status = CaptureStatus()
 
@@ -93,6 +94,7 @@ struct CaptureStatus: Equatable {
         segmenter.clear()
         names.reset()
         Redactor.clearCache()
+        directory?.reset()
         stats.clear()
         do { try store?.deleteAll() } catch { print("Constellation store: delete all failed (\(error))") }
         stats.updateStore(store?.totals(), storeAvailable: store != nil)

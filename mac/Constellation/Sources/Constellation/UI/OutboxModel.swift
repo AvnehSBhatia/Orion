@@ -7,6 +7,7 @@ import Foundation
     @Published private(set) var approved: [OutboxBatch] = []
     @Published private(set) var sent: [OutboxBatch] = []
     var sender: Sender?
+    var directory: ClientDirectory?
     static let sentShown = 100
     let available: Bool
 
@@ -37,6 +38,11 @@ import Foundation
         refresh()
         sender?.sendNow() // if connected, send right away
     }
+
+    func match(_ item: OutboxItem) -> ClientMatch? { directory?.match(item.record) }
+
+    /// The JSON shown under "What will be sent": exactly what the sender posts.
+    func preview(_ item: OutboxItem) -> String { (directory?.payload(for: item) ?? item.payload).preview }
 
     /// Permanent (spec 9).
     func delete(_ ids: [UUID]) {

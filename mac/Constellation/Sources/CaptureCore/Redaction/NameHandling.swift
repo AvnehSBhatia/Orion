@@ -29,6 +29,8 @@ public final class NameMasker: @unchecked Sendable {
     private var tokens: [String: Int] = [:]
     /// Already redacted line -> masked line. Memory only, cleared with reset().
     private var cache: [String: (text: String, count: Int)] = [:]
+    /// Client names and aliases, lowercased: never masked, so they stay readable.
+    private var exempt: Set<String> = []
     private static let cacheLimit = 5_000
 
     public init() {}
@@ -67,8 +69,26 @@ public final class NameMasker: @unchecked Sendable {
         return (done.map(\.text), done.reduce(0) { $0 + $1.count })
     }
 
+    /// Names masking must leave alone, e.g. the client list. Clears the cache when they change.
+    public func setExempt(_ names: [String]) {
+        let updated = Set(names.map { $0.lowercased() }.filter { !$0.isEmpty })
+        lock.lock()
+        defer { lock.unlock() }
+        if updated != exempt {
+            exempt = updated
+            cache = [:]
+        }
+    }
+
     public func mask(_ text: String) -> (text: String, count: Int) {
-        let ranges = NameDetector.ranges(in: text)
+        lock.lock()
+        let exempt = self.exempt
+        lock.unlock()
+        // A detected name that is, or is part of, a client name stays as it is.
+        let ranges = NameDetector.ranges(in: text).filter { range in
+            let name = text[range].lowercased()
+            return !exempt.contains { $0 == name || $0.contains(name) }
+        }
         guard !ranges.isEmpty else { return (text, 0) }
         // Number names in reading order, so the first person mentioned is Person 1.
         let numbered = ranges.map { ($0, token(for: String(text[$0]))) }

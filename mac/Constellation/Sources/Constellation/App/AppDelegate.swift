@@ -14,10 +14,13 @@ import CaptureCore
         engine.outbox = model
         return model
     }()
+    private lazy var directory = ClientDirectory(store: engine.store, names: engine.names)
     private lazy var sender: Sender = {
-        let sender = Sender(settings: settings, store: engine.store)
+        let sender = Sender(settings: settings, store: engine.store, directory: directory)
         sender.outbox = outbox
         outbox.sender = sender
+        outbox.directory = directory
+        engine.directory = directory
         return sender
     }()
     private var menuBar: MenuBarController?

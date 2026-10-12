@@ -19,6 +19,7 @@ import Foundation
     @Published private(set) var destination: String?
 
     var outbox: OutboxModel?
+    let directory: ClientDirectory
 
     private let settings: Settings
     private let store: RecordStore?
@@ -31,9 +32,10 @@ import Foundation
     static let checkSeconds: TimeInterval = 60
     static let maxBackoffSeconds: TimeInterval = 900
 
-    init(settings: Settings, store: RecordStore?) {
+    init(settings: Settings, store: RecordStore?, directory: ClientDirectory) {
         self.settings = settings
         self.store = store
+        self.directory = directory
         credentials = DeviceCredentials.load()
         state = credentials == nil ? .notConnected : .connected
         destination = credentials == nil ? nil : client?.destination
@@ -75,6 +77,7 @@ import Foundation
             self.credentials = credentials
             destination = client.destination
             state = .connected
+            await syncClients() // match against the client list before the first send
             sendNow()
         } catch {
             state = .failed(error.localizedDescription)
@@ -98,7 +101,23 @@ import Foundation
 
     private func tick() {
         guard Date() >= nextAttempt else { return }
-        Task { await sendApproved() }
+        Task {
+            if directory.isDue { await syncClients() }
+            await sendApproved()
+        }
+    }
+
+    /// GET /v1/clients: only what changed since the last sync.
+    func syncClients() async {
+        guard let credentials, let client else { return }
+        do {
+            directory.apply(try await client.fetchClients(since: directory.list.since, credentials: credentials))
+        } catch BackendError.unauthorized {
+            disconnect()
+            state = .failed(BackendError.unauthorized.localizedDescription)
+        } catch {
+            directory.failed(error.localizedDescription)
+        }
     }
 
     private func sendApproved() async {
@@ -110,7 +129,8 @@ import Foundation
         state = .sending
         defer { inFlight = false }
         do {
-            let response = try await client.postWorkBlocks(items.map(\.payload), credentials: credentials)
+            // Each block carries the client matched on this Mac, if any.
+            let response = try await client.postWorkBlocks(items.map(directory.payload(for:)), credentials: credentials)
             let accepted = Set(response.accepted)
             let sent = items.filter { accepted.contains($0.id.uuidString) }.map(\.id)
             try store.markSent(sent, destination: client.destination)
