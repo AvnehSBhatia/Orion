@@ -50,8 +50,10 @@ public struct Snapshot: Sendable {
     }
 }
 
+/// local: still being written. queued: closed, waiting in the Outbox for review.
+/// approved: waiting for the sender. sent: delivered. (Deleting removes the row.)
 public enum RecordStatus: String, Sendable {
-    case local, queued, sent, deleted
+    case local, queued, approved, sent, deleted
 }
 
 /// A stretch of work in one app and window (spec 5.5).

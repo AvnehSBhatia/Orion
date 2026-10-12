@@ -9,6 +9,11 @@ import CaptureCore
     // The smoke test never opens the store: after a rebuild, macOS asks before
     // the new binary may use the Keychain key, and nobody is there to answer.
     private lazy var engine = CaptureEngine(settings: settings, stats: stats, store: smokeTest ? nil : openStore())
+    private lazy var outbox: OutboxModel = {
+        let model = OutboxModel(store: engine.store, settings: settings, names: engine.names)
+        engine.outbox = model
+        return model
+    }()
     private var menuBar: MenuBarController?
 
     /// The encrypted store. If it cannot open (for example the Keychain refuses), capture
@@ -25,7 +30,7 @@ import CaptureCore
     func applicationDidFinishLaunching(_ notification: Notification) {
         // No permission prompt here: the welcome screens explain what is read first,
         // and ask for the permission themselves (spec 5.1).
-        menuBar = MenuBarController(settings: settings, engine: engine, stats: stats)
+        menuBar = MenuBarController(settings: settings, engine: engine, stats: stats, outbox: outbox)
 
         if smokeTest {
             // Build everything, start nothing, and quit: no app is read.

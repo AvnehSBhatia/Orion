@@ -21,7 +21,10 @@ struct CaptureStatus: Equatable {
     private let system = SystemState()
     private let scheduler = EventScheduler()
     private(set) var segmenter = Segmenter()
-    private let names = NameMasker() // stable [Person N] tokens for this session
+    let names = NameMasker() // stable [Person N] tokens for this session; the Outbox uses it for edits
+    /// Refreshed when records move into the Outbox.
+    var outbox: OutboxModel?
+    private var outboxTimer: Timer?
     @Published private(set) var status = CaptureStatus()
 
     private var front: NSRunningApplication?
@@ -60,8 +63,28 @@ struct CaptureStatus: Equatable {
             MainActor.assumeIsolated { self?.applyRetention() }
         }
         applyRetention()
+        // Anything still open from the last session is finished: move it to the Outbox.
+        store?.closeOpen(except: nil, endedBefore: nil, approve: settings.outboxMode == .logOnly)
+        outboxTimer = Timer.scheduledTimer(withTimeInterval: Limits.outboxCheckSeconds, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkOutbox() }
+        }
+        checkOutbox()
         stats.updateStore(store?.totals(), storeAvailable: store != nil)
         reattach()
+    }
+
+    /// Close records idle past the gap, auto approve what has waited long enough,
+    /// and refresh the Outbox window.
+    private func checkOutbox() {
+        guard let store else { return }
+        store.closeOpen(
+            except: segmenter.current?.id, endedBefore: Date().addingTimeInterval(-Limits.idleGapSeconds),
+            approve: settings.outboxMode == .logOnly
+        )
+        if settings.outboxMode == .reviewFirst, settings.autoApprove {
+            _ = try? store.autoApprove(queuedBefore: Date().addingTimeInterval(-Double(Limits.autoApproveMinutes) * 60))
+        }
+        outbox?.refresh()
     }
 
     /// Delete all (spec 2.7): every record in memory and on disk, the store's key, and every counter.
@@ -71,6 +94,7 @@ struct CaptureStatus: Equatable {
         stats.clear()
         do { try store?.deleteAll() } catch { print("Constellation store: delete all failed (\(error))") }
         stats.updateStore(store?.totals(), storeAvailable: store != nil)
+        outbox?.refresh()
     }
 
     /// Clear captured text from stored records older than the retention period.
@@ -170,9 +194,14 @@ struct CaptureStatus: Equatable {
             if snapshot.skip == nil, snapshot.foundWindow {
                 lastTitle[pid] = snapshot.windowTitle
                 scheduler.noteRan(contentKey(pid))
-                segmenter.ingest(snapshot)
+                let outcome = segmenter.ingest(snapshot)
                 if let record = segmenter.current {
                     store?.save(record) // encrypted, in the background
+                }
+                if outcome == .newRecord {
+                    // The previous record is finished: it moves to the Outbox.
+                    store?.closeOpen(except: segmenter.current?.id, endedBefore: nil, approve: settings.outboxMode == .logOnly)
+                    outbox?.refresh()
                 }
                 stats.updateStore(store?.totals(), storeAvailable: store != nil, inMemory: segmenter)
             }

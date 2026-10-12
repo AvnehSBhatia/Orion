@@ -9,13 +9,15 @@ import SwiftUI
     private let settings: Settings
     private let engine: CaptureEngine
     private let stats: DebugStats
+    private let outbox: OutboxModel
     private var windows: [String: NSWindow] = [:]
     private var sink: AnyCancellable?
 
-    init(settings: Settings, engine: CaptureEngine, stats: DebugStats) {
+    init(settings: Settings, engine: CaptureEngine, stats: DebugStats, outbox: OutboxModel) {
         self.settings = settings
         self.engine = engine
         self.stats = stats
+        self.outbox = outbox
         super.init()
         let menu = NSMenu()
         menu.delegate = self
@@ -56,6 +58,8 @@ import SwiftUI
             menu.addItem(action("Turn capture off", #selector(turnOff)))
         }
         menu.addItem(.separator())
+        let waiting = outbox.toReviewCount
+        menu.addItem(action(waiting > 0 ? "Outbox (\(waiting) to review)…" : "Outbox…", #selector(showOutbox)))
         menu.addItem(action("Choose apps…", #selector(showApps)))
         menu.addItem(action("Welcome and permission…", #selector(showWelcome)))
         menu.addItem(action("Debug view…", #selector(showDebug)))
@@ -92,6 +96,10 @@ import SwiftUI
         })
     }
 
+    @objc func showOutbox() {
+        show("outbox", title: "Constellation: Outbox", OutboxView(model: outbox, settings: settings))
+    }
+
     @objc func showWelcome() {
         show("welcome", title: "Welcome to Constellation", OnboardingView(
             settings: settings,
@@ -109,7 +117,8 @@ import SwiftUI
         let apps = NSHostingController(rootView: AppPickerView(settings: settings, engine: engine) {})
         let debug = NSHostingController(rootView: DebugView(stats: stats, engine: engine))
         let welcome = NSHostingController(rootView: OnboardingView(settings: settings, openApps: {}, finish: {}))
-        let views = [apps.view, debug.view, welcome.view]
+        let outboxWindow = NSHostingController(rootView: OutboxView(model: outbox, settings: settings))
+        let views = [apps.view, debug.view, welcome.view, outboxWindow.view]
         views.forEach { $0.layoutSubtreeIfNeeded() }
         return views.allSatisfy { $0.fittingSize.width > 0 }
     }

@@ -41,6 +41,11 @@ public enum Limits {
     public static let rawTextRetentionDays = 30
     public static let retentionCheckSeconds: TimeInterval = 3600
 
+    // Outbox (spec 9).
+    public static let outboxBatchSeconds: TimeInterval = 1800 // batches are 30 minute slots
+    public static let autoApproveMinutes = 30 // Review first: approve automatically after this, if on
+    public static let outboxCheckSeconds: TimeInterval = 30 // close idle records, auto approve
+
     /// Low Power Mode doubles every debounce (spec 13).
     public static func debounce(_ seconds: TimeInterval) -> TimeInterval {
         ProcessInfo.processInfo.isLowPowerModeEnabled ? seconds * 2 : seconds

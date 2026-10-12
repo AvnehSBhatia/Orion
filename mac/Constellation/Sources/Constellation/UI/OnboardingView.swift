@@ -1,4 +1,5 @@
 import ApplicationServices
+import CaptureCore
 import AppKit
 import SwiftUI
 
@@ -12,7 +13,7 @@ struct OnboardingView: View {
     @State private var step = 0
     @State private var trusted = AXIsProcessTrusted()
     private let poll = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-    private static let stepCount = 4
+    private static let stepCount = 5
 
     /// Run from Terminal in this test build, so macOS grants the permission to Terminal.
     private var runningUnbundled: Bool { Bundle.main.bundleIdentifier == nil }
@@ -24,6 +25,7 @@ struct OnboardingView: View {
                 case 0: welcome
                 case 1: whatIsRead
                 case 2: permission
+                case 3: sharing
                 default: chooseApps
                 }
             }
@@ -103,6 +105,25 @@ struct OnboardingView: View {
             }
             Text("You can turn this off any time in System Settings > Privacy & Security > Accessibility.")
                 .font(.caption).foregroundStyle(.secondary)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var sharing: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("You decide what is shared").font(.title2.bold())
+            Text("Finished work goes to the Outbox first, where you can read exactly what would be sent, edit it, or delete it.")
+            Picker("", selection: $settings.outboxMode) {
+                Text("Review first: I approve before anything is sent").tag(OutboxMode.reviewFirst)
+                Text("Log only: send automatically, and show me what was sent").tag(OutboxMode.logOnly)
+            }
+            .pickerStyle(.radioGroup)
+            .labelsHidden()
+            if settings.outboxMode == .reviewFirst {
+                Toggle("Approve automatically after \(Limits.autoApproveMinutes) minutes if I haven't looked", isOn: $settings.autoApprove)
+            }
+            Text("You can change this any time in the Outbox. Nothing is sent anywhere in this version yet.")
+                .foregroundStyle(.secondary)
         }
         .fixedSize(horizontal: false, vertical: true)
     }

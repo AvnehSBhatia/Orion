@@ -2,7 +2,7 @@
 
 Menu bar app that reads on-screen text from apps the user turns on, redacts it on the device, and (from M5 on) sends approved work records to the backend. `mac/AXProbe` is the separate M0 measurement tool.
 
-**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, M2 redaction, M3 encrypted store, **M4 welcome and permission screen (current)**, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
+**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, M2 redaction, M3 encrypted store, M4 welcome and permission screen, **M5 Outbox (current)**, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
 
 ## Run it
 
@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 44 tests: store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 53 tests: Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -46,14 +46,29 @@ Look-alikes that are kept, each with a test: version strings, dates, card-shaped
 
 The debug view adds a **Redactions** count per app. Text is still never shown there; the Outbox (M5) is where the redacted text becomes visible.
 
+## Outbox (M5)
+
+Nothing leaves the Mac unless it appears in the Outbox first (spec 2.5, 9). Open it from the menu: "Outbox (N to review)…".
+
+- A record goes to the Outbox when it **closes**: the app, window, or page changes, or 2 minutes pass with no new capture. The record still being written never appears. Records left open when the app quit are closed at the next launch.
+- **Review first** (default): items wait under "Waiting for review". **Approve automatically after 30 minutes** is on by default and can be turned off. **Log only**: items are approved as soon as they close. The mode is chosen in the welcome screens and can be changed in the Outbox.
+- Items are grouped into **30 minute batches**. A batch can be approved or deleted as a whole; each item can be edited or deleted on its own.
+- Each item shows the app, times, title, web address, text, and redaction count. **People's names are highlighted** in yellow (spec 8) and redaction markers like `[EMAIL]` are greyed. "What will be sent" shows the exact JSON, produced by the same code the sender will use.
+- **Edits are redacted again** before they are saved, so nothing typed into an edit skips redaction. Edited items are marked.
+- **Delete is permanent**: the row is removed and, with `secure_delete`, overwritten.
+- Destination: **not connected yet**. Approved items wait under "Approved, waiting to send" until the sender is built. Nothing is sent.
+
+Once a record has closed, capture can never overwrite it, so edits and deletes stick. The store upgrades an M3 database in place (schema version 2), and a test covers that.
+
 ## Welcome and permission (M4)
 
-Four short screens, shown on first run and from the menu ("Welcome and permission…"):
+Five short screens, shown on first run and from the menu ("Welcome and permission…"):
 
 1. What Constellation is for.
 2. What it reads and what it never reads, in plain words, plus how redaction and encryption work.
 3. The Accessibility permission. The system prompt opens only when the person clicks **Open System Settings** on this screen, never at launch (spec 5.1). The screen shows "Allowed" as soon as macOS grants it.
-4. Choose apps (opens the app list) and an optional "Start capturing now" switch.
+4. Sharing: Review first or Log only, and auto approve (M5).
+5. Choose apps (opens the app list) and an optional "Start capturing now" switch.
 
 The rest of M4 (menu bar icon and states, app picker, pause controls) was built in M1.
 
@@ -82,8 +97,7 @@ It fails if the label is gone. Without the variable it is skipped.
 
 ## Not built yet
 
-- Nothing is sent anywhere yet (Outbox and sender come later).
-- No Outbox yet (M5).
+- Nothing is sent anywhere yet: the sender, client matching, and the daily draft review come next.
 
 ## Check it by hand
 

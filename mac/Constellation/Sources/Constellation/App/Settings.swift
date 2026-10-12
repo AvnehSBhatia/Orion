@@ -18,6 +18,8 @@ enum CaptureState: Equatable {
         static let maskNames = "maskNames"
         static let redactPrivateIPs = "redactPrivateIPs"
         static let onboardingDone = "onboardingDone"
+        static let outboxMode = "outboxMode"
+        static let autoApprove = "autoApprove"
     }
 
     private let defaults = UserDefaults(suiteName: "com.traxrobotics.constellation") ?? .standard
@@ -34,6 +36,10 @@ enum CaptureState: Equatable {
     @Published var redactPrivateIPs: Bool { didSet { defaults.set(redactPrivateIPs, forKey: Key.redactPrivateIPs) } }
     /// The welcome screens have been seen (M4).
     @Published var onboardingDone: Bool { didSet { defaults.set(onboardingDone, forKey: Key.onboardingDone) } }
+    /// Outbox (spec 9): Review first by default.
+    @Published var outboxMode: OutboxMode { didSet { defaults.set(outboxMode.rawValue, forKey: Key.outboxMode) } }
+    /// Review first only: approve automatically after Limits.autoApproveMinutes. On by default.
+    @Published var autoApprove: Bool { didSet { defaults.set(autoApprove, forKey: Key.autoApprove) } }
 
     init() {
         captureOn = defaults.bool(forKey: Key.captureOn)
@@ -44,6 +50,8 @@ enum CaptureState: Equatable {
         maskNames = defaults.bool(forKey: Key.maskNames)
         redactPrivateIPs = defaults.bool(forKey: Key.redactPrivateIPs)
         onboardingDone = defaults.bool(forKey: Key.onboardingDone)
+        outboxMode = defaults.string(forKey: Key.outboxMode).flatMap(OutboxMode.init(rawValue:)) ?? .reviewFirst
+        autoApprove = defaults.object(forKey: Key.autoApprove) as? Bool ?? true
     }
 
     var rules: ExclusionRules { ExclusionRules(skipDomains: skipDomains, skipWords: skipWords) }

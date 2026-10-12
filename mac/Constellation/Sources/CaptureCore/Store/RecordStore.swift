@@ -116,22 +116,8 @@ public final class RecordStore: @unchecked Sendable { // every database call run
 
     public func load(limit: Int = 500) throws -> [ActivityRecord] {
         try queue.sync {
-            try query(
-                """
-                SELECT id, started_at, ended_at, app_bundle_id, app_name, sealed, redaction_count, status, snapshot_count
-                FROM records ORDER BY started_at DESC LIMIT ?
-                """,
-                [.int(limit)]
-            ) { row in (row.text(0), row.real(1), row.real(2), row.text(3), row.text(4), row.blob(5), row.int(6), row.text(7), row.int(8)) }
-            .map { id, started, ended, bundleId, appName, blob, redactions, status, snapshots in
-                let sealed = try open(blob)
-                return ActivityRecord(
-                    id: UUID(uuidString: id) ?? UUID(), startedAt: Date(timeIntervalSince1970: started),
-                    endedAt: Date(timeIntervalSince1970: ended), appBundleId: bundleId, appName: appName,
-                    windowTitle: sealed.windowTitle, domainPath: sealed.domainPath, text: sealed.text,
-                    textHash: sealed.textHash, redactionCount: redactions,
-                    status: RecordStatus(rawValue: status) ?? .local, snapshotCount: snapshots
-                )
+            try query("SELECT \(Self.recordColumns) FROM records ORDER BY started_at DESC LIMIT ?", [.int(limit)]) {
+                try decodeRecord($0)
             }
         }
     }
@@ -140,6 +126,121 @@ public final class RecordStore: @unchecked Sendable { // every database call run
         (try? queue.sync {
             try query("SELECT COUNT(*), COALESCE(SUM(text_chars), 0) FROM records", []) { Totals(records: $0.int(0), chars: $0.int(1)) }
         }.first) ?? Totals()
+    }
+
+    // MARK: Outbox (M5)
+
+    /// Close records that are no longer being written: they move to the Outbox
+    /// (queued), or straight to approved in Log only mode. `except` is the record
+    /// still being written; `endedBefore` limits it to records idle since then.
+    /// Runs in the background after any pending saves.
+    public func closeOpen(except current: UUID?, endedBefore: Date?, approve: Bool) {
+        let now = Date().timeIntervalSince1970
+        queue.async { [self] in
+            do {
+                try run(
+                    """
+                    UPDATE records SET status = ?, queued_at = ?, approved_at = ?
+                    WHERE status = 'local' AND id != ? AND ended_at < ?
+                    """,
+                    [
+                        .text(approve ? RecordStatus.approved.rawValue : RecordStatus.queued.rawValue), .real(now),
+                        approve ? .real(now) : .null, .text(current?.uuidString ?? ""),
+                        .real(endedBefore?.timeIntervalSince1970 ?? .greatestFiniteMagnitude),
+                    ]
+                )
+            } catch { print("Constellation store: close failed (\(error))") }
+        }
+    }
+
+    /// Records in the Outbox with the given statuses, newest first.
+    public func outbox(_ statuses: [RecordStatus] = [.queued, .approved]) throws -> [OutboxItem] {
+        try queue.sync {
+            let marks = statuses.map { _ in "?" }.joined(separator: ", ")
+            return try query(
+                """
+                SELECT \(Self.recordColumns), queued_at, approved_at, sent_at, edited
+                FROM records WHERE status IN (\(marks)) ORDER BY ended_at DESC
+                """,
+                statuses.map { .text($0.rawValue) }
+            ) { row in
+                OutboxItem(
+                    record: try decodeRecord(row),
+                    queuedAt: row.optionalDate(9), approvedAt: row.optionalDate(10), sentAt: row.optionalDate(11),
+                    edited: row.int(12) != 0
+                )
+            }
+        }
+    }
+
+    public func approve(_ ids: [UUID]) throws {
+        let now = Date().timeIntervalSince1970
+        try queue.sync {
+            for id in ids {
+                try run("UPDATE records SET status = 'approved', approved_at = ? WHERE id = ? AND status = 'queued'",
+                        [.real(now), .text(id.uuidString)])
+            }
+        }
+    }
+
+    /// Review first with auto approve on: approve what has waited since `queuedBefore`.
+    @discardableResult
+    public func autoApprove(queuedBefore: Date) throws -> Int {
+        try queue.sync {
+            try run("UPDATE records SET status = 'approved', approved_at = ? WHERE status = 'queued' AND queued_at < ?",
+                    [.real(Date().timeIntervalSince1970), .real(queuedBefore.timeIntervalSince1970)])
+            return Int(sqlite3_changes(db))
+        }
+    }
+
+    /// Replace a waiting record's text with an edited (already redacted) version.
+    public func updateText(_ id: UUID, text: String, redactionCount: Int) throws {
+        try queue.sync {
+            let rows = try query(
+                "SELECT sealed FROM records WHERE id = ? AND status IN ('queued', 'approved')", [.text(id.uuidString)],
+                { $0.blob(0) }
+            )
+            guard let row = rows.first else { return }
+            var sealed = try open(row)
+            sealed.text = text
+            sealed.textHash = Segmenter.hash(text)
+            try run(
+                "UPDATE records SET sealed = ?, text_chars = ?, redaction_count = ?, edited = 1 WHERE id = ?",
+                [.blob(try seal(sealed)), .int(text.count), .int(redactionCount), .text(id.uuidString)]
+            )
+        }
+    }
+
+    /// Delete permanently (spec 9). With secure_delete on, the bytes are overwritten.
+    public func delete(_ ids: [UUID]) throws {
+        try queue.sync {
+            for id in ids { try run("DELETE FROM records WHERE id = ?", [.text(id.uuidString)]) }
+        }
+    }
+
+    public func outboxCounts() -> (toReview: Int, approved: Int) {
+        let rows = (try? queue.sync {
+            try query("SELECT status, COUNT(*) FROM records WHERE status IN ('queued', 'approved') GROUP BY status", []) {
+                ($0.text(0), $0.int(1))
+            }
+        }) ?? []
+        let counts = Dictionary(uniqueKeysWithValues: rows)
+        return (counts["queued"] ?? 0, counts["approved"] ?? 0)
+    }
+
+    private static let recordColumns =
+        "id, started_at, ended_at, app_bundle_id, app_name, sealed, redaction_count, status, snapshot_count"
+
+    /// Columns 0 to 8 are `recordColumns`.
+    private func decodeRecord(_ row: Row) throws -> ActivityRecord {
+        let sealed = try open(row.blob(5))
+        return ActivityRecord(
+            id: UUID(uuidString: row.text(0)) ?? UUID(), startedAt: Date(timeIntervalSince1970: row.real(1)),
+            endedAt: Date(timeIntervalSince1970: row.real(2)), appBundleId: row.text(3), appName: row.text(4),
+            windowTitle: sealed.windowTitle, domainPath: sealed.domainPath, text: sealed.text,
+            textHash: sealed.textHash, redactionCount: row.int(6),
+            status: RecordStatus(rawValue: row.text(7)) ?? .local, snapshotCount: row.int(8)
+        )
     }
 
     // MARK: Database
@@ -177,6 +278,16 @@ public final class RecordStore: @unchecked Sendable { // every database call run
             PRAGMA user_version = 1;
             """)
         }
+        if version < 2 {
+            // Outbox (M5): when a record was queued, approved, sent, and whether it was edited.
+            try exec("""
+            ALTER TABLE records ADD COLUMN queued_at REAL;
+            ALTER TABLE records ADD COLUMN approved_at REAL;
+            ALTER TABLE records ADD COLUMN sent_at REAL;
+            ALTER TABLE records ADD COLUMN edited INTEGER NOT NULL DEFAULT 0;
+            PRAGMA user_version = 2;
+            """)
+        }
     }
 
     private func upsert(_ record: ActivityRecord) throws {
@@ -189,7 +300,8 @@ public final class RecordStore: @unchecked Sendable { // every database call run
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 ended_at = excluded.ended_at, sealed = excluded.sealed, redaction_count = excluded.redaction_count,
-                status = excluded.status, snapshot_count = excluded.snapshot_count, text_chars = excluded.text_chars
+                snapshot_count = excluded.snapshot_count, text_chars = excluded.text_chars
+            WHERE records.status = 'local'
             """,
             [
                 .text(record.id.uuidString), .real(record.startedAt.timeIntervalSince1970),
@@ -221,6 +333,7 @@ public final class RecordStore: @unchecked Sendable { // every database call run
         case real(Double)
         case text(String)
         case blob(Data)
+        case null
     }
 
     private struct Row {
@@ -228,6 +341,9 @@ public final class RecordStore: @unchecked Sendable { // every database call run
         func int(_ column: Int32) -> Int { Int(sqlite3_column_int64(statement, column)) }
         func real(_ column: Int32) -> Double { sqlite3_column_double(statement, column) }
         func text(_ column: Int32) -> String { sqlite3_column_text(statement, column).map { String(cString: $0) } ?? "" }
+        func optionalDate(_ column: Int32) -> Date? {
+            sqlite3_column_type(statement, column) == SQLITE_NULL ? nil : Date(timeIntervalSince1970: real(column))
+        }
         func blob(_ column: Int32) -> Data {
             guard let bytes = sqlite3_column_blob(statement, column) else { return Data() }
             return Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, column)))
@@ -257,6 +373,7 @@ public final class RecordStore: @unchecked Sendable { // every database call run
             case .real(let v): sqlite3_bind_double(statement, index, v)
             case .text(let v): sqlite3_bind_text(statement, index, v, -1, Self.transient)
             case .blob(let v): _ = v.withUnsafeBytes { sqlite3_bind_blob(statement, index, $0.baseAddress, Int32(v.count), Self.transient) }
+            case .null: sqlite3_bind_null(statement, index)
             }
         }
         var rows: [T] = []
