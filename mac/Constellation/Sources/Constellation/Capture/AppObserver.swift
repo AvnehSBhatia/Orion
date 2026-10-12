@@ -1,4 +1,5 @@
 import ApplicationServices
+import CaptureCore
 import Foundation
 
 /// Accessibility notifications from the front app (spec 5.2). Only created for
@@ -29,7 +30,7 @@ import Foundation
         self.pid = pid
         self.app = AXUIElementCreateApplication(pid)
         self.onEvent = onEvent
-        AXUIElementSetMessagingTimeout(app, 0.25)
+        AXUIElementSetMessagingTimeout(app, Limits.axTimeoutSeconds)
     }
 
     func start() {

@@ -27,8 +27,9 @@ import Foundation
     @Published private(set) var recordCount = 0
     @Published private(set) var storedChars = 0
 
+    /// Fixed order, so rows don't jump around as captures come in.
     var sortedRows: [AppRow] {
-        rows.values.sorted { ($0.lastAt ?? .distantPast) > ($1.lastAt ?? .distantPast) }
+        rows.values.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     func record(_ snapshot: Snapshot, trigger: Trigger) {

@@ -10,8 +10,10 @@ public enum Limits {
     public static let maxWalkMs = 100.0
     public static let maxSnapshotChars = 8_000
 
-    // Per Accessibility call. The system default is 6 seconds.
-    public static let axTimeoutSeconds: Float = 0.25
+    // Per Accessibility call. The system default is 6 seconds. Kept at the walk
+    // budget so one slow call cannot push a read far past it (M1 saw 234 ms in
+    // Safari with 0.25 s).
+    public static let axTimeoutSeconds: Float = 0.1
 
     // Browser URL search: covers toolbars (for the address bar), which the text walk skips.
     public static let urlSearchMaxDepth = 15

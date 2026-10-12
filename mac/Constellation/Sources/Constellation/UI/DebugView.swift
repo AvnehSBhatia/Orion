@@ -18,21 +18,42 @@ struct DebugView: View {
                 Summary(label: "Characters stored", value: "\(stats.storedChars)")
             }
 
-            Table(stats.sortedRows) {
-                TableColumn("App", value: \.name)
-                TableColumn("Captures") { Text("\($0.captures)") }.width(64)
-                TableColumn("Chars last / avg") { Text("\($0.lastChars) / \($0.avgChars)") }.width(110)
-                TableColumn("Title chars") { Text("\($0.lastTitleChars)") }.width(72)
-                TableColumn("URL") { Text($0.urlFound.map { $0 ? "yes" : "no" } ?? "-") }.width(40)
-                TableColumn("Read ms last / avg / max") { Text("\(ms($0.lastMs)) / \(ms($0.avgMs)) / \(ms($0.maxMs))") }.width(160)
-                TableColumn("Last trigger", value: \.lastTrigger)
-                TableColumn("Skips") { row in Text(row.skips == 0 ? "0" : "\(row.skips) (\(row.lastSkip))") }
+            // A plain grid rather than Table: Table's NSTableView warned about
+            // reentrant updates as rows changed under it.
+            ScrollView {
+                Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
+                    GridRow {
+                        ForEach(Self.headers, id: \.self) { Text($0) }
+                    }
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    Divider()
+                    ForEach(stats.sortedRows) { row in
+                        GridRow {
+                            Text(row.name)
+                            Text("\(row.captures)")
+                            Text(row.skips == 0 ? "0" : "\(row.skips): \(row.lastSkip)")
+                                .foregroundStyle(row.skips == 0 ? .primary : Color.orange)
+                            Text("\(row.lastChars) / \(row.avgChars)")
+                            Text("\(row.lastTitleChars)")
+                            Text(row.urlFound.map { $0 ? "yes" : "no" } ?? "-")
+                            Text("\(ms(row.lastMs)) / \(ms(row.avgMs)) / \(ms(row.maxMs))")
+                            Text(row.lastTrigger)
+                        }
+                        .monospacedDigit()
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(minHeight: 260)
+            .frame(minHeight: 220)
         }
         .padding(20)
-        .frame(minWidth: 900, minHeight: 420)
+        .frame(minWidth: 960, minHeight: 400)
     }
+
+    private static let headers = [
+        "App", "Captures", "Skips", "Chars last / avg", "Title chars", "URL", "Read ms last / avg / max", "Last trigger",
+    ]
 
     private var statusText: String {
         let status = engine.status
