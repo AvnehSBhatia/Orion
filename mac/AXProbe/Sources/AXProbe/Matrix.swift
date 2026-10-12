@@ -10,7 +10,9 @@ struct Row {
     var app = "-"
     var kind = "-"
     var tree = "-" // Chromium/Electron: AXManualAccessibility before, and the result of turning it on
-    var charsBefore = 0 // first walk, before the tree was turned on
+    var firstChars = 0 // first, cold walk: what a capture right after switching to the app gets
+    var firstMs = 0.0
+    var charsBefore: Int? // Chromium/Electron: a warm walk before the tree flag was set
     var chars = 0
     var contentChars = 0
     var quality = 0
@@ -60,7 +62,8 @@ enum Matrix {
                 continue
             }
             if let home, front.pid == home.pid, !target.lowercased().contains("terminal") {
-                print("  \(front.name) is still in front. Switch to \(target) during the countdown. Trying again.")
+                print("  \(front.name) is still in front (\(Apps.diagnose())).")
+                print("  Switch to \(target) during the countdown. Trying again.")
                 continue
             }
 
@@ -117,10 +120,17 @@ enum Matrix {
         row.cpuBase = ProcessStats.cpuPercent(from: a0, to: a1, seconds: Timing.baselineSeconds)
         row.memBase = ProcessStats.footprintMB(a1)
 
-        // One walk before touching the tree flag: what Chromium gives without being asked.
-        row.charsBefore = AXReader.walk(app: app).chars
+        // The first walk is cold: the app builds its Accessibility objects on
+        // demand, so this is slow and may hit the time limit. It is what the real
+        // app gets on the capture right after you switch apps.
+        let first = AXReader.walk(app: app)
+        row.firstChars = first.chars
+        row.firstMs = first.ms
 
         if usesTreeFlag {
+            // A warm walk before touching the flag: what Chromium gives unasked.
+            Thread.sleep(forTimeInterval: 0.5)
+            row.charsBefore = AXReader.walk(app: app).chars
             let result = ManualAccessibility.set(app, true)
             turnedOn = result == .success
             row.tree = "was \(prior), set \(axName(result))"
@@ -221,24 +231,27 @@ enum Matrix {
 
     static func printSummary(_ row: Row) {
         let tree = row.kind == "Native" ? "" : " Tree flag: \(row.tree)."
+        let before = row.charsBefore.map { ", \($0) before the tree flag" } ?? ""
         print("""
           Done: \(row.app) (\(row.kind)).\(tree)
-          Text: \(row.chars) chars (\(row.charsBefore) before the tree flag), \(row.contentChars) in sentences, quality \(row.quality)/5.
+          First walk (cold): \(row.firstChars) chars in \(fmt(row.firstMs)) ms\(before).
+          Text: \(row.chars) chars, \(row.contentChars) in sentences, quality \(row.quality)/5.
           Walk: \(fmt(row.walkAvgMs)) ms avg, \(fmt(row.walkMaxMs)) ms max, \(row.nodes) nodes, limit hit: \(row.stoppedBy).
           App CPU \(fmt(row.cpuBase))% -> \(fmt(row.cpuCapture))%, memory \(fmt(row.memBase, 0)) -> \(fmt(row.memCapture, 0)) MB. Probe CPU \(fmt(row.probeCPU))%.
         """)
     }
 
     static func printTable(_ rows: [Row]) {
-        print("| Target | App | Type | Chars before flag | Chars | Sentence chars | Quality 0-5 | Walk ms avg / max | Nodes | Limit hit | Web URL | Secure skipped | Tree flag | App CPU % base / reading | App MB base / reading | Probe CPU % | Notes |")
-        print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+        print("| Target | App | Type | First walk chars / ms | Chars before flag | Chars | Sentence chars | Quality 0-5 | Walk ms avg / max | Nodes | Limit hit | Web URL | Secure skipped | Tree flag | App CPU % base / reading | App MB base / reading | Probe CPU % | Notes |")
+        print("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
         for r in rows {
             if r.skipped {
-                print("| \(r.target) | skipped | | | | | | | | | | | | | | | |")
+                print("| \(r.target) | skipped | | | | | | | | | | | | | | | | |")
                 continue
             }
             let cells = [
-                r.target, r.app, r.kind, "\(r.charsBefore)", "\(r.chars)", "\(r.contentChars)", "\(r.quality)",
+                r.target, r.app, r.kind, "\(r.firstChars) / \(fmt(r.firstMs))", r.charsBefore.map(String.init) ?? "n/a",
+                "\(r.chars)", "\(r.contentChars)", "\(r.quality)",
                 "\(fmt(r.walkAvgMs)) / \(fmt(r.walkMaxMs))", "\(r.nodes)", r.stoppedBy, r.webURL, "\(r.secureSkipped)",
                 r.tree, "\(fmt(r.cpuBase)) / \(fmt(r.cpuCapture))", "\(fmt(r.memBase, 0)) / \(fmt(r.memCapture, 0))",
                 fmt(r.probeCPU), r.notes,

@@ -9,6 +9,7 @@ Usage: ax-probe <command>
 
   matrix [--apps "Safari,Chrome"]   Guided run over the spec's app list (or your own), then the coverage table.
   once                              Measure whatever app is in front after a 5 second countdown.
+  front                             After a 5 second countdown, show which app the probe thinks is in front.
   selftest                          Check that CPU and memory readings work. Reads no app text.
 """
 
@@ -42,6 +43,9 @@ case "matrix":
 case "once":
     requireAccessibility()
     Matrix.runOnce()
+case "front":
+    Matrix.countdown("any app")
+    print("In front: \(Apps.frontmost()?.name ?? "unknown") (\(Apps.diagnose()))")
 case "selftest":
     SelfTest.run()
 default:

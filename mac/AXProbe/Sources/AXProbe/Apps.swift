@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreGraphics
 
 enum AppKind: String {
     case native = "Native"
@@ -20,17 +21,48 @@ enum Apps {
         "com.vivaldi.Vivaldi", "com.operasoftware.Opera",
     ]
 
-    /// The app with keyboard focus right now, read fresh from the Accessibility API.
-    /// (NSWorkspace's frontmost app only updates when a run loop is running, which
-    /// this command line tool does not do.)
+    /// The app in front right now. The on-screen window order comes first because
+    /// it is always current. NSWorkspace's frontmost app is not used: it only
+    /// updates while a run loop runs, which this command line tool never does, so
+    /// it kept reporting Terminal.
     static func frontmost() -> FrontApp? {
+        (windowListFrontPid() ?? accessibilityFrontPid()).flatMap(describe)
+    }
+
+    /// Owner of the topmost normal window on screen. Needs no permission: window
+    /// titles would need Screen Recording, but owner and layer do not.
+    static func windowListFrontPid() -> pid_t? {
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let windows = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else { return nil }
+        for window in windows { // front to back
+            guard (window[kCGWindowLayer as String] as? Int) == 0,
+                  (window[kCGWindowAlpha as String] as? Double ?? 1) > 0,
+                  let pid = window[kCGWindowOwnerPID as String] as? pid_t else { continue }
+            // Skip tiny helper windows some apps keep at the normal layer.
+            if let bounds = window[kCGWindowBounds as String] as? [String: Any],
+               let width = bounds["Width"] as? Double, let height = bounds["Height"] as? Double,
+               width < 50 || height < 50 { continue }
+            return pid
+        }
+        return nil
+    }
+
+    /// The app with keyboard focus, per the Accessibility API.
+    static func accessibilityFrontPid() -> pid_t? {
         let system = AXUIElementCreateSystemWide()
         var pid: pid_t = 0
-        if let app = AXReader.element(AXReader.copy(system, kAXFocusedApplicationAttribute)),
-           AXUIElementGetPid(app, &pid) == .success {
-            return describe(pid)
+        guard let app = AXReader.element(AXReader.copy(system, kAXFocusedApplicationAttribute)),
+              AXUIElementGetPid(app, &pid) == .success else { return nil }
+        return pid
+    }
+
+    /// Both readings side by side, for when the probe picks the wrong app.
+    static func diagnose() -> String {
+        func label(_ pid: pid_t?) -> String {
+            guard let pid else { return "unknown" }
+            return describe(pid)?.name ?? "pid \(pid)"
         }
-        return NSWorkspace.shared.frontmostApplication.flatMap { describe($0.processIdentifier) }
+        return "window order says \(label(windowListFrontPid())), Accessibility says \(label(accessibilityFrontPid()))"
     }
 
     static func describe(_ pid: pid_t) -> FrontApp? {

@@ -19,14 +19,15 @@ Other commands:
 
 - `matrix --apps "Slack,Figma"` measures just those apps.
 - `once` measures whatever app is in front after a 5 second countdown.
+- `front` shows which app the probe thinks is in front, if it keeps picking the wrong one.
 
 ## How one measurement works
 
 For each app: press Enter, switch to the app during the 5 second countdown, and keep using it lightly for about 22 seconds.
 
 1. **Baseline (10 s):** the app's CPU and memory, including Chromium helper processes, with no Accessibility calls at all.
-2. **One walk** without touching anything: what the app exposes unprompted ("Chars before flag").
-3. **Chromium and Electron apps only:** set `AXManualAccessibility = true` on the app (spec 5.4), and record what it was before and whether the set worked. `AXEnhancedUserInterface` is never used.
+2. **First walk (cold):** the app builds its Accessibility objects on demand, so the first read is slow and may hit the 50 ms limit. It is what the real app gets on the capture right after you switch apps.
+3. **Chromium and Electron apps only:** one warm walk without touching anything ("Chars before flag"), then set `AXManualAccessibility = true` on the app (spec 5.4), and record what it was before and whether the set worked. `AXEnhancedUserInterface` is never used.
 4. **Reading (10 s):** walk the focused window every 2 seconds, with the app's CPU and memory measured again.
 5. The flag is set back to how it was.
 
@@ -38,7 +39,8 @@ If you switch away mid-run, that run is discarded and the app is asked for again
 
 | Column | Meaning |
 |---|---|
-| Chars before flag | Text from the first walk, before `AXManualAccessibility` was set |
+| First walk chars / ms | The cold first read: text and time |
+| Chars before flag | Chromium and Electron only: a warm read before `AXManualAccessibility` was set. `n/a` for native apps |
 | Chars | Most distinct text from one walk while reading (cap 8,000) |
 | Sentence chars | Part of that in strings of 5 or more words, i.e. content rather than UI labels |
 | Quality 0-5 | Heuristic from sentence chars: 0 under 50 chars total, then under 100 / 500 / 1,500 / 4,000 / over. A comparison aid, not a judgement of whether the right text came back. Use Notes for that. |

@@ -45,10 +45,19 @@ enum AXReader {
     }
 
     static func walk(app: AXUIElement) -> WalkResult {
-        var result = WalkResult()
         let start = DispatchTime.now()
-        func elapsedMs() -> Double { Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1e6 }
-        defer { result.ms = elapsedMs() }
+        var result = collect(app: app, start: start)
+        result.ms = elapsedMs(since: start)
+        return result
+    }
+
+    static func elapsedMs(since start: DispatchTime) -> Double {
+        Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1e6
+    }
+
+    private static func collect(app: AXUIElement, start: DispatchTime) -> WalkResult {
+        var result = WalkResult()
+        func elapsedMs() -> Double { AXReader.elapsedMs(since: start) }
 
         guard let window = focusedWindow(of: app) else { return result }
         result.foundWindow = true
