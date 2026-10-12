@@ -5,6 +5,9 @@ import Foundation
 @MainActor final class OutboxModel: ObservableObject {
     @Published private(set) var toReview: [OutboxBatch] = []
     @Published private(set) var approved: [OutboxBatch] = []
+    @Published private(set) var sent: [OutboxBatch] = []
+    var sender: Sender?
+    static let sentShown = 100
     let available: Bool
 
     private let store: RecordStore?
@@ -26,11 +29,13 @@ import Foundation
         let items = (try? store.outbox([.queued, .approved])) ?? []
         toReview = OutboxBatch.group(items.filter { $0.record.status == .queued })
         approved = OutboxBatch.group(items.filter { $0.record.status == .approved })
+        sent = OutboxBatch.group((try? store.outbox([.sent], limit: Self.sentShown)) ?? [])
     }
 
     func approve(_ batch: OutboxBatch) {
         try? store?.approve(batch.items.map(\.id))
         refresh()
+        sender?.sendNow() // if connected, send right away
     }
 
     /// Permanent (spec 9).

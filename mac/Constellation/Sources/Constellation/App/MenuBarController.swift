@@ -10,14 +10,16 @@ import SwiftUI
     private let engine: CaptureEngine
     private let stats: DebugStats
     private let outbox: OutboxModel
+    private let sender: Sender
     private var windows: [String: NSWindow] = [:]
     private var sink: AnyCancellable?
 
-    init(settings: Settings, engine: CaptureEngine, stats: DebugStats, outbox: OutboxModel) {
+    init(settings: Settings, engine: CaptureEngine, stats: DebugStats, outbox: OutboxModel, sender: Sender) {
         self.settings = settings
         self.engine = engine
         self.stats = stats
         self.outbox = outbox
+        self.sender = sender
         super.init()
         let menu = NSMenu()
         menu.delegate = self
@@ -97,7 +99,7 @@ import SwiftUI
     }
 
     @objc func showOutbox() {
-        show("outbox", title: "Constellation: Outbox", OutboxView(model: outbox, settings: settings))
+        show("outbox", title: "Constellation: Outbox", OutboxView(model: outbox, settings: settings, sender: sender))
     }
 
     @objc func showWelcome() {
@@ -117,7 +119,7 @@ import SwiftUI
         let apps = NSHostingController(rootView: AppPickerView(settings: settings, engine: engine) {})
         let debug = NSHostingController(rootView: DebugView(stats: stats, engine: engine))
         let welcome = NSHostingController(rootView: OnboardingView(settings: settings, openApps: {}, finish: {}))
-        let outboxWindow = NSHostingController(rootView: OutboxView(model: outbox, settings: settings))
+        let outboxWindow = NSHostingController(rootView: OutboxView(model: outbox, settings: settings, sender: sender))
         let views = [apps.view, debug.view, welcome.view, outboxWindow.view]
         views.forEach { $0.layoutSubtreeIfNeeded() }
         return views.allSatisfy { $0.fittingSize.width > 0 }

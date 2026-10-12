@@ -16,15 +16,19 @@ public struct OutboxItem: Identifiable, Sendable {
     public var approvedAt: Date?
     public var sentAt: Date?
     public var edited: Bool
+    /// Where it was sent, e.g. "localhost:8787".
+    public var sentTo: String?
 
     public var id: UUID { record.id }
 
-    public init(record: ActivityRecord, queuedAt: Date? = nil, approvedAt: Date? = nil, sentAt: Date? = nil, edited: Bool = false) {
+    public init(record: ActivityRecord, queuedAt: Date? = nil, approvedAt: Date? = nil, sentAt: Date? = nil,
+                edited: Bool = false, sentTo: String? = nil) {
         self.record = record
         self.queuedAt = queuedAt
         self.approvedAt = approvedAt
         self.sentAt = sentAt
         self.edited = edited
+        self.sentTo = sentTo
     }
 
     /// Exactly what the sender will post for this item.

@@ -1,6 +1,5 @@
 import CryptoKit
 import Foundation
-import Security
 
 /// Where the store's encryption key comes from. The Keychain in the app; a
 /// fixed in-memory key in tests, so tests never touch the user's Keychain.
@@ -10,49 +9,21 @@ public protocol StoreKeyProvider: Sendable {
     func destroy() throws
 }
 
-public enum StoreKeyError: Error {
-    case keychain(OSStatus)
-}
-
 /// A 256-bit key in the login Keychain, usable only on this Mac (never synced).
 public struct KeychainStoreKey: StoreKeyProvider {
-    let service = "com.traxrobotics.constellation"
-    let account = "store-key"
+    static let account = "store-key"
 
     public init() {}
 
     public func loadOrCreate() throws -> SymmetricKey {
-        var query = baseQuery
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecSuccess, let data = item as? Data, data.count == 32 {
-            return SymmetricKey(data: data)
-        }
-        guard status == errSecItemNotFound else { throw StoreKeyError.keychain(status) }
-
+        if let data = try Keychain.read(Self.account), data.count == 32 { return SymmetricKey(data: data) }
         let key = SymmetricKey(size: .bits256)
-        var add = baseQuery
-        add[kSecValueData as String] = key.withUnsafeBytes { Data($0) }
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        add[kSecAttrLabel as String] = "Constellation store key"
-        let added = SecItemAdd(add as CFDictionary, nil)
-        guard added == errSecSuccess else { throw StoreKeyError.keychain(added) }
+        try Keychain.write(key.withUnsafeBytes { Data($0) }, account: Self.account, label: "Constellation store key")
         return key
     }
 
     public func destroy() throws {
-        let status = SecItemDelete(baseQuery as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw StoreKeyError.keychain(status) }
-    }
-
-    private var baseQuery: [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
+        try Keychain.delete(Self.account)
     }
 }
 

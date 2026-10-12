@@ -14,6 +14,12 @@ import CaptureCore
         engine.outbox = model
         return model
     }()
+    private lazy var sender: Sender = {
+        let sender = Sender(settings: settings, store: engine.store)
+        sender.outbox = outbox
+        outbox.sender = sender
+        return sender
+    }()
     private var menuBar: MenuBarController?
 
     /// The encrypted store. If it cannot open (for example the Keychain refuses), capture
@@ -30,7 +36,7 @@ import CaptureCore
     func applicationDidFinishLaunching(_ notification: Notification) {
         // No permission prompt here: the welcome screens explain what is read first,
         // and ask for the permission themselves (spec 5.1).
-        menuBar = MenuBarController(settings: settings, engine: engine, stats: stats, outbox: outbox)
+        menuBar = MenuBarController(settings: settings, engine: engine, stats: stats, outbox: outbox, sender: sender)
 
         if smokeTest {
             // Build everything, start nothing, and quit: no app is read.
@@ -40,6 +46,7 @@ import CaptureCore
             return
         }
         engine.start()
+        sender.start()
 
         print("""
         Constellation is running. Look for the eye icon at the top right of your menu bar.

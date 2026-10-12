@@ -6,6 +6,7 @@ import SwiftUI
 struct OutboxView: View {
     @ObservedObject var model: OutboxModel
     @ObservedObject var settings: Settings
+    @ObservedObject var sender: Sender
     @State private var editing: OutboxItem?
 
     var body: some View {
@@ -28,9 +29,7 @@ struct OutboxView: View {
                 }
             }
 
-            Label("Destination: not connected yet. Approved items wait here; nothing is sent until the sender is set up.",
-                  systemImage: "arrow.up.circle")
-                .foregroundStyle(.secondary)
+            ConnectionBox(sender: sender, settings: settings)
 
             if !model.available {
                 Text("The encrypted store is unavailable, so there is nothing to show.").foregroundStyle(.orange)
@@ -41,6 +40,8 @@ struct OutboxView: View {
                     BatchSection(title: "Waiting for review", empty: "Nothing to review.", batches: model.toReview,
                                  canApprove: true, model: model, editing: $editing)
                     BatchSection(title: "Approved, waiting to send", empty: "Nothing approved yet.", batches: model.approved,
+                                 canApprove: false, model: model, editing: $editing)
+                    BatchSection(title: "Sent (latest \(OutboxModel.sentShown))", empty: "Nothing sent yet.", batches: model.sent,
                                  canApprove: false, model: model, editing: $editing)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -113,8 +114,12 @@ private struct ItemCard: View {
                 Text(timeRange(item.record.startedAt, item.record.endedAt))
                 Text("· \(item.record.redactionCount) redactions")
                 if item.edited { Text("· edited") }
+                if let sentAt = item.sentAt {
+                    Text("· sent \(sentAt.formatted(date: .omitted, time: .shortened)) to \(item.sentTo ?? "the backend")")
+                        .foregroundStyle(.green)
+                }
                 Spacer()
-                Button("Edit", action: onEdit)
+                if item.sentAt == nil { Button("Edit", action: onEdit) } // what was sent can't be changed
                 Button("Delete", role: .destructive, action: onDelete)
             }
             .foregroundStyle(.primary)
@@ -155,6 +160,73 @@ private struct ItemCard: View {
         HStack(alignment: .top, spacing: 8) {
             Text(label).foregroundStyle(.secondary).frame(width: 90, alignment: .leading)
             content()
+        }
+    }
+}
+
+/// Where approved items go: connect (register this Mac), send now, disconnect.
+private struct ConnectionBox: View {
+    @ObservedObject var sender: Sender
+    @ObservedObject var settings: Settings
+    @State private var url = ""
+    @State private var code = ""
+
+    var body: some View {
+        GroupBox("Backend") {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    TextField("Backend address, e.g. https://api.example.com", text: $url)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(sender.isConnected)
+                    if sender.isConnected {
+                        Button("Send now") { sender.sendNow() }
+                        Button("Disconnect") { sender.disconnect() }
+                    } else {
+                        Button("Connect") { Task { await sender.connect(urlText: url, enrollmentCode: code) } }
+                            .disabled(sender.state == .connecting)
+                    }
+                }
+                if !sender.isConnected {
+                    TextField("Enrollment code (only if your company gave you one)", text: $code)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Label(status, systemImage: icon)
+                    .foregroundStyle(color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(4)
+        }
+        .onAppear { url = settings.backendURL }
+    }
+
+    private var status: String {
+        switch sender.state {
+        case .notConnected: return "Not connected. Approved items wait here; nothing is sent."
+        case .connecting: return "Connecting…"
+        case .sending: return "Sending…"
+        case .failed(let message): return message
+        case .connected:
+            var text = "Connected to \(sender.destination ?? "the backend"). Approved items are sent within a minute."
+            if let at = sender.lastSentAt {
+                text += " Last sent \(at.formatted(date: .omitted, time: .shortened)) (\(sender.lastSentCount))."
+            }
+            return text
+        }
+    }
+
+    private var icon: String {
+        switch sender.state {
+        case .connected, .sending: "checkmark.circle.fill"
+        case .failed: "exclamationmark.triangle.fill"
+        default: "circle.dashed"
+        }
+    }
+
+    private var color: Color {
+        switch sender.state {
+        case .connected, .sending: .green
+        case .failed: .orange
+        default: .secondary
         }
     }
 }

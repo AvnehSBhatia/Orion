@@ -85,6 +85,7 @@ struct CaptureStatus: Equatable {
             _ = try? store.autoApprove(queuedBefore: Date().addingTimeInterval(-Double(Limits.autoApproveMinutes) * 60))
         }
         outbox?.refresh()
+        // The sender checks for approved items on its own timer.
     }
 
     /// Delete all (spec 2.7): every record in memory and on disk, the store's key, and every counter.

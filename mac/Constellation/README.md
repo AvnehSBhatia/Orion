@@ -2,7 +2,7 @@
 
 Menu bar app that reads on-screen text from apps the user turns on, redacts it on the device, and (from M5 on) sends approved work records to the backend. `mac/AXProbe` is the separate M0 measurement tool.
 
-**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, M2 redaction, M3 encrypted store, M4 welcome and permission screen, **M5 Outbox (current)**, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
+**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, M2 redaction, M3 encrypted store, M4 welcome and permission screen, M5 Outbox, **sender (current)**, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
 
 ## Run it
 
@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 56 tests: Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 63 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -59,9 +59,29 @@ Nothing leaves the Mac unless it appears in the Outbox first (spec 2.5, 9). Open
 - Each item shows the app, times, title, web address, text, and redaction count. **People's names are highlighted** in yellow (spec 8) and redaction markers like `[EMAIL]` are greyed. "What will be sent" shows the exact JSON, produced by the same code the sender will use.
 - **Edits are redacted again** before they are saved, so nothing typed into an edit skips redaction. Edited items are marked.
 - **Delete is permanent**: the row is removed and, with `secure_delete`, overwritten.
-- Destination: **not connected yet**. Approved items wait under "Approved, waiting to send" until the sender is built. Nothing is sent.
+- Approved items wait under "Approved, waiting to send" until the sender delivers them (see Sender). Nothing is sent while not connected.
 
 Once a record has closed, capture can never overwrite it, so edits and deletes stick. The store upgrades an M3 database in place (schema version 2), and a test covers that.
+
+## Sender
+
+Sends **approved** Outbox items to the backend. Request and response shapes are in [`mac/BACKEND_CONTRACT.md`](../BACKEND_CONTRACT.md), for the backend team.
+
+- **Connect** in the Outbox's Backend box: enter the backend address (default `http://localhost:8787`, the mock) and click Connect. That registers this Mac (`POST /v1/devices/register`) with a random install id, platform, and versions; no computer or user name. An optional enrollment code can be entered if the company uses one. The device token is kept in the **Keychain**, never in settings.
+- Only `https` addresses are accepted, except `http://localhost` for testing.
+- Approved items are sent within a minute, up to 50 per `POST /v1/work-blocks`, oldest first, and right away after you approve a batch ("Send now" forces it). Only ids the backend accepts are marked sent; they move to the Outbox's **Sent** log with the time and destination (spec 9). Sent items can no longer be edited.
+- If the backend can't be reached, it tries again after 30 s, then 1, 2, 4 ... minutes, up to 15 minutes. If the backend rejects the token (401 or 403), the app disconnects and asks to connect again. Approved items keep waiting either way.
+- Log only mode now means: items close, are approved, and are sent within a minute.
+
+### Mock backend
+
+```sh
+node ~/Documents/constellation-mac/mac/mock-backend/server.mjs     # port 8787, no packages needed
+```
+
+It implements register, work blocks, and delete my data per the contract, prints one line per received block (app, times, size, redaction count), warns if anything that looks like an unredacted email, phone number, or key arrives, and saves everything to `mac/mock-backend/data/` (git ignored) so you can read exactly what arrived. Registered devices survive a restart of the mock.
+
+Live test against it: `CONSTELLATION_LIVE_BACKEND=http://localhost:8787 swift test --filter LiveBackendTests`.
 
 ## Welcome and permission (M4)
 
@@ -100,7 +120,7 @@ It fails if the label is gone. Without the variable it is skipped.
 
 ## Not built yet
 
-- Nothing is sent anywhere yet: the sender, client matching, and the daily draft review come next.
+- Client matching and the daily draft review come next. Until client matching exists, `client_id` is always null.
 
 ## Check it by hand
 

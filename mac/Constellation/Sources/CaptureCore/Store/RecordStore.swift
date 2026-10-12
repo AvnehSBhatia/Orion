@@ -153,22 +153,33 @@ public final class RecordStore: @unchecked Sendable { // every database call run
         }
     }
 
-    /// Records in the Outbox with the given statuses, newest first.
-    public func outbox(_ statuses: [RecordStatus] = [.queued, .approved]) throws -> [OutboxItem] {
+    /// Records in the Outbox with the given statuses, newest first (or oldest first, for sending).
+    public func outbox(_ statuses: [RecordStatus] = [.queued, .approved], limit: Int = 1_000, oldestFirst: Bool = false) throws -> [OutboxItem] {
         try queue.sync {
             let marks = statuses.map { _ in "?" }.joined(separator: ", ")
             return try query(
                 """
-                SELECT \(Self.recordColumns), queued_at, approved_at, sent_at, edited
-                FROM records WHERE status IN (\(marks)) ORDER BY ended_at DESC
+                SELECT \(Self.recordColumns), queued_at, approved_at, sent_at, edited, sent_to
+                FROM records WHERE status IN (\(marks)) ORDER BY ended_at \(oldestFirst ? "ASC" : "DESC") LIMIT ?
                 """,
-                statuses.map { .text($0.rawValue) }
+                statuses.map { .text($0.rawValue) } + [.int(limit)]
             ) { row in
                 OutboxItem(
                     record: try decodeRecord(row),
                     queuedAt: row.optionalDate(9), approvedAt: row.optionalDate(10), sentAt: row.optionalDate(11),
-                    edited: row.int(12) != 0
+                    edited: row.int(12) != 0, sentTo: row.optionalText(13)
                 )
+            }
+        }
+    }
+
+    /// The sender delivered these: they move to the Outbox's sent log with time and destination.
+    public func markSent(_ ids: [UUID], destination: String) throws {
+        let now = Date().timeIntervalSince1970
+        try queue.sync {
+            for id in ids {
+                try run("UPDATE records SET status = 'sent', sent_at = ?, sent_to = ? WHERE id = ? AND status = 'approved'",
+                        [.real(now), .text(destination), .text(id.uuidString)])
             }
         }
     }
@@ -288,6 +299,13 @@ public final class RecordStore: @unchecked Sendable { // every database call run
             PRAGMA user_version = 2;
             """)
         }
+        if version < 3 {
+            // Sender: where each record was sent (spec 9: the Outbox shows time and destination).
+            try exec("""
+            ALTER TABLE records ADD COLUMN sent_to TEXT;
+            PRAGMA user_version = 3;
+            """)
+        }
     }
 
     private func upsert(_ record: ActivityRecord) throws {
@@ -341,6 +359,9 @@ public final class RecordStore: @unchecked Sendable { // every database call run
         func int(_ column: Int32) -> Int { Int(sqlite3_column_int64(statement, column)) }
         func real(_ column: Int32) -> Double { sqlite3_column_double(statement, column) }
         func text(_ column: Int32) -> String { sqlite3_column_text(statement, column).map { String(cString: $0) } ?? "" }
+        func optionalText(_ column: Int32) -> String? {
+            sqlite3_column_type(statement, column) == SQLITE_NULL ? nil : text(column)
+        }
         func optionalDate(_ column: Int32) -> Date? {
             sqlite3_column_type(statement, column) == SQLITE_NULL ? nil : Date(timeIntervalSince1970: real(column))
         }

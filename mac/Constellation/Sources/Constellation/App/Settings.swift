@@ -20,6 +20,8 @@ enum CaptureState: Equatable {
         static let onboardingDone = "onboardingDone"
         static let outboxMode = "outboxMode"
         static let autoApprove = "autoApprove"
+        static let backendURL = "backendURL"
+        static let installId = "installId"
     }
 
     private let defaults = UserDefaults(suiteName: "com.traxrobotics.constellation") ?? .standard
@@ -40,6 +42,10 @@ enum CaptureState: Equatable {
     @Published var outboxMode: OutboxMode { didSet { defaults.set(outboxMode.rawValue, forKey: Key.outboxMode) } }
     /// Review first only: approve automatically after Limits.autoApproveMinutes. On by default.
     @Published var autoApprove: Bool { didSet { defaults.set(autoApprove, forKey: Key.autoApprove) } }
+    /// Where approved items are sent. The local mock backend until the real one exists.
+    @Published var backendURL: String { didSet { defaults.set(backendURL, forKey: Key.backendURL) } }
+    /// A random id for this install, sent at registration instead of the computer or user name.
+    let installId: String
 
     init() {
         captureOn = defaults.bool(forKey: Key.captureOn)
@@ -52,6 +58,13 @@ enum CaptureState: Equatable {
         onboardingDone = defaults.bool(forKey: Key.onboardingDone)
         outboxMode = defaults.string(forKey: Key.outboxMode).flatMap(OutboxMode.init(rawValue:)) ?? .reviewFirst
         autoApprove = defaults.object(forKey: Key.autoApprove) as? Bool ?? true
+        backendURL = defaults.string(forKey: Key.backendURL) ?? "http://localhost:8787"
+        if let existing = defaults.string(forKey: Key.installId) {
+            installId = existing
+        } else {
+            installId = UUID().uuidString
+            defaults.set(installId, forKey: Key.installId)
+        }
     }
 
     var rules: ExclusionRules { ExclusionRules(skipDomains: skipDomains, skipWords: skipWords) }
