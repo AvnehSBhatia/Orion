@@ -57,6 +57,7 @@ import SwiftUI
         }
         menu.addItem(.separator())
         menu.addItem(action("Choose apps…", #selector(showApps)))
+        menu.addItem(action("Welcome and permission…", #selector(showWelcome)))
         menu.addItem(action("Debug view…", #selector(showDebug)))
         menu.addItem(.separator())
         menu.addItem(action("Delete all captured data", #selector(deleteAll)))
@@ -91,6 +92,14 @@ import SwiftUI
         })
     }
 
+    @objc func showWelcome() {
+        show("welcome", title: "Welcome to Constellation", OnboardingView(
+            settings: settings,
+            openApps: { [weak self] in self?.showApps() },
+            finish: { [weak self] in self?.windows["welcome"]?.close() }
+        ))
+    }
+
     @objc func showDebug() {
         show("debug", title: "Constellation: debug", DebugView(stats: stats, engine: engine))
     }
@@ -99,8 +108,10 @@ import SwiftUI
     func layOutWindowsOffscreen() -> Bool {
         let apps = NSHostingController(rootView: AppPickerView(settings: settings, engine: engine) {})
         let debug = NSHostingController(rootView: DebugView(stats: stats, engine: engine))
-        for controller in [apps.view, debug.view] { controller.layoutSubtreeIfNeeded() }
-        return apps.view.fittingSize.width > 0 && debug.view.fittingSize.width > 0
+        let welcome = NSHostingController(rootView: OnboardingView(settings: settings, openApps: {}, finish: {}))
+        let views = [apps.view, debug.view, welcome.view]
+        views.forEach { $0.layoutSubtreeIfNeeded() }
+        return views.allSatisfy { $0.fittingSize.width > 0 }
     }
 
     // MARK: Helpers

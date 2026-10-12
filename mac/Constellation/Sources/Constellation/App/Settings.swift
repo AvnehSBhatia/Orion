@@ -17,6 +17,7 @@ enum CaptureState: Equatable {
         static let skipWords = "skipWords"
         static let maskNames = "maskNames"
         static let redactPrivateIPs = "redactPrivateIPs"
+        static let onboardingDone = "onboardingDone"
     }
 
     private let defaults = UserDefaults(suiteName: "com.traxrobotics.constellation") ?? .standard
@@ -31,6 +32,8 @@ enum CaptureState: Equatable {
     /// Replace people's names with [Person 1], [Person 2]. Off by default (spec 8).
     @Published var maskNames: Bool { didSet { defaults.set(maskNames, forKey: Key.maskNames) } }
     @Published var redactPrivateIPs: Bool { didSet { defaults.set(redactPrivateIPs, forKey: Key.redactPrivateIPs) } }
+    /// The welcome screens have been seen (M4).
+    @Published var onboardingDone: Bool { didSet { defaults.set(onboardingDone, forKey: Key.onboardingDone) } }
 
     init() {
         captureOn = defaults.bool(forKey: Key.captureOn)
@@ -40,6 +43,7 @@ enum CaptureState: Equatable {
         skipWords = defaults.stringArray(forKey: Key.skipWords) ?? []
         maskNames = defaults.bool(forKey: Key.maskNames)
         redactPrivateIPs = defaults.bool(forKey: Key.redactPrivateIPs)
+        onboardingDone = defaults.bool(forKey: Key.onboardingDone)
     }
 
     var rules: ExclusionRules { ExclusionRules(skipDomains: skipDomains, skipWords: skipWords) }

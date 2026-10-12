@@ -5,7 +5,10 @@ import CaptureCore
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = Settings()
     private let stats = DebugStats()
-    private lazy var engine = CaptureEngine(settings: settings, stats: stats, store: openStore())
+    private let smokeTest = CommandLine.arguments.contains("--smoke-test")
+    // The smoke test never opens the store: after a rebuild, macOS asks before
+    // the new binary may use the Keychain key, and nobody is there to answer.
+    private lazy var engine = CaptureEngine(settings: settings, stats: stats, store: smokeTest ? nil : openStore())
     private var menuBar: MenuBarController?
 
     /// The encrypted store. If it cannot open (for example the Keychain refuses), capture
@@ -20,13 +23,11 @@ import CaptureCore
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        if !AXIsProcessTrusted() {
-            // Opens the system prompt. When run from Terminal, the permission belongs to Terminal.
-            AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-        }
+        // No permission prompt here: the welcome screens explain what is read first,
+        // and ask for the permission themselves (spec 5.1).
         menuBar = MenuBarController(settings: settings, engine: engine, stats: stats)
 
-        if CommandLine.arguments.contains("--smoke-test") {
+        if smokeTest {
             // Build everything, start nothing, and quit: no app is read.
             let laidOut = menuBar?.layOutWindowsOffscreen() ?? false
             print("Smoke test: menu bar built, windows laid out: \(laidOut ? "yes" : "NO"), capture is \(settings.captureOn ? "on" : "off"), \(settings.allowed.count) app(s) turned on.")
@@ -40,8 +41,12 @@ import CaptureCore
         If your menu bar is full, macOS may hide it behind the camera notch; the Apps window has the same controls.
         Press Ctrl+C here, or choose Quit in the menu, to stop.
         """)
-        // A menu bar app has no window of its own, so open the apps window on every
-        // launch while M1 is run from Terminal. Onboarding (M4) replaces this.
-        menuBar?.showApps()
+        // First run, or no permission yet: the welcome screens. Otherwise the apps
+        // window, since a menu bar app has no window of its own.
+        if !settings.onboardingDone || !AXIsProcessTrusted() {
+            menuBar?.showWelcome()
+        } else {
+            menuBar?.showApps()
+        }
     }
 }

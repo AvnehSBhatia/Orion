@@ -2,7 +2,7 @@
 
 Menu bar app that reads on-screen text from apps the user turns on, redacts it on the device, and (from M5 on) sends approved work records to the backend. `mac/AXProbe` is the separate M0 measurement tool.
 
-**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, M2 redaction, **M3 encrypted store (current)**, the rest of M4 with a permission screen, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
+**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, M2 redaction, M3 encrypted store, **M4 welcome and permission screen (current)**, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
 
 ## Run it
 
@@ -15,7 +15,7 @@ swift test                          # 44 tests: store, redaction, segmentation, 
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
 
-When it starts, Terminal prints "Constellation is running" and stays busy. That is normal: the app lives in the menu bar, not in the Terminal. The Apps window opens on every launch. On a MacBook with a full menu bar, macOS can hide the eye icon behind the camera notch; the Apps window has the same on/off, pause, and debug controls. Quit with Ctrl+C in Terminal or Quit in the menu.
+When it starts, Terminal prints "Constellation is running" and stays busy. That is normal: the app lives in the menu bar, not in the Terminal. On first run, or while the Accessibility permission is missing, the **welcome screens** open; after that, the Apps window opens on every launch. On a MacBook with a full menu bar, macOS can hide the eye icon behind the camera notch; the Apps window has the same on/off, pause, and debug controls. Quit with Ctrl+C in Terminal or Quit in the menu.
 
 ## What M1 does
 
@@ -46,6 +46,17 @@ Look-alikes that are kept, each with a test: version strings, dates, card-shaped
 
 The debug view adds a **Redactions** count per app. Text is still never shown there; the Outbox (M5) is where the redacted text becomes visible.
 
+## Welcome and permission (M4)
+
+Four short screens, shown on first run and from the menu ("Welcome and permission…"):
+
+1. What Constellation is for.
+2. What it reads and what it never reads, in plain words, plus how redaction and encryption work.
+3. The Accessibility permission. The system prompt opens only when the person clicks **Open System Settings** on this screen, never at launch (spec 5.1). The screen shows "Allowed" as soon as macOS grants it.
+4. Choose apps (opens the app list) and an optional "Start capturing now" switch.
+
+The rest of M4 (menu bar icon and states, app picker, pause controls) was built in M1.
+
 ## Encrypted store (M3)
 
 Every record is saved to `~/Library/Application Support/Constellation/constellation.sqlite` (folder 700, file 600), so records, and later the Outbox, survive a restart.
@@ -57,7 +68,7 @@ Every record is saved to `~/Library/Application Support/Constellation/constellat
 - **Delete all** closes the database, deletes the files, destroys the Keychain key (so any leftover bytes cannot be read), and starts again empty with a new key.
 - If the store can't open, capture keeps working with records in memory only, and the debug view says "store unavailable".
 
-**Keychain prompt while developing:** this build isn't signed, so after a rebuild macOS may ask whether Constellation can use its Keychain item. Click **Always Allow**. Signing (M8) ends that.
+**Keychain prompt while developing:** this build isn't signed, so after every rebuild macOS asks, at launch, whether Constellation can use its Keychain item. Enter your Mac password and click **Always Allow**. Signing (M8) ends that. `--smoke-test` never opens the store, so it never triggers the prompt.
 
 ## Live Chrome check
 
@@ -72,11 +83,11 @@ It fails if the label is gone. Without the variable it is skipped.
 ## Not built yet
 
 - Nothing is sent anywhere yet (Outbox and sender come later).
-- No onboarding or Outbox (M4, M5).
+- No Outbox yet (M5).
 
 ## Check it by hand
 
-1. Run it. The Apps window opens, and the menu bar shows the crossed-out eye.
+1. Run it. On first run the welcome screens open; finish them (or skip to the end with Continue). Afterwards the Apps window opens, and the menu bar shows the eye.
 2. Turn on Mail and Safari in the list, then switch on **Capture** at the top of the window. The icon becomes an eye.
 3. Click **Debug view** and switch between Mail and Safari. Each switch adds captures (app switch, then re-read). Mail shows characters; Safari shows 0 characters, a title length, and URL yes.
 4. Open a Safari private window (Shift+Cmd+N) or a Chrome incognito window (Shift+Cmd+N in Chrome) with a page loaded. The row should show skips with "private window" and no new captures.
