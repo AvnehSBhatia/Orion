@@ -55,8 +55,12 @@ public enum WindowCapture {
         snapshot.foundWindow = true
         let title = AXReader.title(of: window) ?? ""
 
-        if ExclusionRules.isPrivate(title: title) {
-            snapshot.skip = .privateWindow // nothing else is read, not even the title is kept
+        // Private windows: by title (Safari), or by the toolbar's profile button
+        // (Chrome incognito and guest, Edge InPrivate). Nothing else is read and
+        // not even the title is kept.
+        if ExclusionRules.isPrivate(title: title)
+            || (request.isBrowser && BrowserPrivacy.hasPrivateMarker(in: window, start: start)) {
+            snapshot.skip = .privateWindow
             return finish(snapshot)
         }
         snapshot.windowTitle = title

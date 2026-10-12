@@ -19,6 +19,10 @@ public enum Limits {
     public static let urlSearchMaxDepth = 15
     public static let urlSearchMaxNodes = 600
 
+    // Private window search in browser toolbars (the profile button sits near the top).
+    public static let privacySearchMaxDepth = 10
+    public static let privacySearchMaxNodes = 400
+
     // Records (spec 5.5).
     public static let maxRecordChars = 4_000
     public static let idleGapSeconds: TimeInterval = 120

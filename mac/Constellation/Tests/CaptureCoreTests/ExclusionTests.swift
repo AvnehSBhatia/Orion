@@ -16,6 +16,20 @@ struct ExclusionTests {
         #expect(!ExclusionRules.isPrivate(title: nil))
     }
 
+    @Test("Private and guest profile button labels", arguments: [
+        "Incognito", "Incognito (2)", "Guest", "Guest (1)", "InPrivate", "  incognito  ",
+    ])
+    func privateLabels(label: String) {
+        #expect(BrowserPrivacy.isPrivateLabel(label))
+    }
+
+    @Test("Normal button labels are not private", arguments: [
+        "Veer", "Continue as guest", "Guest list", "Back", "Bookmark this tab", "Exit incognito? No", "",
+    ])
+    func normalLabels(label: String) {
+        #expect(!BrowserPrivacy.isPrivateLabel(label))
+    }
+
     @Test("Password managers and system settings are blocked")
     func blockedApps() {
         #expect(ExclusionRules.isBlocked(bundleId: "com.1password.1password"))
