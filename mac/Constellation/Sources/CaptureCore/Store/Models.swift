@@ -38,6 +38,8 @@ public struct Snapshot: Sendable {
     public var nodes = 0
     public var stoppedBy: String?
     public var foundWindow = false
+    /// Redaction tokens put into this snapshot (M2).
+    public var redactionCount = 0
     public var skip: SkipReason?
     public var capturedAt = Date()
 
@@ -61,7 +63,8 @@ public struct ActivityRecord: Identifiable, Sendable {
     public let windowTitle: String
     /// Browsers: domain and path only (the spec's `domain?`, widened to include the path).
     public let domainPath: String?
-    /// Deduplicated text, capped at Limits.maxRecordChars. Not redacted yet: redaction is M2.
+    /// Redacted, deduplicated text, capped at Limits.maxRecordChars. The title and
+    /// domain and path are redacted too.
     public var text: String
     public var textHash: String
     public var redactionCount: Int

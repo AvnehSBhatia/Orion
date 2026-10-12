@@ -35,6 +35,7 @@ struct DebugView: View {
                             Text(row.skips == 0 ? "0" : "\(row.skips): \(row.lastSkip)")
                                 .foregroundStyle(row.skips == 0 ? .primary : Color.orange)
                             Text("\(row.lastChars) / \(row.avgChars)")
+                            Text("\(row.redactions)")
                             Text("\(row.lastTitleChars)")
                             Text(row.urlFound.map { $0 ? "yes" : "no" } ?? "-")
                             Text("\(ms(row.lastMs)) / \(ms(row.avgMs)) / \(ms(row.maxMs))")
@@ -52,7 +53,7 @@ struct DebugView: View {
     }
 
     private static let headers = [
-        "App", "Captures", "Skips", "Chars last / avg", "Title chars", "URL", "Read ms last / avg / max", "Last trigger",
+        "App", "Captures", "Skips", "Chars last / avg", "Redactions", "Title chars", "URL", "Read ms last / avg / max", "Last trigger",
     ]
 
     private var statusText: String {

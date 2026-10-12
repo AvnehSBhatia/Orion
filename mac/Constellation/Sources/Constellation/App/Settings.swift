@@ -15,6 +15,8 @@ enum CaptureState: Equatable {
         static let allowed = "allowedBundleIds"
         static let skipDomains = "skipDomains"
         static let skipWords = "skipWords"
+        static let maskNames = "maskNames"
+        static let redactPrivateIPs = "redactPrivateIPs"
     }
 
     private let defaults = UserDefaults(suiteName: "com.traxrobotics.constellation") ?? .standard
@@ -26,6 +28,9 @@ enum CaptureState: Equatable {
     @Published var allowed: Set<String> { didSet { defaults.set(allowed.sorted(), forKey: Key.allowed) } }
     @Published var skipDomains: [String] { didSet { defaults.set(skipDomains, forKey: Key.skipDomains) } }
     @Published var skipWords: [String] { didSet { defaults.set(skipWords, forKey: Key.skipWords) } }
+    /// Replace people's names with [Person 1], [Person 2]. Off by default (spec 8).
+    @Published var maskNames: Bool { didSet { defaults.set(maskNames, forKey: Key.maskNames) } }
+    @Published var redactPrivateIPs: Bool { didSet { defaults.set(redactPrivateIPs, forKey: Key.redactPrivateIPs) } }
 
     init() {
         captureOn = defaults.bool(forKey: Key.captureOn)
@@ -33,9 +38,13 @@ enum CaptureState: Equatable {
         allowed = Set(defaults.stringArray(forKey: Key.allowed) ?? [])
         skipDomains = defaults.stringArray(forKey: Key.skipDomains) ?? ExclusionRules.defaultSkipDomains
         skipWords = defaults.stringArray(forKey: Key.skipWords) ?? []
+        maskNames = defaults.bool(forKey: Key.maskNames)
+        redactPrivateIPs = defaults.bool(forKey: Key.redactPrivateIPs)
     }
 
     var rules: ExclusionRules { ExclusionRules(skipDomains: skipDomains, skipWords: skipWords) }
+
+    var redaction: RedactionOptions { RedactionOptions(maskNames: maskNames, redactPrivateIPs: redactPrivateIPs) }
 
     var isPaused: Bool {
         guard let pausedUntil else { return false }

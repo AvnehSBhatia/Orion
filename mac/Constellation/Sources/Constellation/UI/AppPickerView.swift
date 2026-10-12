@@ -41,6 +41,17 @@ struct AppPickerView: View {
             }
             .frame(minHeight: 280)
 
+            GroupBox("Privacy") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Emails, phone numbers, card numbers, SSNs, and API keys and tokens are always replaced before anything is kept.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Toggle("Replace people's names with Person 1, Person 2", isOn: $settings.maskNames)
+                    Toggle("Replace private network addresses (10.x, 192.168.x)", isOn: $settings.redactPrivateIPs)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             HStack(alignment: .top, spacing: 16) {
                 LinesEditor(title: "Always skip these domains", hint: "One per line. A word with no dot matches any domain containing it.", lines: $settings.skipDomains)
                 LinesEditor(title: "Always skip windows containing", hint: "One word or phrase per line.", lines: $settings.skipWords)

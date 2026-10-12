@@ -1,8 +1,8 @@
 # Constellation for Mac
 
-Menu bar app that reads on-screen text from apps the user turns on. Built milestone by milestone from the Constellation for Mac spec. `mac/AXProbe` is the separate M0 measurement tool.
+Menu bar app that reads on-screen text from apps the user turns on, redacts it on the device, and (from M5 on) sends approved work records to the backend. `mac/AXProbe` is the separate M0 measurement tool.
 
-**Current milestone: M1, event driven capture and segmentation (spec section 5) with exclusions (section 7).**
+**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, **M2 redaction (current)**, a small M3 encrypted store for the Outbox, the rest of M4 with a permission screen, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
 
 ## Run it
 
@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on. Built milest
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 20 tests: segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 36 tests: redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -28,10 +28,38 @@ When it starts, Terminal prints "Constellation is running" and stays busy. That 
 - **Segmentation** into activity records: a new record when the app, window title, or browser page changes, or after a 2 minute gap. Within a record only new lines are kept, up to 4,000 chars.
 - **Debug view** ("Debug view…"): per app, captures, characters (last and average), title length, whether a URL was found, read time (last, average, max), last trigger, and skips with the reason. **Counts only**: no text, titles, or URLs are shown.
 
+## Redaction (M2)
+
+Runs on the capture queue, right after a window is read and before anything reaches a record, so nothing unredacted is ever kept. It covers the window title, the browser domain and path, and the text.
+
+| Replaced with | What |
+|---|---|
+| `[EMAIL]` | Email addresses |
+| `[PHONE]` | US numbers like (415) 555-0132, 415-555-0132, +1 415 555 0132; international numbers starting with + |
+| `[CARD]` | 13 to 19 digits, plain or grouped, that pass the Luhn check |
+| `[SSN]` | 123-45-6789 style, skipping numbers never issued |
+| `[SECRET]` | API keys and tokens (sk-, ghp_, github_pat_, AKIA, xox, Bearer, JWTs), and long random strings (24+ characters, letters and digits mixed, high entropy), which also catches document ids in browser paths |
+| `[IP]` | Private network addresses, only if turned on in the Apps window |
+| `[Person 1]` | People's names, only if "Replace people's names" is on. Found on the device with Apple's NaturalLanguage framework. The same name gets the same number for the session |
+
+Look-alikes that are kept, each with a test: version strings, dates, card-shaped numbers that fail Luhn, IPs (when off), build numbers, money, ISBNs, long words, file paths, camelCase identifiers, `user@localhost`, and "sk-" inside a word. Hex commit hashes and UUIDs are treated as secrets, on purpose: they can be session or document ids.
+
+The debug view adds a **Redactions** count per app. Text is still never shown there; the Outbox (M5) is where the redacted text becomes visible.
+
+## Live Chrome check
+
+Chrome incognito windows are recognised only by the "Incognito" label on Chrome's toolbar profile button. To check Chrome still labels it that way, open an incognito window with any page, leave it as Chrome's front window, and run from Terminal:
+
+```sh
+CONSTELLATION_LIVE_CHROME=1 swift test --filter ChromeLiveTests
+```
+
+It fails if the label is gone. Without the variable it is skipped.
+
 ## Not in M1
 
 - **Nothing is written to disk.** Records live in memory and are gone when the app quits. Settings (on/off, pause, chosen apps, skip lists) are saved; they hold no captured text. The encrypted store is M3.
-- **No redaction yet** (M2). That is why nothing is stored or sent.
+- Nothing is sent anywhere yet (Outbox and sender come later).
 - No onboarding or Outbox (M4, M5).
 
 ## Check it by hand

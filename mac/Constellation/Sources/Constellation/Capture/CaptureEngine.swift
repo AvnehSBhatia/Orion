@@ -19,6 +19,7 @@ struct CaptureStatus: Equatable {
     private let system = SystemState()
     private let scheduler = EventScheduler()
     private(set) var segmenter = Segmenter()
+    private let names = NameMasker() // stable [Person N] tokens for this session
     @Published private(set) var status = CaptureStatus()
 
     private var front: NSRunningApplication?
@@ -57,6 +58,7 @@ struct CaptureStatus: Equatable {
     /// Delete all (spec 2.7): every record and every counter.
     func deleteAll() {
         segmenter.clear()
+        names.reset()
         stats.clear()
     }
 
@@ -132,7 +134,9 @@ struct CaptureStatus: Equatable {
             pid: app.processIdentifier, bundleId: bundleId, appName: app.localizedName ?? bundleId,
             isBrowser: AppInfo.isBrowser(bundleId),
             turnOnElectronTree: AppInfo.kind(bundleId: bundleId, bundleURL: app.bundleURL) == .electron,
-            rules: settings.rules
+            rules: settings.rules,
+            redaction: settings.redaction,
+            names: names
         )
         Task { [weak self] in
             let snapshot = await WindowCapture.read(request) // off the main thread

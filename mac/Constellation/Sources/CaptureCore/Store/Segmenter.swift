@@ -39,6 +39,7 @@ public struct Segmenter: Sendable {
         ))
         seenLines = []
         append(snapshot.lines)
+        updateRedactionCount()
         if records.count > Limits.maxRecordsInMemory { records.removeFirst(records.count - Limits.maxRecordsInMemory) }
         return .newRecord
     }
@@ -74,8 +75,16 @@ public struct Segmenter: Sendable {
         if added > 0 {
             records[records.count - 1].text = text
             records[records.count - 1].textHash = Self.hash(text)
+            updateRedactionCount()
         }
         return added
+    }
+
+    /// Tokens actually present in what the record keeps (title, domain and path, text).
+    private mutating func updateRedactionCount() {
+        guard let record = records.last else { return }
+        records[records.count - 1].redactionCount = Redactor.countTokens(in: record.windowTitle)
+            + Redactor.countTokens(in: record.domainPath) + Redactor.countTokens(in: record.text)
     }
 
     static func hash(_ text: String) -> String {

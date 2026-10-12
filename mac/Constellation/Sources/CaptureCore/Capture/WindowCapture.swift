@@ -13,14 +13,21 @@ public struct CaptureRequest: Sendable {
     /// Electron apps: turn the accessibility tree on first (spec 5.4).
     public var turnOnElectronTree: Bool
     public var rules: ExclusionRules
+    public var redaction: RedactionOptions
+    public var names: NameMasker?
 
-    public init(pid: pid_t, bundleId: String, appName: String, isBrowser: Bool, turnOnElectronTree: Bool, rules: ExclusionRules) {
+    public init(
+        pid: pid_t, bundleId: String, appName: String, isBrowser: Bool, turnOnElectronTree: Bool,
+        rules: ExclusionRules, redaction: RedactionOptions = RedactionOptions(), names: NameMasker? = nil
+    ) {
         self.pid = pid
         self.bundleId = bundleId
         self.appName = appName
         self.isBrowser = isBrowser
         self.turnOnElectronTree = turnOnElectronTree
         self.rules = rules
+        self.redaction = redaction
+        self.names = names
     }
 }
 
@@ -82,6 +89,8 @@ public enum WindowCapture {
         if request.rules.containsSkipWord(title: snapshot.windowTitle, lines: snapshot.lines) {
             return finish(skipped(snapshot, .skippedWord))
         }
+        // Redact before the snapshot leaves this queue: nothing unredacted is ever stored (spec 2.4).
+        Redactor.redact(&snapshot, options: request.redaction, names: request.names)
         return finish(snapshot)
     }
 

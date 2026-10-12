@@ -17,6 +17,7 @@ import Foundation
         var totalMs = 0.0
         var maxMs = 0.0
         var lastTrigger = "-"
+        var redactions = 0
         var lastAt: Date?
 
         var avgChars: Int { captures == 0 ? 0 : totalChars / captures }
@@ -46,6 +47,7 @@ import Foundation
             row.lastChars = snapshot.chars
             row.totalChars += snapshot.chars
             row.totalMs += snapshot.readMs
+            row.redactions += snapshot.redactionCount
             row.lastTitleChars = snapshot.windowTitle.count
             if AppInfo.isBrowser(snapshot.appBundleId) { row.urlFound = snapshot.domainPath != nil }
         }
