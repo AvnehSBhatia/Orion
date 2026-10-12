@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 53 tests: Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 56 tests: Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -38,9 +38,12 @@ Runs on the capture queue, right after a window is read and before anything reac
 | `[PHONE]` | US numbers like (415) 555-0132, 415-555-0132, +1 415 555 0132; international numbers starting with + |
 | `[CARD]` | 13 to 19 digits, plain or grouped, that pass the Luhn check |
 | `[SSN]` | 123-45-6789 style, skipping numbers never issued |
+| `[ADDRESS]` | Street addresses, found by Apple's on-device data detector (the one Mail and Messages use) |
 | `[SECRET]` | API keys and tokens (sk-, ghp_, github_pat_, AKIA, xox, Bearer, JWTs), and long random strings (24+ characters, letters and digits mixed, high entropy), which also catches document ids in browser paths |
 | `[IP]` | Private network addresses, only if turned on in the Apps window |
 | `[Person 1]` | People's names, only if "Replace people's names" is on. Found on the device with Apple's NaturalLanguage framework. The same name gets the same number for the session |
+
+Each line's result is remembered (keyed by a SHA-256 of the line, so no unredacted text is held), so a window read again only pays for new lines: about 40 ms the first time a full window is seen, under 1 ms after. Delete all clears this cache too.
 
 Look-alikes that are kept, each with a test: version strings, dates, card-shaped numbers that fail Luhn, IPs (when off), build numbers, money, ISBNs, long words, file paths, camelCase identifiers, `user@localhost`, and "sk-" inside a word. Hex commit hashes and UUIDs are treated as secrets, on purpose: they can be session or document ids.
 

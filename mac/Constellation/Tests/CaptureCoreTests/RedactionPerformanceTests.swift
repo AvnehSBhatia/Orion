@@ -5,7 +5,7 @@ import Testing
 // Redaction runs on every capture, so it has to be cheap. M2 testing showed Mail
 // reads taking up to 1.3 s once redaction was added; this measures it.
 
-@Suite("Redaction speed")
+@Suite("Redaction speed", .serialized) // they share the line cache
 struct RedactionPerformanceTests {
     /// About 8,000 characters in 200 lines, like a full Mail window.
     static let lines: [String] = (0..<200).map { index in
@@ -22,9 +22,15 @@ struct RedactionPerformanceTests {
     func plain() {
         var snapshot = Snapshot(appBundleId: "com.apple.mail", appName: "Mail")
         snapshot.lines = Self.lines
+        Redactor.clearCache()
         let ms = Self.time { Redactor.redact(&snapshot, options: RedactionOptions(), names: nil) }
-        print("redaction, names off: \(String(format: "%.1f", ms)) ms for \(Self.lines.count) lines")
+        var again = Snapshot(appBundleId: "com.apple.mail", appName: "Mail")
+        again.lines = Self.lines
+        let againMs = Self.time { Redactor.redact(&again, options: RedactionOptions(), names: nil) }
+        print("redaction, names off: first read \(String(format: "%.1f", ms)) ms, repeat read \(String(format: "%.1f", againMs)) ms for \(Self.lines.count) lines")
         #expect(snapshot.redactionCount == 400)
+        #expect(again.lines == snapshot.lines)
+        #expect(againMs < ms / 2)
     }
 
     @Test("With name masking, first read and repeat read")

@@ -91,6 +91,7 @@ struct CaptureStatus: Equatable {
     func deleteAll() {
         segmenter.clear()
         names.reset()
+        Redactor.clearCache()
         stats.clear()
         do { try store?.deleteAll() } catch { print("Constellation store: delete all failed (\(error))") }
         stats.updateStore(store?.totals(), storeAvailable: store != nil)

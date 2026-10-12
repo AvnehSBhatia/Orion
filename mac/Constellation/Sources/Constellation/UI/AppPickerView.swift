@@ -43,7 +43,7 @@ struct AppPickerView: View {
 
             GroupBox("Privacy") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Emails, phone numbers, card numbers, SSNs, and API keys and tokens are always replaced before anything is kept.")
+                    Text("Emails, phone numbers, street addresses, card numbers, SSNs, and API keys and tokens are always replaced before anything is kept.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Toggle("Replace people's names with Person 1, Person 2", isOn: $settings.maskNames)

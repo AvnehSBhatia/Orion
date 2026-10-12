@@ -195,7 +195,7 @@ private struct EditTextSheet: View {
 /// Names get a yellow highlight (spec 8: shown highlighted in the Outbox);
 /// redaction markers like [EMAIL] are greyed.
 enum Highlight {
-    private static let tokens = try! NSRegularExpression(pattern: #"\[(?:EMAIL|PHONE|CARD|SSN|SECRET|IP|Person \d+)\]"#)
+    private static let tokens = try! NSRegularExpression(pattern: #"\[(?:EMAIL|PHONE|CARD|SSN|ADDRESS|SECRET|IP|Person \d+)\]"#)
 
     static func apply(_ text: String) -> AttributedString {
         var result = AttributedString(text)

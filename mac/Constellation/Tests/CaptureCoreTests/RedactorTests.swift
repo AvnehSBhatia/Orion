@@ -152,3 +152,37 @@ struct SnapshotRedactionTests {
         #expect(segmenter.current?.redactionCount == 4)
     }
 }
+
+@Suite("Street addresses")
+struct AddressRedactionTests {
+    @Test("Addresses become [ADDRESS]", arguments: [
+        "Ship to 1 Infinite Loop, Cupertino, CA 95014 by Friday",
+        "Office: 350 Fifth Avenue, New York, NY 10118",
+        "Send it to 123 Main Street, Springfield, IL 62701.",
+        "1600 Pennsylvania Ave NW, Washington, DC 20500",
+    ])
+    func replaced(text: String) {
+        let result = Redactor.redact(text)
+        #expect(result.text.contains("[ADDRESS]"))
+        #expect(result.counts[.address] == 1)
+        // The street number and name are gone.
+        for part in ["Infinite Loop", "Fifth Avenue", "Main Street", "Pennsylvania"] {
+            #expect(!result.text.contains(part))
+        }
+    }
+
+    @Test("Look-alikes stay", arguments: [
+        "We met at 3 pm to discuss the main topic",
+        "Meeting room 4B on the second floor",
+        "Order 12345 shipped on 2026-10-12",
+        "Version 2.4 of the street map app",
+    ])
+    func unchanged(text: String) {
+        #expect(Redactor.redact(text).text == text)
+    }
+
+    @Test("Counted as a redaction token")
+    func counted() {
+        #expect(Redactor.countTokens(in: "to [ADDRESS] and [EMAIL]") == 2)
+    }
+}

@@ -9,6 +9,7 @@ public enum RedactionKind: String, CaseIterable, Sendable {
     case phone = "PHONE"
     case card = "CARD"
     case ssn = "SSN"
+    case address = "ADDRESS"
     case secret = "SECRET"
     case ip = "IP"
 
@@ -75,6 +76,10 @@ enum Patterns {
         Pattern(.phone, #"(?<![\w+])\+\d{1,3}(?:[ .-]?\(?\d{1,4}\)?){2,5}(?!\d)"#, priority: 5,
                 accept: { (8...15).contains($0.filter(\.isNumber).count) }),
     ]
+
+    // Street addresses come from NSDataDetector in Redactor; this entry only carries
+    // the kind and priority. Below secrets and cards, so a key or card inside an address wins.
+    static let address = Pattern(.address, #"(?!)"#, priority: 4)
 
     // Optional: private network addresses.
     static let privateIP = Pattern(
