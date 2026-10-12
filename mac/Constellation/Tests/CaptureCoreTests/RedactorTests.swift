@@ -186,3 +186,30 @@ struct AddressRedactionTests {
         #expect(Redactor.countTokens(in: "to [ADDRESS] and [EMAIL]") == 2)
     }
 }
+
+@Suite("Links in text")
+struct LinkTrimmingTests {
+    @Test("Query strings and fragments are dropped from links", arguments: [
+        ("Reset here: https://accounts.example.com/reset?token=abc123 now", "Reset here: accounts.example.com/reset now"),
+        ("go to Apple ID (https://appleid.apple.com) and change", "go to Apple ID (appleid.apple.com) and change"),
+        ("Pricing: www.acme.com/pricing?ref=email#top.", "Pricing: www.acme.com/pricing."),
+        ("https://user:pass@site.com:8443/x?y=1", "site.com/x"),
+        ("Docs at https://docs.example.com/guide/start#install, then", "Docs at docs.example.com/guide/start, then"),
+    ])
+    func trimmed(input: String, expected: String) {
+        #expect(Redactor.redact(input).text == expected)
+    }
+
+    @Test("Text without web links is untouched", arguments: [
+        "Version 2.4 is out", "email me at [EMAIL]", "see section 3.2.1", "ftp://files.example.com/a?b=1",
+    ])
+    func untouched(text: String) {
+        #expect(Redactor.redact(text).text == text)
+    }
+
+    @Test("Document ids in a link's path still become [SECRET]")
+    func pathSecrets() {
+        let text = "Open https://docs.google.com/document/d/1X0L4IKV2kX63xvoIYkr14PPCpguJohYhS6nWr_CyVfY/edit?usp=sharing"
+        #expect(Redactor.redact(text).text == "Open docs.google.com/document/d/[SECRET]/edit")
+    }
+}

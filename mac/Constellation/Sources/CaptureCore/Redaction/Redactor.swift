@@ -23,7 +23,10 @@ public struct Redacted: Sendable, Equatable {
 }
 
 public enum Redactor {
-    public static func redact(_ text: String, options: RedactionOptions = RedactionOptions()) -> Redacted {
+    public static func redact(_ original: String, options: RedactionOptions = RedactionOptions()) -> Redacted {
+        // Links in text get the same treatment as browser addresses: domain and
+        // path only, since query strings and fragments can carry tokens.
+        let text = trimLinks(original)
         var patterns = [Patterns.email] + Patterns.secrets + [Patterns.card, Patterns.ssn] + Patterns.phones
         if options.redactPrivateIPs { patterns.append(Patterns.privateIP) }
         patterns.append(Patterns.randomToken)
@@ -78,6 +81,27 @@ public enum Redactor {
 
     static func countPersonTokens(in text: String) -> Int {
         personRegex.numberOfMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length))
+    }
+
+    private static let linkRegex = try! NSRegularExpression(
+        pattern: #"(?i)\b(?:https?://|www\.)[^\s<>"'()\[\]{}|\\^`]+"#
+    )
+
+    /// "https://site.com/reset?token=abc#x" becomes "site.com/reset". Trailing
+    /// sentence punctuation stays outside the link. Text that isn't a web link is untouched.
+    static func trimLinks(_ text: String) -> String {
+        let source = text as NSString
+        let matches = linkRegex.matches(in: text, range: NSRange(location: 0, length: source.length))
+        guard !matches.isEmpty else { return text }
+        let output = NSMutableString(string: text)
+        for match in matches.reversed() {
+            var link = source.substring(with: match.range)
+            while let last = link.last, ".,;:!?".contains(last) { link.removeLast() }
+            guard let trimmed = BrowserURL.domainAndPath(link) else { continue }
+            let range = NSRange(location: match.range.location, length: (link as NSString).length)
+            output.replaceCharacters(in: range, with: trimmed)
+        }
+        return output as String
     }
 
     /// Delete all (spec 16): forget remembered line results too.

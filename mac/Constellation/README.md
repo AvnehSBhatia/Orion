@@ -43,6 +43,8 @@ Runs on the capture queue, right after a window is read and before anything reac
 | `[IP]` | Private network addresses, only if turned on in the Apps window |
 | `[Person 1]` | People's names, only if "Replace people's names" is on. Found on the device with Apple's NaturalLanguage framework. The same name gets the same number for the session |
 
+**Links in text** (titles, window text, Outbox edits) are cut to domain and path, the same rule as browser addresses: `https://site.com/reset?token=abc#x` becomes `site.com/reset`, because query strings and fragments can carry tokens.
+
 Each line's result is remembered (keyed by a SHA-256 of the line, so no unredacted text is held), so a window read again only pays for new lines: about 40 ms the first time a full window is seen, under 1 ms after. Delete all clears this cache too.
 
 Look-alikes that are kept, each with a test: version strings, dates, card-shaped numbers that fail Luhn, IPs (when off), build numbers, money, ISBNs, long words, file paths, camelCase identifiers, `user@localhost`, and "sk-" inside a word. Hex commit hashes and UUIDs are treated as secrets, on purpose: they can be session or document ids.
