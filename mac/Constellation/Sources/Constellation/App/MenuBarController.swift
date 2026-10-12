@@ -85,12 +85,22 @@ import SwiftUI
     @objc private func deleteAll() { engine.deleteAll() }
     @objc private func quit() { NSApp.terminate(nil) }
 
-    @objc private func showApps() {
-        show("apps", title: "Constellation: apps", AppPickerView(settings: settings))
+    @objc func showApps() {
+        show("apps", title: "Constellation: apps", AppPickerView(settings: settings, engine: engine) { [weak self] in
+            self?.showDebug()
+        })
     }
 
-    @objc private func showDebug() {
+    @objc func showDebug() {
         show("debug", title: "Constellation: debug", DebugView(stats: stats, engine: engine))
+    }
+
+    /// Smoke test: lay out both windows' views without showing them.
+    func layOutWindowsOffscreen() -> Bool {
+        let apps = NSHostingController(rootView: AppPickerView(settings: settings, engine: engine) {})
+        let debug = NSHostingController(rootView: DebugView(stats: stats, engine: engine))
+        for controller in [apps.view, debug.view] { controller.layoutSubtreeIfNeeded() }
+        return apps.view.fittingSize.width > 0 && debug.view.fittingSize.width > 0
     }
 
     // MARK: Helpers

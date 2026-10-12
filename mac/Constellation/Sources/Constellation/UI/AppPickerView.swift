@@ -3,6 +3,8 @@ import SwiftUI
 /// Settings > Apps (spec 7): every app starts off; blocked apps cannot be turned on.
 struct AppPickerView: View {
     @ObservedObject var settings: Settings
+    @ObservedObject var engine: CaptureEngine
+    let showDebug: () -> Void
     @State private var apps: [AppEntry] = []
     @State private var search = ""
 
@@ -12,6 +14,21 @@ struct AppPickerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // The same controls as the menu bar icon, for when the icon is hidden behind the notch.
+            HStack(spacing: 12) {
+                Toggle("Capture", isOn: $settings.captureOn).toggleStyle(.switch)
+                Text(stateText).foregroundStyle(.secondary)
+                Spacer()
+                if case .paused = engine.status.state {
+                    Button("Resume") { settings.resume() }
+                } else if settings.captureOn {
+                    Button("Pause 1 hour") { settings.pause(for: 3600) }
+                }
+                Button("Debug view", action: showDebug)
+            }
+            .padding(12)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+
             Text("Choose which apps Constellation reads").font(.title2.bold())
             Text("Every app starts off. An app you turn on is read only while it is in front. Browsers give their tab title and web address only, never page text.")
                 .foregroundStyle(.secondary)
@@ -32,6 +49,17 @@ struct AppPickerView: View {
         .padding(20)
         .frame(minWidth: 560, minHeight: 620)
         .onAppear { apps = AppCatalog.load() }
+    }
+
+    private var stateText: String {
+        switch engine.status.state {
+        case .off: return "Off. Nothing is read."
+        case .paused(let until): return "Paused until \(until.formatted(date: .omitted, time: .shortened))"
+        case .on:
+            if !engine.status.trusted { return "Needs Accessibility permission" }
+            if settings.allowed.isEmpty { return "On, but no apps are turned on below" }
+            return "On. Reading the apps turned on below while they are in front."
+        }
     }
 
     private func binding(for entry: AppEntry) -> Binding<Bool> {

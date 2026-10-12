@@ -13,7 +13,9 @@ swift build -c release
 swift test                          # 20 tests: segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
-M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8. Quit from the menu bar icon.
+M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
+
+When it starts, Terminal prints "Constellation is running" and stays busy. That is normal: the app lives in the menu bar, not in the Terminal. The Apps window opens on its own while capture is off or no apps are chosen. On a MacBook with a full menu bar, macOS can hide the eye icon behind the camera notch; the Apps window has the same on/off, pause, and debug controls. Quit with Ctrl+C in Terminal or Quit in the menu.
 
 ## What M1 does
 
@@ -34,9 +36,9 @@ M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility 
 
 ## Check it by hand
 
-1. Run it. The menu bar shows the crossed-out eye and "Capture is off".
-2. "Choose apps…": turn on Mail and Safari. Menu: "Turn capture on". The icon becomes an eye.
-3. Open "Debug view…" and switch between Mail and Safari. Each switch adds captures (app switch, then re-read). Mail shows characters; Safari shows 0 characters, a title length, and URL yes.
+1. Run it. The Apps window opens, and the menu bar shows the crossed-out eye.
+2. Turn on Mail and Safari in the list, then switch on **Capture** at the top of the window. The icon becomes an eye.
+3. Click **Debug view** and switch between Mail and Safari. Each switch adds captures (app switch, then re-read). Mail shows characters; Safari shows 0 characters, a title length, and URL yes.
 4. Open a Safari private window (Shift+Cmd+N). The Safari row should show a skip with "private window". **Needs checking:** whether Safari's private window title actually contains "Private Browsing" once a page is open. If it doesn't, it is captured as title plus URL, and we need another way to detect it.
 5. Add a word to "Always skip windows containing" that appears in an open email: that window shows "skipped word" skips.
 6. "Pause for 1 hour": no new captures. "Resume": captures come back.
