@@ -39,6 +39,7 @@ struct DebugView: View {
                             Text("\(row.lastTitleChars)")
                             Text(row.urlFound.map { $0 ? "yes" : "no" } ?? "-")
                             Text("\(ms(row.lastMs)) / \(ms(row.avgMs)) / \(ms(row.maxMs))")
+                            Text("\(ms(row.lastRedactMs)) / \(ms(row.avgRedactMs)) / \(ms(row.maxRedactMs))")
                             Text(row.lastTrigger)
                         }
                         .monospacedDigit()
@@ -49,11 +50,11 @@ struct DebugView: View {
             .frame(minHeight: 220)
         }
         .padding(20)
-        .frame(minWidth: 960, minHeight: 400)
+        .frame(minWidth: 1120, minHeight: 400)
     }
 
     private static let headers = [
-        "App", "Captures", "Skips", "Chars last / avg", "Redactions", "Title chars", "URL", "Read ms last / avg / max", "Last trigger",
+        "App", "Captures", "Skips", "Chars last / avg", "Redactions", "Title chars", "URL", "Read ms last / avg / max", "Redact ms last / avg / max", "Last trigger",
     ]
 
     private var statusText: String {

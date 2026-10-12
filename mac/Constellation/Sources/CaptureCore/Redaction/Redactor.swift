@@ -62,6 +62,12 @@ public enum Redactor {
         pattern: #"\[(?:EMAIL|PHONE|CARD|SSN|SECRET|IP|Person \d+)\]"#
     )
 
+    private static let personRegex = try! NSRegularExpression(pattern: #"\[Person \d+\]"#)
+
+    static func countPersonTokens(in text: String) -> Int {
+        personRegex.numberOfMatches(in: text, range: NSRange(location: 0, length: (text as NSString).length))
+    }
+
     /// How many redaction tokens a text holds, for a record's redactionCount.
     public static func countTokens(in text: String?) -> Int {
         guard let text else { return 0 }
@@ -73,23 +79,21 @@ public enum Redactor {
     public static func redact(_ snapshot: inout Snapshot, options: RedactionOptions, names: NameMasker?) {
         var total = 0
         func clean(_ text: String) -> String {
-            var result = redact(text, options: options)
+            let result = redact(text, options: options)
             total += result.total
-            if options.maskNames, let names {
-                let masked = names.mask(result.text)
-                result.text = masked.text
-                total += masked.count
-            }
             return result.text
         }
-        snapshot.windowTitle = clean(snapshot.windowTitle)
-        if let path = snapshot.domainPath {
-            // Paths can carry document ids and tokens; they are not checked for names.
-            let result = redact(path, options: options)
-            total += result.total
-            snapshot.domainPath = result.text
+        // Paths can carry document ids and tokens; they are not checked for names.
+        snapshot.domainPath = snapshot.domainPath.map(clean)
+        // Title is masked together with the text, so one model pass covers both.
+        var texts = [clean(snapshot.windowTitle)] + snapshot.lines.map(clean)
+        if options.maskNames, let names {
+            let masked = names.mask(lines: texts)
+            texts = masked.lines
+            total += masked.count
         }
-        snapshot.lines = snapshot.lines.map(clean)
+        snapshot.windowTitle = texts[0]
+        snapshot.lines = Array(texts.dropFirst())
         snapshot.chars = snapshot.lines.reduce(0) { $0 + $1.count }
         snapshot.redactionCount = total
     }

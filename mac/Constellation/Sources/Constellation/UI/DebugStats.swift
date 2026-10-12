@@ -18,10 +18,14 @@ import Foundation
         var maxMs = 0.0
         var lastTrigger = "-"
         var redactions = 0
+        var lastRedactMs = 0.0
+        var totalRedactMs = 0.0
+        var maxRedactMs = 0.0
         var lastAt: Date?
 
         var avgChars: Int { captures == 0 ? 0 : totalChars / captures }
         var avgMs: Double { captures == 0 ? 0 : totalMs / Double(captures) }
+        var avgRedactMs: Double { captures == 0 ? 0 : totalRedactMs / Double(captures) }
     }
 
     @Published private(set) var rows: [String: AppRow] = [:]
@@ -48,6 +52,9 @@ import Foundation
             row.totalChars += snapshot.chars
             row.totalMs += snapshot.readMs
             row.redactions += snapshot.redactionCount
+            row.lastRedactMs = snapshot.redactMs
+            row.totalRedactMs += snapshot.redactMs
+            row.maxRedactMs = max(row.maxRedactMs, snapshot.redactMs)
             row.lastTitleChars = snapshot.windowTitle.count
             if AppInfo.isBrowser(snapshot.appBundleId) { row.urlFound = snapshot.domainPath != nil }
         }

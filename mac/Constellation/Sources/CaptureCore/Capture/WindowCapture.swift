@@ -90,8 +90,13 @@ public enum WindowCapture {
             return finish(skipped(snapshot, .skippedWord))
         }
         // Redact before the snapshot leaves this queue: nothing unredacted is ever stored (spec 2.4).
+        let readMs = AXReader.elapsedMs(since: start)
+        let redactStart = DispatchTime.now()
         Redactor.redact(&snapshot, options: request.redaction, names: request.names)
-        return finish(snapshot)
+        var done = finish(snapshot)
+        done.readMs = readMs
+        done.redactMs = AXReader.elapsedMs(since: redactStart)
+        return done
     }
 
     /// Drop everything read so far and keep only the reason.

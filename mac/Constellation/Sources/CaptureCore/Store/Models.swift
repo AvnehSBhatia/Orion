@@ -34,7 +34,8 @@ public struct Snapshot: Sendable {
     /// Distinct text from the window. Always empty for browsers (title and URL only).
     public var lines: [String] = []
     public var chars = 0
-    public var readMs = 0.0
+    public var readMs = 0.0 // reading the window (the 100 ms budget)
+    public var redactMs = 0.0 // redacting what was read, measured separately
     public var nodes = 0
     public var stoppedBy: String?
     public var foundWindow = false

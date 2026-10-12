@@ -27,8 +27,45 @@ public enum NameDetector {
 public final class NameMasker: @unchecked Sendable {
     private let lock = NSLock()
     private var tokens: [String: Int] = [:]
+    /// Already redacted line -> masked line. Memory only, cleared with reset().
+    private var cache: [String: (text: String, count: Int)] = [:]
+    private static let cacheLimit = 5_000
 
     public init() {}
+
+    /// Mask names across many lines with one pass of the language model. Starting
+    /// the model once per line cost over a second for a full Mail window (M2 testing).
+    public func mask(lines: [String]) -> (lines: [String], count: Int) {
+        guard !lines.isEmpty else { return (lines, 0) }
+        // A window is read again and again with mostly the same lines, so lines
+        // already masked come from the cache and only new ones go to the model.
+        var results = [(text: String, count: Int)?](repeating: nil, count: lines.count)
+        var fresh: [Int] = []
+        lock.lock()
+        for (index, line) in lines.enumerated() {
+            if let cached = cache[line] { results[index] = cached } else { fresh.append(index) }
+        }
+        lock.unlock()
+
+        if !fresh.isEmpty {
+            // One model pass for all new lines, joined with a separator the text never
+            // contains; the paragraph separator also keeps names from joining across lines.
+            let separator = "\u{2029}"
+            let masked = mask(fresh.map { lines[$0] }.joined(separator: separator)).text
+            var parts = masked.components(separatedBy: separator)
+            if parts.count != fresh.count { parts = fresh.map { mask(lines[$0]).text } } // fall back line by line
+            lock.lock()
+            if cache.count > Self.cacheLimit { cache.removeAll(keepingCapacity: true) }
+            for (offset, index) in fresh.enumerated() {
+                let entry = (parts[offset], Redactor.countPersonTokens(in: parts[offset]))
+                cache[lines[index]] = entry
+                results[index] = entry
+            }
+            lock.unlock()
+        }
+        let done = results.map { $0! }
+        return (done.map(\.text), done.reduce(0) { $0 + $1.count })
+    }
 
     public func mask(_ text: String) -> (text: String, count: Int) {
         let ranges = NameDetector.ranges(in: text)
@@ -46,6 +83,7 @@ public final class NameMasker: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         tokens = [:]
+        cache = [:]
     }
 
     private func token(for name: String) -> Int {
