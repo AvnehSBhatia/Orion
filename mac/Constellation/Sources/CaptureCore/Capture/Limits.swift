@@ -34,8 +34,12 @@ public enum Limits {
     public static let idleThresholdSeconds: TimeInterval = 120
     public static let idleCheckSeconds: TimeInterval = 5
 
-    // M1 keeps records in memory only; M3 adds the encrypted store.
+    // The segmenter keeps recent records in memory; every record is also saved to the encrypted store (M3).
     public static let maxRecordsInMemory = 500
+
+    // Retention (spec M3): captured text is cleared from stored records after this many days.
+    public static let rawTextRetentionDays = 30
+    public static let retentionCheckSeconds: TimeInterval = 3600
 
     /// Low Power Mode doubles every debounce (spec 13).
     public static func debounce(_ seconds: TimeInterval) -> TimeInterval {

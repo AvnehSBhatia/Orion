@@ -16,6 +16,8 @@ struct CaptureStatus: Equatable {
 @MainActor final class CaptureEngine: ObservableObject {
     let settings: Settings
     let stats: DebugStats
+    /// Encrypted local store (M3). Nil if it could not be opened; records then stay in memory only.
+    let store: RecordStore?
     private let system = SystemState()
     private let scheduler = EventScheduler()
     private(set) var segmenter = Segmenter()
@@ -31,10 +33,12 @@ struct CaptureStatus: Equatable {
     private var timer: Timer?
     private var tokens: [NSObjectProtocol] = []
     private var settingsSink: AnyCancellable?
+    private var retentionTimer: Timer?
 
-    init(settings: Settings, stats: DebugStats) {
+    init(settings: Settings, stats: DebugStats, store: RecordStore?) {
         self.settings = settings
         self.stats = stats
+        self.store = store
     }
 
     func start() {
@@ -52,14 +56,28 @@ struct CaptureStatus: Equatable {
         timer = Timer.scheduledTimer(withTimeInterval: Limits.idleCheckSeconds, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
+        retentionTimer = Timer.scheduledTimer(withTimeInterval: Limits.retentionCheckSeconds, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyRetention() }
+        }
+        applyRetention()
+        stats.updateStore(store?.totals(), storeAvailable: store != nil)
         reattach()
     }
 
-    /// Delete all (spec 2.7): every record and every counter.
+    /// Delete all (spec 2.7): every record in memory and on disk, the store's key, and every counter.
     func deleteAll() {
         segmenter.clear()
         names.reset()
         stats.clear()
+        do { try store?.deleteAll() } catch { print("Constellation store: delete all failed (\(error))") }
+        stats.updateStore(store?.totals(), storeAvailable: store != nil)
+    }
+
+    /// Clear captured text from stored records older than the retention period.
+    private func applyRetention() {
+        guard let store else { return }
+        let cutoff = Date().addingTimeInterval(-Double(Limits.rawTextRetentionDays) * 86_400)
+        Task.detached { _ = try? store.purgeText(endedBefore: cutoff) }
     }
 
     // MARK: Front app
@@ -153,7 +171,10 @@ struct CaptureStatus: Equatable {
                 lastTitle[pid] = snapshot.windowTitle
                 scheduler.noteRan(contentKey(pid))
                 segmenter.ingest(snapshot)
-                stats.updateStore(segmenter)
+                if let record = segmenter.current {
+                    store?.save(record) // encrypted, in the background
+                }
+                stats.updateStore(store?.totals(), storeAvailable: store != nil, inMemory: segmenter)
             }
         }
         if let next = pending {

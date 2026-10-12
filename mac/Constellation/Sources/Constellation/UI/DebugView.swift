@@ -9,13 +9,13 @@ struct DebugView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Capture debug").font(.title2.bold())
-            Text("Counts only. Captured text stays in memory for this session and is never shown, logged, or saved.")
+            Text("Counts only. Captured text is redacted, then saved encrypted on this Mac. It is never shown here, logged, or sent.")
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 24) {
                 Summary(label: "Status", value: statusText)
-                Summary(label: "Records in memory", value: "\(stats.recordCount)")
-                Summary(label: "Characters stored", value: "\(stats.storedChars)")
+                Summary(label: stats.storeAvailable ? "Records saved (encrypted)" : "Records in memory (store unavailable)", value: "\(stats.recordCount)")
+                Summary(label: "Characters saved", value: "\(stats.storedChars)")
             }
 
             // A plain grid rather than Table: Table's NSTableView warned about

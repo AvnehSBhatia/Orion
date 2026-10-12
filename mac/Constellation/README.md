@@ -2,7 +2,7 @@
 
 Menu bar app that reads on-screen text from apps the user turns on, redacts it on the device, and (from M5 on) sends approved work records to the backend. `mac/AXProbe` is the separate M0 measurement tool.
 
-**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, **M2 redaction (current)**, a small M3 encrypted store for the Outbox, the rest of M4 with a permission screen, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
+**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, M2 redaction, **M3 encrypted store (current)**, the rest of M4 with a permission screen, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
 
 ## Run it
 
@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 36 tests: redaction, segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 44 tests: store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -46,6 +46,19 @@ Look-alikes that are kept, each with a test: version strings, dates, card-shaped
 
 The debug view adds a **Redactions** count per app. Text is still never shown there; the Outbox (M5) is where the redacted text becomes visible.
 
+## Encrypted store (M3)
+
+Every record is saved to `~/Library/Application Support/Constellation/constellation.sqlite` (folder 700, file 600), so records, and later the Outbox, survive a restart.
+
+- SQLite built into macOS, no third-party packages. The captured content of each record (window title, domain and path, text, text hash) is sealed with AES-GCM (CryptoKit). Times, app, status, and counts stay readable for sorting and the Outbox.
+- The 256-bit key is in the login Keychain as `com.traxrobotics.constellation` / `store-key`, usable only on this Mac and never synced to iCloud.
+- Saving runs in the background, after redaction, so nothing unredacted reaches the disk.
+- **Retention:** every hour, the text of records that ended more than 30 days ago is cleared. Title and domain stay.
+- **Delete all** closes the database, deletes the files, destroys the Keychain key (so any leftover bytes cannot be read), and starts again empty with a new key.
+- If the store can't open, capture keeps working with records in memory only, and the debug view says "store unavailable".
+
+**Keychain prompt while developing:** this build isn't signed, so after a rebuild macOS may ask whether Constellation can use its Keychain item. Click **Always Allow**. Signing (M8) ends that.
+
 ## Live Chrome check
 
 Chrome incognito windows are recognised only by the "Incognito" label on Chrome's toolbar profile button. To check Chrome still labels it that way, open an incognito window with any page, leave it as Chrome's front window, and run from Terminal:
@@ -56,9 +69,8 @@ CONSTELLATION_LIVE_CHROME=1 swift test --filter ChromeLiveTests
 
 It fails if the label is gone. Without the variable it is skipped.
 
-## Not in M1
+## Not built yet
 
-- **Nothing is written to disk.** Records live in memory and are gone when the app quits. Settings (on/off, pause, chosen apps, skip lists) are saved; they hold no captured text. The encrypted store is M3.
 - Nothing is sent anywhere yet (Outbox and sender come later).
 - No onboarding or Outbox (M4, M5).
 
@@ -70,7 +82,8 @@ It fails if the label is gone. Without the variable it is skipped.
 4. Open a Safari private window (Shift+Cmd+N) or a Chrome incognito window (Shift+Cmd+N in Chrome) with a page loaded. The row should show skips with "private window" and no new captures.
 5. Add a word to "Always skip windows containing" that appears in an open email: that window shows "skipped word" skips.
 6. "Pause for 1 hour": no new captures. "Resume": captures come back.
-7. "Delete all captured data": records and counts go to 0.
+7. Quit and start again: "Records saved (encrypted)" keeps its count.
+8. "Delete all captured data": records and counts go to 0, also after a restart.
 
 ## Tests
 

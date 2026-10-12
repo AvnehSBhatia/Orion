@@ -31,6 +31,7 @@ import Foundation
     @Published private(set) var rows: [String: AppRow] = [:]
     @Published private(set) var recordCount = 0
     @Published private(set) var storedChars = 0
+    @Published private(set) var storeAvailable = true
 
     /// Fixed order, so rows don't jump around as captures come in.
     var sortedRows: [AppRow] {
@@ -61,9 +62,16 @@ import Foundation
         rows[snapshot.appBundleId] = row
     }
 
-    func updateStore(_ segmenter: Segmenter) {
-        recordCount = segmenter.records.count
-        storedChars = segmenter.records.reduce(0) { $0 + $1.text.count }
+    /// Totals from the encrypted store; if it is unavailable, from the records in memory.
+    func updateStore(_ totals: RecordStore.Totals?, storeAvailable: Bool, inMemory segmenter: Segmenter? = nil) {
+        self.storeAvailable = storeAvailable
+        if let totals {
+            recordCount = totals.records
+            storedChars = totals.chars
+        } else if let segmenter {
+            recordCount = segmenter.records.count
+            storedChars = segmenter.records.reduce(0) { $0 + $1.text.count }
+        }
     }
 
     func clear() {

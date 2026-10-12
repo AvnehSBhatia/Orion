@@ -1,11 +1,23 @@
 import AppKit
 import ApplicationServices
+import CaptureCore
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = Settings()
     private let stats = DebugStats()
-    private lazy var engine = CaptureEngine(settings: settings, stats: stats)
+    private lazy var engine = CaptureEngine(settings: settings, stats: stats, store: openStore())
     private var menuBar: MenuBarController?
+
+    /// The encrypted store. If it cannot open (for example the Keychain refuses), capture
+    /// still works and records stay in memory; the debug view says so.
+    private func openStore() -> RecordStore? {
+        do {
+            return try RecordStore.openDefault()
+        } catch {
+            print("Constellation store: could not open (\(error)). Records will stay in memory only.")
+            return nil
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if !AXIsProcessTrusted() {
