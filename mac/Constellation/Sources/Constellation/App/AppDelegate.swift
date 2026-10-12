@@ -28,9 +28,8 @@ import ApplicationServices
         If your menu bar is full, macOS may hide it behind the camera notch; the Apps window has the same controls.
         Press Ctrl+C here, or choose Quit in the menu, to stop.
         """)
-        // A menu bar app has no window, so open the apps window until there is something to capture.
-        if !settings.captureOn || settings.allowed.isEmpty {
-            menuBar?.showApps()
-        }
+        // A menu bar app has no window of its own, so open the apps window on every
+        // launch while M1 is run from Terminal. Onboarding (M4) replaces this.
+        menuBar?.showApps()
     }
 }

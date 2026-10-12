@@ -15,7 +15,7 @@ swift test                          # 20 tests: segmentation, dedupe, browser UR
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
 
-When it starts, Terminal prints "Constellation is running" and stays busy. That is normal: the app lives in the menu bar, not in the Terminal. The Apps window opens on its own while capture is off or no apps are chosen. On a MacBook with a full menu bar, macOS can hide the eye icon behind the camera notch; the Apps window has the same on/off, pause, and debug controls. Quit with Ctrl+C in Terminal or Quit in the menu.
+When it starts, Terminal prints "Constellation is running" and stays busy. That is normal: the app lives in the menu bar, not in the Terminal. The Apps window opens on every launch. On a MacBook with a full menu bar, macOS can hide the eye icon behind the camera notch; the Apps window has the same on/off, pause, and debug controls. Quit with Ctrl+C in Terminal or Quit in the menu.
 
 ## What M1 does
 
