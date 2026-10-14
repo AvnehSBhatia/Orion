@@ -1,0 +1,76 @@
+# Orion
+
+A live context base for a company. What people do in their tools (a budget change in Google Ads, a ticket, a commit) becomes a shared graph of work. Engineers pull it into their coding agent over MCP, and everyone gets a dashboard they can reshape by typing what they want to see.
+
+```
+Chrome extension ──captures──▶ ┐
+codebase agent / CI ─commits─▶ ├─▶ backend (Next.js API, :3001) ──▶ SQLite per org (data/orgs/<org>.db)
+                               │        │            │
+web dashboard (:3000) ◀────────┘        │            └─▶ MCP /api/mcp ──▶ Claude Code, Cursor, Codex
+                                        └─▶ OpenRouter (extraction, chat), EmbeddingGemma 2 in process
+```
+
+## Layout
+
+| Path | What it is |
+|---|---|
+| `app/api/`, `src/` | Backend. Routes in `app/api/**/route.ts`, logic in `src/` (ingest, graph, steering, digests, MCP). Tests next to the code (`*.test.ts`). |
+| `web/` | Dashboard UI (Next.js). |
+| `extension/` | Chrome extension that captures the tabs, windows, and screens a person picks. |
+| `codebase-agent/` | Turns commits into feature cards; respects `+.` private paths in `.gitignore`. Also runs in CI (`.github/workflows/ctx-sync.yml`). |
+| `.agents/skills/orion-context/` | Skill that teaches coding agents to pull context and write feature cards. |
+| `server/` | Work in progress: Rust port of the backend. Not used yet. |
+| `scripts/` | `seed.ts` (demo org), `bench.ts` and `bench-embed.ts` (cost benchmarks). |
+| `demo/` | Tiny fake product for the codebase agent demo. |
+
+## Run it locally
+
+```sh
+npm install && cp .env.example .env   # set OPENROUTER_API_KEY
+npm run dev                            # backend on :3001
+cd web && npm install && npm run dev   # dashboard on :3000
+cd extension && npm install && npm run build   # load extension/dist unpacked in chrome://extensions
+```
+
+`npm test` runs the backend suite. `npm run bench` measures server CPU on a copy of an org file; `npm run bench:embed` measures the embedder.
+
+## Cost controls
+
+Set in `.env` (see `.env.example`):
+
+- `EMBED_SCREENSHOTS=auto` embeds a screenshot only when the capture has little text (desktop windows, screens). An image embed costs ~14x a text embed on CPU.
+- `MAINTAIN_INTERVAL_MS=60000` is the minimum time between org maintenance runs.
+- `EMBED_PROVIDER=gemma` runs embeddings on the server CPU; `openrouter` moves them to an API (re-embeds the org once on switch).
+- `INGEST_IMAGES=light` (default) skips OCR and screenshot pruning.
+
+## Accounts and tokens
+
+Every API route needs a sign-in (set `AUTH_DISABLED=true` in `.env` for a local demo).
+
+```sh
+npx tsx scripts/account.ts create --username mina --password '...' --org acme --user mina --admin
+npx tsx scripts/account.ts token --username mina --label "claude code"   # API token for MCP, the extension, or CI
+```
+
+The web app shows a sign-in screen; the extension signs in from its options page and keeps an API token; the codebase agent and CI send `ORION_TOKEN`.
+
+## MCP for coding agents
+
+```sh
+claude mcp add --transport http orion https://<host>/api/mcp --header "Authorization: Bearer $ORION_TOKEN"
+```
+
+`context_for_task` returns one markdown context file for the task at hand (relevant work, what changed recently and who changed it, key documents, blockers, next steps). The `orion-context` skill tells the agent to call it at the start of a task and save it to `.orion/context.md`. Full tool list: [docs/mcp.md](docs/mcp.md).
+
+## Deploy on one box
+
+1. `npm ci && npm run build` at the root and in `web/` (set `NEXT_PUBLIC_ORION_API` to the backend URL before building the web app).
+2. `.env`: `OPENROUTER_API_KEY`, `COOKIE_SECURE=true`, `UI_ORIGIN=https://<web host>`, `TRUST_PROXY=true` behind a proxy, `EXTENSION_IDS`.
+3. Run `npm start` (backend, :3001) and `cd web && npm start` (:3000) under a process manager, behind HTTPS. UI and API must be on the same site for the session cookie (for example app.example.com and api.example.com).
+4. Create the first admin with `scripts/account.ts`, then load the extension and sign in.
+
+Data lives in `DATA_DIR` (SQLite per org plus `auth.db`); back that directory up.
+
+## API
+
+The request and response shapes are in `src/contract/types.ts`.
