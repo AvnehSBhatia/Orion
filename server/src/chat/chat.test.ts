@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Source } from "@/contract/types";
 import { fakeLlm } from "@/test/llm";
-import { LlmChat, parseActions, sanitizeView, visibleEnd, type ChatInput } from "./chat";
+import { parseActions, visibleEnd } from "./actions";
+import { LlmChat, sanitizeView, type ChatInput } from "./model";
 
 const user = { id: "sam", name: "Sam Ortiz", role: "Account executive. Deals and renewals.", teamDescription: "" };
 const knownIds = new Set(["voice-mode", "sso-login"]);
@@ -59,7 +60,7 @@ describe("LlmChat", () => {
     const res = await new LlmChat(llm, "deepseek/test").reply(input());
 
     expect(requests).toHaveLength(1);
-    expect(requests[0].tools).toBeUndefined();
+    expect("tools" in requests[0]).toBe(false);
     expect(requests[0].max_tokens).toBeLessThanOrEqual(300);
     expect(requests[0].temperature).toBe(0);
     expect(res.reply).toBe("Voice mode is safe to mention [1]. The launch is on November 14 [2, 1].");

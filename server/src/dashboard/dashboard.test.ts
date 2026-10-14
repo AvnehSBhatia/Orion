@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { dashboardSpec, MAX_WIDGETS } from "@/contract/schemas";
 import type { GraphResponse, User } from "@/contract/types";
-import { pca, scaleColumns } from "@/graph/projection";
 import { fakeLlm, jsonTurn } from "@/test/llm";
-import { askDashboard, composeRoleDashboard, heuristicDashboard, looksLikeLayoutRequest, personaOf, sanitizeDashboard, withLiveWidgets } from "./dashboard";
+import { askDashboard, looksLikeLayoutRequest } from "./ask";
+import { composeRoleDashboard } from "./compose";
+import { heuristicDashboard, personaOf } from "./heuristic";
+import { sanitizeDashboard, withLiveWidgets } from "./widgets";
 
 const person = (role: string, name = "Sam Ortiz"): User => ({ id: "sam", name, role, teamDescription: "" });
 const graph: GraphResponse = { nodes: [], edges: [], gaps: [] };
@@ -112,37 +114,6 @@ describe("composeRoleDashboard", () => {
   });
 });
 
-describe("pca", () => {
-  it("finds the main axes of spread and scales them into [-1, 1]", () => {
-    // Points along (1, 1, 0, 0) with a little spread along (0, 0, 1, 0).
-    const rows = Array.from({ length: 50 }, (_, i) => {
-      const t = i - 25;
-      const e = (i % 5) - 2;
-      return [t, t, e * 0.1, 0];
-    });
-    const xyz = scaleColumns(pca(rows));
-    expect(xyz).toHaveLength(50);
-    for (const p of xyz) for (const v of p) expect(Math.abs(v)).toBeLessThanOrEqual(1);
-    // First axis tracks t, second tracks e.
-    const corr = (a: number[], b: number[]) => {
-      const m = (v: number[]) => v.reduce((s, x) => s + x, 0) / v.length;
-      const [ma, mb] = [m(a), m(b)];
-      const cov = a.reduce((s, x, i) => s + (x - ma) * (b[i] - mb), 0);
-      return cov / Math.sqrt(a.reduce((s, x) => s + (x - ma) ** 2, 0) * b.reduce((s, x) => s + (x - mb) ** 2, 0));
-    };
-    expect(Math.abs(corr(xyz.map((p) => p[0]), rows.map((r) => r[0])))).toBeGreaterThan(0.99);
-    expect(Math.abs(corr(xyz.map((p) => p[1]), rows.map((r) => r[2])))).toBeGreaterThan(0.99);
-    expect(xyz.every((p) => Number.isFinite(p[2]))).toBe(true);
-  });
-
-  it("is deterministic and handles tiny inputs", () => {
-    const rows = [[1, 2, 3], [2, 1, 0], [0, 0, 1], [3, 3, 3]];
-    expect(pca(rows)).toEqual(pca(rows));
-    expect(pca([])).toEqual([]);
-    expect(scaleColumns(pca([[1, 2]]))).toEqual([[0, 0, 0]]);
-  });
-});
-
 describe("askDashboard", () => {
   const asker: User = { id: "avneh", name: "Avneh Bhatia", role: "Founder.", teamDescription: "" };
   const graph = { nodes: [{ id: "voice-mode", label: "Voice mode", domain: "engineering", status: "blocked", owner: null, sellable: false }] } as unknown as Pick<GraphResponse, "nodes">;
@@ -172,7 +143,7 @@ describe("askDashboard", () => {
     const { llm, requests } = fakeLlm([jsonTurn({ change: true, dashboard: spec })]);
     const d = await askDashboard(asker, "I am a deep ML researcher", current, graph, { llm });
     expect(requests).toHaveLength(1);
-    expect(requests[0].tools).toBeUndefined();
+    expect("tools" in requests[0]).toBe(false);
     expect(requests[0].max_tokens).toBe(2000);
     expect(d?.origin).toBe("chat");
     expect(d?.widgets[0].filter?.nodeIds).toEqual(["voice-mode"]);

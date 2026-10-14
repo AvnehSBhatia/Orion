@@ -1,19 +1,10 @@
+// OpenRouter chat completions: the one model provider. Callers depend only on the `LlmClient` shape.
 import { config } from "@/config";
 import { HttpError } from "@/http/error";
 
 const CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 
-export type ToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
-
-export type ChatMessage =
-  | { role: "system" | "user"; content: string }
-  | { role: "assistant"; content: string | null; tool_calls?: ToolCall[]; [extra: string]: unknown }
-  | { role: "tool"; tool_call_id: string; content: string };
-
-export type ToolDef = {
-  type: "function";
-  function: { name: string; description: string; parameters: Record<string, unknown>; strict: true };
-};
+export type ChatMessage = { role: "system" | "user"; content: string } | { role: "assistant"; content: string | null };
 
 export type Completion = {
   choices: { finish_reason: string | null; message: Extract<ChatMessage, { role: "assistant" }> }[];
@@ -24,8 +15,6 @@ export type CompletionRequest = {
   messages: ChatMessage[];
   max_tokens?: number;
   temperature?: number;
-  tools?: ToolDef[];
-  tool_choice?: "auto" | "none" | "required";
   response_format?: { type: "json_schema"; json_schema: { name: string; strict: true; schema: Record<string, unknown> } };
 };
 
@@ -34,10 +23,18 @@ export interface LlmClient {
   complete(req: CompletionRequest): Promise<Completion>;
 }
 
+/** A JSON schema that also allows null (strict mode requires every field, so optional ones are nullable). */
 export const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: "null" }] });
 
-export function tool(name: string, description: string, parameters: Record<string, unknown>): ToolDef {
-  return { type: "function", function: { name, description, parameters, strict: true } };
+function requireKey(): string {
+  const key = config.openRouterKey;
+  if (!key) throw new HttpError(503, "OPENROUTER_API_KEY is not set on the backend");
+  return key;
+}
+
+async function failed(res: Response): Promise<never> {
+  console.error(`OpenRouter ${res.status}: ${(await res.text().catch(() => "")).slice(0, 500)}`);
+  throw new HttpError(res.status === 429 ? 429 : 502, "model provider failed");
 }
 
 /** Models that rejected `reasoning: { enabled: false }`; requests to them omit it. */
@@ -45,8 +42,7 @@ const reasoningRequired = new Set<string>();
 
 export class OpenRouterClient implements LlmClient {
   async complete(req: CompletionRequest): Promise<Completion> {
-    const key = config.openRouterKey;
-    if (!key) throw new HttpError(503, "OPENROUTER_API_KEY is not set on the backend");
+    const key = requireKey();
     const send = (reasoningOff: boolean) =>
       fetch(CHAT_URL, {
         method: "POST",
@@ -55,7 +51,7 @@ export class OpenRouterClient implements LlmClient {
           "Content-Type": "application/json",
           "X-Title": "Orion",
         },
-        // require_parameters: only route to providers that honor tools and strict schemas.
+        // require_parameters: only route to providers that honor strict schemas.
         // Reasoning off: hidden thinking ate the token budget and made replies slow or empty.
         body: JSON.stringify({ ...(reasoningOff ? { reasoning: { enabled: false } } : {}), ...req, provider: { require_parameters: true } }),
       });
@@ -74,11 +70,7 @@ export class OpenRouterClient implements LlmClient {
       console.error("OpenRouter unreachable", err);
       throw new HttpError(502, "model provider failed");
     }
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`OpenRouter ${res.status}: ${body.slice(0, 500)}`);
-      throw new HttpError(res.status === 429 ? 429 : 502, "model provider failed");
-    }
+    if (!res.ok) return failed(res);
     const json = (await res.json()) as Completion & { error?: { message?: string } };
     if (!json.choices?.length) {
       console.error("OpenRouter returned no choices", json.error?.message);
@@ -86,6 +78,45 @@ export class OpenRouterClient implements LlmClient {
     }
     return json;
   }
+}
+
+/** One completion with stream: true, read as server-sent events. Calls onDelta per text chunk; resolves with the whole text. */
+export async function streamCompletion(req: CompletionRequest, onDelta: (text: string) => void): Promise<string> {
+  const key = requireKey();
+  const res = await fetch(CHAT_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "Orion" },
+    // Reasoning would spend the small token budget before the answer starts.
+    body: JSON.stringify({ ...req, stream: true, reasoning: { enabled: false } }),
+  }).catch((err) => {
+    console.error("OpenRouter unreachable", err);
+    throw new HttpError(502, "model provider failed");
+  });
+  if (!res.ok || !res.body) return failed(res);
+  const decoder = new TextDecoder();
+  let buf = "";
+  let full = "";
+  for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+    buf += decoder.decode(chunk, { stream: true });
+    let nl: number;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (data === "[DONE]") return full;
+      try {
+        const delta = (JSON.parse(data) as { choices?: { delta?: { content?: string | null } }[] }).choices?.[0]?.delta?.content;
+        if (delta) {
+          full += delta;
+          onDelta(delta);
+        }
+      } catch {
+        // keep-alive comments and partial lines
+      }
+    }
+  }
+  return full;
 }
 
 /**

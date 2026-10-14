@@ -5,7 +5,8 @@ import { toPublicUser } from "@/db/store";
 import { getLlm, getStore, requireUser } from "@/http/deps";
 import { HttpError } from "@/http/error";
 import { actingAs, preflight, route, scopedBody, scopedQuery } from "@/http/route";
-import { resolveDashboard, sanitizeDashboard } from "@/steer/dashboard";
+import { resolveDashboard } from "@/dashboard/compose";
+import { sanitizeDashboard } from "@/dashboard/widgets";
 
 export const runtime = "nodejs";
 // Composing a dashboard from a role is one model call; only the first visit per person waits on it.

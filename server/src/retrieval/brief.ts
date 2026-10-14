@@ -1,8 +1,8 @@
 import { config } from "@/config";
 import type { BriefResponse, Source, User } from "@/contract/types";
 import type { Store } from "@/db/store";
-import { plain } from "@/lib/text";
-import { capCitations, FAST_MODEL, firstName, Handles } from "@/llm/chat";
+import { firstName, plain } from "@/lib/text";
+import { Handles, capCitations } from "@/chat/citations";
 import type { Embedder } from "@/llm/embed";
 import type { LlmClient } from "@/llm/openrouter";
 import { feedFor } from "./feed";
@@ -76,7 +76,7 @@ export async function briefFor(store: Store, embedder: Embedder, user: User, dep
   try {
     const completion = await Promise.race([
       llm.complete({
-        model: FAST_MODEL,
+        model: config.fastModel,
         max_tokens: 120,
         temperature: 0,
         messages: [

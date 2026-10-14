@@ -6,7 +6,7 @@ import type { Org, OrgSummary } from "@/contract/types";
 import { DEMO_ORG, seedDemo } from "@/db/seed";
 import { Store } from "@/db/store";
 import type { IngestDeps } from "@/ingest/pipeline";
-import { LlmChat, type ChatModel } from "@/llm/chat";
+import { LlmChat, type ChatModel } from "@/chat/model";
 import { createEmbedder, type Embedder } from "@/llm/embed";
 import { LlmExtractor, type Extractor } from "@/llm/extract";
 import { OpenRouterClient, type LlmClient } from "@/llm/openrouter";

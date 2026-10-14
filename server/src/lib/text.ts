@@ -47,6 +47,8 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
+export const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
+
 export function clamp(text: string, max: number): string {
   const t = plain(text);
   if (t.length <= max) return t;

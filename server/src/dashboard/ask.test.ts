@@ -4,7 +4,10 @@ import { SEED_USERS } from "@/db/seed";
 import { readGraph } from "@/graph/view";
 import { memoryStore } from "@/test/helpers";
 import { fakeLlm, jsonTurn } from "@/test/llm";
-import { askAndSaveDashboard, askDashboard, type AskTrace, draftDashboard, heuristicDashboard, keepsFilters, parseAsk } from "./dashboard";
+import { askAndSaveDashboard, askDashboard, type AskTrace } from "./ask";
+import { draftDashboard, keepsFilters } from "./draft";
+import { heuristicDashboard } from "./heuristic";
+import { parseAsk } from "./parse";
 
 const store = memoryStore({ seed: true });
 const graph = readGraph(store);
