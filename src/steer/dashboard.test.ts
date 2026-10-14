@@ -173,13 +173,14 @@ describe("askDashboard", () => {
     const d = await askDashboard(asker, "I am a deep ML researcher", current, graph, { llm });
     expect(requests).toHaveLength(1);
     expect(requests[0].tools).toBeUndefined();
-    expect(requests[0].max_tokens).toBe(1200);
+    expect(requests[0].max_tokens).toBe(2000);
     expect(d?.origin).toBe("chat");
     expect(d?.widgets[0].filter?.nodeIds).toEqual(["voice-mode"]);
   });
 
   it("returns null when the model says nothing changed", async () => {
     const { llm } = fakeLlm([jsonTurn({ change: false, dashboard: spec })]);
-    expect(await askDashboard(asker, "show me what is blocked", current, graph, { llm })).toBeNull();
+    // The parser reads nothing here, so there is no draft to fall back on.
+    expect(await askDashboard(asker, "show me the voice launch plan", current, graph, { llm })).toBeNull();
   });
 });

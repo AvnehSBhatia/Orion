@@ -411,13 +411,20 @@ export function AppShell() {
     }
     const key = `${orgId}:${userId}`;
     // The dashboard reshapes on its own fast call and lands the moment it resolves, without waiting for the answer.
-    if (LAYOUT_ASK.test(text)) {
+    // The server's instant draft lands first (no model, a few ms); the refined spec swaps in quietly after.
+    if (isLayoutAsk(text)) {
       setReshaping(true);
+      let drafted = false;
       orion
-        .askDashboard(orgId, userId, text)
+        .askDashboard(orgId, userId, text, (draft) => {
+          drafted = true;
+          landSpec(key, draft);
+          setOverride({ key, value: draft });
+        })
         .then(({ dashboard }) => {
           if (!dashboard) return;
-          landSpec(key, dashboard);
+          if (drafted) seenSpec.current = { key, at: Date.parse(dashboard.updatedAt) || Date.now() };
+          else landSpec(key, dashboard);
           setOverride({ key, value: dashboard });
         })
         .catch(() => {})
@@ -1259,7 +1266,11 @@ function Picker({
 
 // Mirrors the backend's pre-check: only these messages can reshape the dashboard, so only they show the pill.
 const LAYOUT_ASK =
-  /\b(show|dashboard|board|focus|track|view|only|add|remove|put|switch|rebuild|replace|swap|hide|pin|widgets?|chart|kpi|layout|display|see|watch|monitor|i am|i'm|im a|as a|my role)\b/i;
+  /\b(show|dashboard|board|focus|track|view|only|just|add|remove|put|switch|rebuild|replace|swap|hide|pin|widgets?|chart|kpi|layout|display|see|watch|monitor|i am|i'm|im a|as a|my role)\b/i;
+// A bare filter phrase ("blocked marketing work") reshapes too, unless it reads as a question.
+const FILTER_ASK = /\b(blocked|at risk|on track|done|shipped|marketing|sales|engineering|ops|deals?|campaigns?|google ads|hubspot|commits?|today|this week|mine)\b/i;
+const QUESTION_ASK = /\?\s*$|^\s*(what|who|why|how|when|where|which|is|are|does|do|did|can|could|should|will|would)\b/i;
+const isLayoutAsk = (text: string) => LAYOUT_ASK.test(text) || (FILTER_ASK.test(text) && !QUESTION_ASK.test(text));
 
 function Toasts({ toasts, reshaping = false, lower = false }: { toasts: Toast[]; reshaping?: boolean; lower?: boolean }) {
   return (

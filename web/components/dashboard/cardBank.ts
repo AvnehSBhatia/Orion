@@ -15,6 +15,7 @@ import type {
   WidgetKind,
   WidgetMetric,
 } from "@/lib/orion";
+import { applyFilter, hasFilter } from "./shared";
 
 export type CardSize = Widget["size"];
 
@@ -97,6 +98,7 @@ export function specTerms(spec: DashboardSpec): Set<string> {
     if (w.filter?.owner) parts.push(w.filter.owner);
     if (w.filter?.domains) parts.push(w.filter.domains.join(" "));
     if (w.filter?.statuses) parts.push(w.filter.statuses.join(" "));
+    if (w.filter?.source) parts.push(w.filter.source);
   }
   const set = new Set<string>();
   for (const t of tokens(parts.join(" "))) {
@@ -375,7 +377,24 @@ export function buildBank(
   }
 
   out.sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1));
-  return { pinned, ranked: out.slice(0, BANK_SIZE) };
+  const ranked = focusOf(spec) ? inFocus(out, spec, nodes) : out;
+  return { pinned, ranked: ranked.slice(0, BANK_SIZE) };
+}
+
+/**
+ * An "only X" board from Orion: every widget is filtered except at most one activity feed. The deck then
+ * fills its free slots with cards that pass those filters and nothing else, so "only marketing" stays marketing.
+ */
+export function focusOf(spec: DashboardSpec): boolean {
+  if (spec.origin !== "chat") return false;
+  const open = spec.widgets.filter((w) => !hasFilter(w.filter));
+  return spec.widgets.length > open.length && open.every((w) => w.kind === "activity") && open.length <= 1;
+}
+
+function inFocus(cards: Card[], spec: DashboardSpec, nodes: PublicNode[]): Card[] {
+  const ok = new Set<string>();
+  for (const w of spec.widgets) if (hasFilter(w.filter)) for (const n of applyFilter(nodes, w.filter)) ok.add(n.id);
+  return cards.filter((c) => (c.kind === "node" ? ok.has(c.node.id) : c.kind === "change" ? ok.has(c.change.nodeId) : false));
 }
 
 /** Stable key for "the user asked for something new". */
