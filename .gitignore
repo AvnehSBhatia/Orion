@@ -27,14 +27,9 @@ skills-lock.json
 demo/src/features/secret-pricing-engine/
 demo/src/features/unreleased-voice-mode/
 
-# tests, stress labs, and scratch
-**/*.test.ts
-**/*.spec.ts
-src/test/
-codebase-agent/test/
+# stress labs and scratch
 stress/
 data-stress/
-vitest.config.ts
 test.txt
 
 # one-off probe scripts
