@@ -36,11 +36,6 @@
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules",
-    "extension",
-    "codebase-agent",
-    "demo",
-    "stress",
-    "web"
+    "node_modules"
   ]
 }

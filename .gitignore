@@ -33,7 +33,7 @@ data-stress/
 test.txt
 
 # one-off probe scripts
-scripts/probe-*.ts
+server/scripts/probe-*.ts
 
 # Orion codebase agent sync state
 .ctx-last-sha

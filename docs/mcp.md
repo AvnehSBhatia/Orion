@@ -19,7 +19,7 @@ claude mcp add --transport http orion https://<your-orion-host>/api/mcp \
   --header "Authorization: Bearer $ORION_TOKEN"
 ```
 
-For local development against `npm run dev`:
+For local development against `npm run dev` (in `server/`):
 
 ```sh
 claude mcp add --transport http orion http://localhost:3000/api/mcp \

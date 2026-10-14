@@ -1,42 +1,13 @@
 {
-  "name": "constellation-backend",
-  "version": "0.1.0",
+  "name": "orion",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "next dev -p 3001",
-    "build": "next build",
-    "start": "next start -p 3001",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
-    "embed-models": "tsx scripts/embed-models.ts",
-    "probe-gemma": "tsx scripts/probe-gemma.ts",
+    "dev": "npm --prefix server run dev",
+    "dev:web": "npm --prefix web run dev",
+    "test": "npm --prefix server test",
+    "typecheck": "cd server && npx tsc --noEmit && cd ../web && npx tsc --noEmit && cd ../extension && npx tsc --noEmit && cd ../codebase-agent && npx tsc --noEmit",
     "ctx:sync": "npm --prefix codebase-agent run sync --",
     "swarm": "npm --prefix stress run swarm --",
-    "ask": "npm --prefix stress run ask --",
-    "bench": "tsx scripts/bench.ts",
-    "bench:embed": "tsx scripts/bench-embed.ts",
-    "eval": "EMBED_PROVIDER=gemma tsx scripts/eval.ts"
-  },
-  "dependencies": {
-    "@huggingface/transformers": "^4.3.1",
-    "@modelcontextprotocol/server": "^2.3.1",
-    "better-sqlite3": "^13.0.3",
-    "mcp-handler": "^2.3.0",
-    "next": "^16.4.0",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "sharp": "^0.35.5",
-    "tesseract.js": "^7.0.0",
-    "zod": "^4.6.5"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0",
-    "@types/node": "^26.6.5",
-    "@types/react": "^19.3.0",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
-    "vitest": "^5.0.3"
+    "ask": "npm --prefix stress run ask --"
   }
 }
