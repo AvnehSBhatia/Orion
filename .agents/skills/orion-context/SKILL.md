@@ -1,11 +1,26 @@
 ---
 name: orion-context
-description: Use when committing or reviewing code changes, to keep the Orion context map in sync. Applies the "+." agent private rule from .gitignore and writes plain-language feature cards for sales.
+description: Use at the start of any coding task to pull live org context from the Orion MCP server into .orion/context.md, and when committing or reviewing code changes to keep the Orion context map in sync. Applies the "+." agent private rule from .gitignore and writes plain-language feature cards for sales.
 ---
 
 # Orion context
 
-Orion is a shared map of what the org is working on. Every code change you make should show up there as a short feature card that a salesperson can read and repeat. Some paths are private and must never show up anywhere.
+Orion is a shared map of what the org is working on, kept current by teammates' browser captures (Google Ads, HubSpot, docs, consoles) and commits. Pull from it before you start, and push to it when you ship. Some paths are private and must never show up anywhere.
+
+## 0. Start every task with Orion context
+
+If the `orion` MCP server is connected (see `docs/mcp.md`), do this before planning or editing code:
+
+1. Call `context_for_task` with the task in the user's own words (add the feature name, ticket, or file area if you know it). Defaults are fine; pass `sinceHours` to look further back.
+2. Write the first text block of the result, unchanged, to `.orion/context.md` at the repo root (create `.orion/`, overwrite the file). The second block is JSON with `write_to`, `itemIds`, and `sourceIds`. Do not commit `.orion/`.
+3. Read `.orion/context.md`. Act on it:
+   - Status flips (`-> **blocked**`, `at risk`) and blockers under "Upstream" change what you should build first. Tell the user when the task depends on blocked work.
+   - Call `read_document` with a source id (`src-...` or `dg-...`) when an excerpt matters for the code: it returns the full page text or diff plus text read off the screenshot.
+   - Call `graph_neighborhood` on an item id to see what blocks, feeds, or contains it, with owners.
+   - Call `search_context` for anything the file did not cover, and `whats_new` to catch up on recent changes by others.
+4. Cite sources by their ref (URL or `repo@sha`) when you rely on them.
+
+If the task changes direction mid-way, call `context_for_task` again with the new task and overwrite the file. If the server is not connected, skip this step and carry on.
 
 ## 1. Respect agent private paths
 
