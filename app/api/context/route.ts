@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { contextQuery } from "@/contract/schemas";
 import type { ContextResponse } from "@/contract/types";
 import { getEmbedder, getStore, requireUser } from "@/server/deps";
-import { preflight, route } from "@/server/http";
+import { preflight, route, scopedQuery } from "@/server/http";
 import { buildContext, findNodes } from "@/steer/context";
 import { filterParams, isEmptyFilter } from "@/steer/filters";
 
@@ -14,7 +14,7 @@ export const runtime = "nodejs";
  * plus the newest document behind each.
  */
 export const GET = route(async (req: NextRequest): Promise<ContextResponse> => {
-  const params = Object.fromEntries(req.nextUrl.searchParams);
+  const params = scopedQuery(req, { user: true });
   const query = contextQuery.parse(params);
   const filter = filterParams.parse(params);
   const store = getStore(query.orgId);

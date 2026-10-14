@@ -32,7 +32,8 @@ export type ScreenFrame = {
 export type CaptureResponse = { nodesTouched: string[] };
 
 // orgId: which org's map captures land in. Empty means the backend's default org.
-export type Settings = { userId: string; backendUrl: string; orgId: string };
+// token: a session or API token from Orion sign-in, sent as `Authorization: Bearer`.
+export type Settings = { userId: string; backendUrl: string; orgId: string; token: string };
 
 export type ErrorCode = 'no_user' | 'restricted' | 'timeout' | 'backend' | 'unknown';
 

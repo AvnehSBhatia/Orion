@@ -41,6 +41,7 @@ Env:
 
 - `BACKEND_URL`: default `http://localhost:3001`.
 - `ORION_ORG_ID`: which org the change belongs to. Default `demo`.
+- `ORION_TOKEN`: an Orion API token (create one with `POST /api/auth/tokens` or `npx tsx scripts/account.ts token`). Required unless the server runs with `AUTH_DISABLED=true`. With it, the org comes from the token.
 - `ORION_USER_ID`: optional. Without it the backend matches the commit author's name or email to a person in the org, so the change counts toward their work.
 
 The GitHub Action in `.github/workflows/ctx-sync.yml` runs the same script on every push to main. Set the `BACKEND_URL` and `ORION_ORG_ID` repo secrets; without `BACKEND_URL` the job skips. Cards only come from local runs, since `.ctx-cards.json` is not committed.

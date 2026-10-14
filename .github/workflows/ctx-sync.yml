@@ -10,6 +10,7 @@ jobs:
     env:
       BACKEND_URL: ${{ secrets.BACKEND_URL }}
       ORION_ORG_ID: ${{ secrets.ORION_ORG_ID }}
+      ORION_TOKEN: ${{ secrets.ORION_TOKEN }}
     steps:
       - name: Check backend is configured
         id: check

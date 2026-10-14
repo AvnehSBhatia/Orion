@@ -60,4 +60,27 @@ export const config = {
       .map((s) => s.trim())
       .filter(Boolean);
   },
+  /** Dev only: skip sign-in on every route (the local demo flow). Never set this on a public box. */
+  get authDisabled(): boolean {
+    return process.env.AUTH_DISABLED === "true";
+  },
+  /** POST /api/auth/signup creates a new org and its admin. Off by default. */
+  get allowSignup(): boolean {
+    return process.env.ALLOW_SIGNUP === "true";
+  },
+  /** Mark the session cookie Secure (set this behind HTTPS). */
+  get cookieSecure(): boolean {
+    return process.env.COOKIE_SECURE === "true";
+  },
+  /** Read the client IP from X-Forwarded-For (only behind a proxy that sets it). */
+  get trustProxy(): boolean {
+    return process.env.TRUST_PROXY === "true";
+  },
+  /** Chrome extension ids allowed by CORS. Empty: any extension. */
+  get extensionIds(): string[] {
+    return (process.env.EXTENSION_IDS || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  },
 };

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { activityQuery } from "@/contract/schemas";
 import type { ActivityPerson, ActivityResponse } from "@/contract/types";
 import { getStore } from "@/server/deps";
-import { preflight, route } from "@/server/http";
+import { preflight, route, scopedQuery } from "@/server/http";
 
 export const runtime = "nodejs";
 
@@ -10,7 +10,7 @@ const HOUR = 3_600_000;
 
 /** What people are capturing and committing right now. Cheap enough to poll every couple of seconds. */
 export const GET = route(async (req: NextRequest): Promise<ActivityResponse> => {
-  const { orgId, limit } = activityQuery.parse(Object.fromEntries(req.nextUrl.searchParams));
+  const { orgId, limit } = activityQuery.parse(scopedQuery(req));
   const store = getStore(orgId);
   const now = Date.now();
   const lastHourAt = new Date(now - HOUR).toISOString();
