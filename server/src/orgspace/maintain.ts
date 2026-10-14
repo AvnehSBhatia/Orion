@@ -2,6 +2,10 @@ import type { Store } from "@/db/store";
 import type { Embedder } from "@/llm/embed";
 import type { LlmClient } from "@/llm/openrouter";
 import { HttpError } from "@/http/error";
+import { retryPendingExtractions, type RetryReport } from "@/ingest/extraction";
+import { logJson } from "@/jobs/log";
+import { LlmExtractor, type Extractor } from "@/llm/extract";
+import { withUsage } from "@/usage";
 import { activeCompressor, ensureOrgSpace } from "./embeddings";
 import { recomputeUserVectors } from "./personVectors";
 import { synthesizeDigests, type DigestReport } from "@/digests/synthesize";
@@ -21,6 +25,7 @@ export const MAINTAIN_INTERVAL_MS = Number(process.env.MAINTAIN_INTERVAL_MS) || 
 type Skipped = { skipped: string };
 
 export type MaintainReport = {
+  extractions: RetryReport | Skipped;
   facets: { labeled: number; areas: number } | Skipped;
   retrain: RetrainResult | Skipped;
   clusters: { id: string; label: string; size: number }[];
@@ -43,14 +48,27 @@ async function optional<T>(run: () => Promise<T>): Promise<T | Skipped> {
  * model, retrain the 64d map when the corpus grew or many labels changed, rebuild the area clusters, then
  * refresh the digests of similar documents.
  */
-export async function maintainOrg(
+export function maintainOrg(
   store: Store,
   embedder: Embedder,
   llm: LlmClient,
   model: string,
-  { forceRetrain = false }: { forceRetrain?: boolean } = {},
+  opts: { forceRetrain?: boolean; extractor?: Extractor } = {},
+): Promise<MaintainReport> {
+  // Every model call below is billed to this org and stops at its monthly budget.
+  return withUsage(store, () => maintainInContext(store, embedder, llm, model, opts));
+}
+
+async function maintainInContext(
+  store: Store,
+  embedder: Embedder,
+  llm: LlmClient,
+  model: string,
+  { forceRetrain = false, extractor }: { forceRetrain?: boolean; extractor?: Extractor },
 ): Promise<MaintainReport> {
   const t = performance.now();
+  // First, so what the retried extractions add is embedded and projected in this same run.
+  const extractions = await optional(() => retryPendingExtractions(store, extractor ?? new LlmExtractor(llm, model)));
   await recomputeUserVectors(store, embedder);
 
   const facets = await optional(() => labelFacets(store, llm, model));
@@ -73,6 +91,7 @@ export async function maintainOrg(
 
   const digests = await optional(() => synthesizeDigests(store, embedder, llm, model));
   return {
+    extractions,
     facets,
     retrain,
     clusters: store.listClusters(c.id).map(({ id, label, size }) => ({ id, label, size })),
@@ -103,9 +122,10 @@ export function maintainInBackground(store: Store, embedder: Embedder, llm: LlmC
       const d = "created" in r.digests ? `${r.digests.created} new digests` : `digests ${r.digests.skipped}`;
       const f = "labeled" in r.facets ? `${r.facets.labeled} labeled` : `facets ${r.facets.skipped}`;
       const tr = "status" in r.retrain ? r.retrain.status : "not retrained";
-      console.log(`org maintenance: ${f}, map ${tr}, ${r.clusters.length} clusters, ${d}, ${r.ms}ms`);
+      const ex = "tried" in r.extractions && r.extractions.tried ? `, ${r.extractions.extracted}/${r.extractions.tried} extractions retried` : "";
+      console.log(`org maintenance: ${f}, map ${tr}, ${r.clusters.length} clusters, ${d}${ex}, ${r.ms}ms`);
     } catch (err) {
-      console.error("org maintenance failed", err);
+      logJson("error", "background job failed", { job: "org maintenance", err });
     } finally {
       s.running = false;
       s.lastEnd = Date.now();

@@ -186,3 +186,12 @@ export function pageOf(stored: string): string {
   const at = stored.indexOf(PAGE_MARK);
   return at < 0 ? "" : stored.slice(at + PAGE_MARK.length);
 }
+
+/** The change block of a stored source (what `withChanges` put on top), or null when it has none. */
+export function changesOf(stored: string): { since: string; diff: string } | null {
+  if (!stored.startsWith(HEADER)) return null;
+  const close = stored.indexOf("):\n", HEADER.length);
+  const at = stored.indexOf(PAGE_MARK);
+  if (close < 0 || at < close) return null;
+  return { since: stored.slice(HEADER.length, close), diff: stored.slice(close + 3, at) };
+}
