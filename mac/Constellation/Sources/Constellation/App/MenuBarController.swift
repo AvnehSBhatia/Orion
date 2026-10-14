@@ -91,7 +91,7 @@ import SwiftUI
     // MARK: Windows
 
     @objc func showApps() {
-        show("apps", title: "Constellation: apps and privacy", AppPickerView(settings: settings, engine: engine) { [weak self] in
+        show("apps", title: "Constellation: Apps and Privacy", AppPickerView(settings: settings, engine: engine) { [weak self] in
             self?.showDebug()
         })
     }
@@ -101,7 +101,7 @@ import SwiftUI
     }
 
     @objc func showDraft() {
-        show("draft", title: "Constellation: today's draft", DraftView(model: drafts, directory: sender.directory))
+        show("draft", title: "Constellation: Today's Draft", DraftView(model: drafts, directory: sender.directory))
     }
 
     @objc func showWelcome() {
@@ -113,7 +113,7 @@ import SwiftUI
     }
 
     @objc func showDebug() {
-        show("debug", title: "Constellation: debug", DebugView(stats: stats, engine: engine))
+        show("debug", title: "Constellation: Debug", DebugView(stats: stats, engine: engine))
     }
 
     /// Smoke test: lay out every screen without showing it.

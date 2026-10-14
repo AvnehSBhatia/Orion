@@ -86,6 +86,9 @@ import Foundation
 
     func match(_ item: OutboxItem) -> ClientMatch? { directory?.match(item.record) }
 
+    /// False until a client list has synced, so "No client" isn't shown when nothing could match.
+    var hasClients: Bool { directory?.list.clients.isEmpty == false }
+
     /// The JSON shown under "What will be sent": exactly what the sender posts.
     func preview(_ item: OutboxItem) -> String { (directory?.payload(for: item) ?? item.payload).preview }
 

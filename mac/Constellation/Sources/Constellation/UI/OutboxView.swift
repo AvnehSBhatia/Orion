@@ -23,7 +23,7 @@ struct OutboxView: View {
                 Label("The encrypted store is unavailable, so there is nothing to show.", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Theme.warning)
             }
-            BatchSection(title: "Waiting for review", empty: "Nothing to review.", batches: model.toReview,
+            BatchSection(title: "Waiting for Review", empty: "Nothing to review.", batches: model.toReview,
                          kind: .review, model: model, editing: $editing)
             BatchSection(title: "Approved", empty: "Nothing approved yet.", batches: model.approved,
                          kind: .approved, model: model, editing: $editing)
@@ -31,7 +31,7 @@ struct OutboxView: View {
                          batches: showAllSent ? model.sent : Array(model.sent.prefix(Self.sentCollapsed)),
                          kind: .sent, model: model, editing: $editing, total: model.sent.reduce(0) { $0 + $1.items.count })
             if model.sent.count > Self.sentCollapsed {
-                Button(showAllSent ? "Show fewer" : "Show all \(model.sent.count) sent batches") { showAllSent.toggle() }
+                Button(showAllSent ? "Show Fewer" : "Show All \(model.sent.count) Sent Batches") { showAllSent.toggle() }
                     .buttonStyle(LinkButtonStyle())
             }
         }
@@ -51,14 +51,14 @@ struct OutboxView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: Theme.Space.l) {
                 Picker("Mode", selection: $settings.outboxMode) {
-                    Text("Review first").tag(OutboxMode.reviewFirst)
-                    Text("Log only").tag(OutboxMode.logOnly)
+                    Text("Review First").tag(OutboxMode.reviewFirst)
+                    Text("Log Only").tag(OutboxMode.logOnly)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: 220)
                 if settings.outboxMode == .reviewFirst {
-                    Toggle("Auto approve after \(Limits.autoApproveMinutes) min", isOn: $settings.autoApprove)
+                    Toggle("Auto-approve after \(Limits.autoApproveMinutes) minutes", isOn: $settings.autoApprove)
                         .toggleStyle(.switch)
                         .controlSize(.small)
                 }
@@ -102,11 +102,11 @@ private struct NowCard: View {
                                     Text(detail).foregroundStyle(Theme.textSecondary).lineLimit(1)
                                 }
                             }
-                            Text("It moves to Waiting for review when you open another email, window or app, or after \(Int(Limits.idleGapSeconds / 60)) minutes idle.")
+                            Text("It moves to Waiting for Review when you open another email, window, or app, or after \(Int(Limits.idleGapSeconds / 60)) minutes idle.")
                                 .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
                                 .fixedSize(horizontal: false, vertical: true)
                         } else {
-                            Text("Capture is on. Open one of your chosen apps and it shows up here.")
+                            Text("Capture is on. Open one of your chosen apps, and it will appear here.")
                             Text("Reading: \(settings.allowed.isEmpty ? "no apps chosen yet" : "\(settings.allowed.count) \(settings.allowed.count == 1 ? "app" : "apps")")")
                                 .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
                         }
@@ -114,7 +114,7 @@ private struct NowCard: View {
                 }
                 Spacer(minLength: Theme.Space.s)
                 switch settings.state {
-                case .off: Button("Turn on") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle(small: true))
+                case .off: Button("Turn On") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle(small: true))
                 case .paused: Button("Resume") { settings.resume() }.buttonStyle(PrimaryButtonStyle(small: true))
                 case .on: EmptyView()
                 }
@@ -150,9 +150,9 @@ private struct ConnectionCard: View {
                     Text(line).lineLimit(1).truncationMode(.middle)
                     Spacer(minLength: Theme.Space.s)
                     if sender.isConnected {
-                        Button("Send now") { sender.sendNow() }.buttonStyle(PrimaryButtonStyle(small: true))
+                        Button("Send Now") { sender.sendNow() }.buttonStyle(PrimaryButtonStyle(small: true))
                         Menu {
-                            Button("Sync clients") { Task { await sender.syncClients() } }
+                            Button("Sync Clients") { Task { await sender.syncClients() } }
                             Divider()
                             Button("Disconnect", role: .destructive) { sender.disconnect() }
                         } label: {
@@ -202,7 +202,7 @@ private struct ConnectionCard: View {
 
     private var line: String {
         switch sender.state {
-        case .notConnected: return "Not connected · approved items wait here"
+        case .notConnected: return "Not connected. Approved items wait here."
         case .connecting: return "Connecting…"
         case .sending: return "Sending · \(host)"
         case .failed: return sender.isConnected ? "Connected · \(host) · couldn't send" : "Not connected"
@@ -337,7 +337,7 @@ private struct BatchRow: View {
                     ForEach(Array(batch.items.enumerated()), id: \.element.id) { index, item in
                         if index > 0 { Divider().overlay(Color.white.opacity(0.05)) }
                         ItemRow(item: item, match: model.match(item), preview: model.preview(item), sent: kind == .sent,
-                                startOpen: isSampleOpen(item), onEdit: { editing = item }, onDelete: { model.delete([item.id]) })
+                                hasClients: model.hasClients, startOpen: isSampleOpen(item), onEdit: { editing = item }, onDelete: { model.delete([item.id]) })
                     }
                 }
                 .padding(.leading, 18)
@@ -361,6 +361,7 @@ private struct ItemRow: View {
     let match: ClientMatch?
     let preview: String
     let sent: Bool
+    var hasClients = true
     let onEdit: () -> Void
     let onDelete: () -> Void
     @State private var open: Bool
@@ -368,8 +369,9 @@ private struct ItemRow: View {
     @State private var showData = false
     @State private var confirmDelete = false
 
-    init(item: OutboxItem, match: ClientMatch?, preview: String, sent: Bool, startOpen: Bool = false,
+    init(item: OutboxItem, match: ClientMatch?, preview: String, sent: Bool, hasClients: Bool, startOpen: Bool = false,
          onEdit: @escaping () -> Void, onDelete: @escaping () -> Void) {
+        self.hasClients = hasClients
         self.item = item
         self.match = match
         self.preview = preview
@@ -395,7 +397,7 @@ private struct ItemRow: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(open ? "Hide" : "Read it")
+                .help(summary.headline + (summary.detail.map { " (\($0))" } ?? ""))
                 Spacer(minLength: Theme.Space.s)
                 if let match {
                     Label(match.client.name, systemImage: "star.fill")
@@ -403,8 +405,11 @@ private struct ItemRow: View {
                         .foregroundStyle(Theme.success)
                         .lineLimit(1)
                         .help("Matched by \(match.reason)")
-                } else {
+                } else if hasClients {
                     StarBadge(kind: .noClient, label: "No client")
+                } else {
+                    StarBadge(kind: .noClient, label: "Clients not synced")
+                        .help("Connect to the backend to sync the client list. Items are matched once it arrives.")
                 }
                 Text(item.record.startedAt.formatted(date: .omitted, time: .shortened))
                     .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary).monospacedDigit()
@@ -422,9 +427,9 @@ private struct ItemRow: View {
                         if item.record.redactionCount > 0 {
                             Chip(text: "\(item.record.redactionCount) \(item.record.redactionCount == 1 ? "redaction" : "redactions")")
                         }
-                        if item.edited { Chip(text: "edited") }
+                        if item.edited { Chip(text: "Edited") }
                         if let sentAt = item.sentAt {
-                            Text("sent \(sentAt.formatted(date: .omitted, time: .shortened)) to \(item.sentTo ?? "the backend")")
+                            Text("Sent at \(sentAt.formatted(date: .omitted, time: .shortened)) to \(item.sentTo ?? "the backend")")
                                 .font(Theme.Typo.caption).foregroundStyle(Theme.line)
                         }
                     }
@@ -433,7 +438,7 @@ private struct ItemRow: View {
                         Text("No text: browsers send the title and address only.")
                             .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
                     } else if lines.isEmpty {
-                        Text("Only short labels were captured. Open the full text to see them.")
+                        Text("Only short labels were captured. Choose Show Full Text to see them.")
                             .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
                     } else {
                         VStack(alignment: .leading, spacing: 4) {
@@ -444,10 +449,10 @@ private struct ItemRow: View {
                     }
                     HStack(spacing: Theme.Space.l) {
                         if !item.record.text.isEmpty {
-                            Button(showFull ? "Hide full text" : "Show full text") { showFull.toggle() }
+                            Button(showFull ? "Hide Full Text" : "Show Full Text") { showFull.toggle() }
                                 .buttonStyle(LinkButtonStyle())
                         }
-                        Button(showData ? "Hide exact data" : "Show exact data") { showData.toggle() }
+                        Button(showData ? "Hide Exact Data" : "Show Exact Data") { showData.toggle() }
                             .buttonStyle(LinkButtonStyle(color: Theme.textSecondary))
                     }
                     if showFull {
@@ -500,7 +505,7 @@ private struct EditTextSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
-            Text("Edit text").font(Theme.Typo.windowTitle)
+            Text("Edit Text").font(Theme.Typo.windowTitle)
             HStack(spacing: 6) {
                 Text("\(item.record.appName) · \(timeRange(item.record.startedAt, item.record.endedAt))")
                     .foregroundStyle(Theme.textSecondary)

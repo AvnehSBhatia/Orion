@@ -30,8 +30,8 @@ struct AppPickerView: View {
 
     var body: some View {
         SpaceScreen {
-            WindowHeader(title: "Apps and privacy", subtitle: "Apps start off. Browsers share tab title and address only.") {
-                IconButton(symbol: "gauge.with.dots.needle.33percent", help: "Debug view", action: showDebug)
+            WindowHeader(title: "Apps and Privacy", subtitle: "Every app starts off. Browsers share only the tab title and address.") {
+                IconButton(symbol: "gauge.with.dots.needle.33percent", help: "Open the debug view", action: showDebug)
             }
             captureRow
             Picker("Section", selection: $tab) {
@@ -71,7 +71,7 @@ struct AppPickerView: View {
             if case .paused = engine.status.state {
                 Button("Resume") { settings.resume() }.buttonStyle(GhostButtonStyle(small: true))
             } else if settings.captureOn {
-                Button("Pause 1 hour") { settings.pause(for: 3600) }.buttonStyle(GhostButtonStyle(small: true))
+                Button("Pause for 1 Hour") { settings.pause(for: 3600) }.buttonStyle(GhostButtonStyle(small: true))
             }
         }
     }
@@ -124,7 +124,7 @@ struct AppPickerView: View {
             GlassCard {
                 VStack(alignment: .leading, spacing: Theme.Space.m) {
                     PrivacySwitch(title: "Email addresses", detail: "Become [EMAIL]", isOn: $settings.redactEmails)
-                    PrivacySwitch(title: "Keep the company part", detail: "Shows [EMAIL]@acme.com instead", isOn: $settings.keepEmailDomain)
+                    PrivacySwitch(title: "Keep the company part", detail: "Shows [EMAIL]@acme.com instead of [EMAIL]", isOn: $settings.keepEmailDomain)
                         .padding(.leading, 28)
                         .disabled(!settings.redactEmails)
                         .opacity(settings.redactEmails ? 1 : 0.5)

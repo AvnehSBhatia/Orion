@@ -10,9 +10,9 @@ struct DraftView: View {
     var body: some View {
         SpaceScreen {
             WindowHeader(
-                title: "Today's draft",
+                title: "Today's Draft",
                 detail: Date().formatted(.dateTime.weekday(.wide).month(.wide).day()),
-                subtitle: "Review each entry. Accept, edit or reject."
+                subtitle: "Review each entry, then accept, edit, or reject it."
             ) {
                 if model.loading { ProgressView().controlSize(.small) }
                 IconButton(symbol: "arrow.clockwise", help: "Refresh") { Task { await model.refresh() } }
@@ -92,7 +92,7 @@ private struct EntryCard: View {
     private var topRow: some View {
         HStack(spacing: Theme.Space.m) {
             Menu {
-                Button("No client") { clientId = nil }
+                Button("No Client") { clientId = nil }
                 Divider()
                 ForEach(clients) { client in Button(client.name) { clientId = client.id } }
             } label: {
@@ -171,10 +171,10 @@ private struct EntryCard: View {
             if entry.status != .pending, !changed, !reopened {
                 // The badge already says Accepted or Rejected. There is no "back to pending"
                 // in the API, so this reopens the choice rather than undoing it on the server.
-                Button("Change decision") { reopened = true }.buttonStyle(LinkButtonStyle())
+                Button("Change Decision") { reopened = true }.buttonStyle(LinkButtonStyle())
             } else {
                 Button("Reject") { submit(.reject) }.buttonStyle(GhostButtonStyle(small: true, color: Theme.danger))
-                Button(changed ? "Accept with changes" : "Accept") { submit(.accept) }
+                Button(changed ? "Accept with Changes" : "Accept") { submit(.accept) }
                     .buttonStyle(PrimaryButtonStyle(small: true))
                     .keyboardShortcut(.defaultAction)
             }
@@ -186,7 +186,7 @@ private struct EntryCard: View {
         return InsetPanel {
             VStack(alignment: .leading, spacing: 4) {
                 if blocks.isEmpty {
-                    Text("These blocks aren't on this Mac any more.")
+                    Text("These blocks are no longer on this Mac.")
                 }
                 ForEach(blocks) { item in
                     Text("\(item.record.startedAt.formatted(date: .omitted, time: .shortened))  \(item.record.appName)  \(item.record.windowTitle)")

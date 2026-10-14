@@ -8,14 +8,14 @@ struct DebugView: View {
 
     var body: some View {
         SpaceScreen(maxWidth: 1000) {
-            WindowHeader(title: "Debug", detail: "counts only") {
+            WindowHeader(title: "Debug", detail: "Counts only") {
                 InfoButton(text: "Captured text is redacted, then saved encrypted on this Mac. It is never shown here, logged, or sent from this view.")
             }
             HStack(spacing: Theme.Space.s) {
                 StatusPill(icon: "circle.fill", text: statusText, color: statusColor)
                 StatusPill(icon: "lock.fill",
                            text: "\(stats.recordCount) \(stats.storeAvailable ? "records saved" : "records in memory (store unavailable)")")
-                StatusPill(icon: "textformat", text: "\(stats.storedChars) chars saved")
+                StatusPill(icon: "textformat", text: "\(stats.storedChars) characters saved")
             }
         } content: {
             GlassCard {

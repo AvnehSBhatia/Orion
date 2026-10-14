@@ -175,7 +175,7 @@ struct StarBadge: View {
     private var defaultLabel: String? {
         switch kind {
         case .accepted: "Accepted"
-        case .needsReview: "To review"
+        case .needsReview: "Needs review"
         case .noClient: "Pick a client"
         case .sent: "Sent"
         case .rejected: "Rejected"

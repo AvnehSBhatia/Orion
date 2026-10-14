@@ -95,7 +95,7 @@ struct OnboardingView: View {
     private var whatIsRead: some View {
         VStack(alignment: .leading, spacing: Theme.Space.l) {
             stepHeader(
-                "What it reads",
+                "What It Reads",
                 "Only what you choose, only while it's in front.",
                 info: "Before anything is kept, card numbers and keys are always replaced with markers like [CARD], and by default so are emails, phone numbers, and street addresses. You can change those under Privacy. Nothing is kept unencrypted."
             )
@@ -120,7 +120,7 @@ struct OnboardingView: View {
     private var permission: some View {
         VStack(alignment: .leading, spacing: Theme.Space.l) {
             stepHeader(
-                "Allow reading windows",
+                "Allow Reading Windows",
                 "macOS calls this Accessibility permission.",
                 info: "It lets an app read the text of other apps' windows. You can turn it off any time in System Settings > Privacy & Security > Accessibility."
             )
@@ -135,7 +135,7 @@ struct OnboardingView: View {
                             .disabled(trusted)
                     }
                     if runningUnbundled {
-                        Text("This test version runs from Terminal, so turn on Terminal in the list, then quit and reopen it.")
+                        Text("This test version runs from Terminal, so turn on Terminal in the list, then quit and reopen Terminal.")
                             .font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -147,20 +147,20 @@ struct OnboardingView: View {
     private var sharing: some View {
         VStack(alignment: .leading, spacing: Theme.Space.l) {
             stepHeader(
-                "You decide what's shared",
+                "You Decide What's Shared",
                 "Finished work waits in the Outbox first.",
                 info: "In the Outbox you can read exactly what would be sent, edit it, or delete it. You can change this choice any time there."
             )
             GlassCard {
                 VStack(alignment: .leading, spacing: Theme.Space.m) {
                     Picker("", selection: $settings.outboxMode) {
-                        Text("Review first: I approve before anything is sent").tag(OutboxMode.reviewFirst)
-                        Text("Log only: send automatically, show me what was sent").tag(OutboxMode.logOnly)
+                        Text("Review first: I approve everything before it is sent").tag(OutboxMode.reviewFirst)
+                        Text("Log only: send automatically and show me what was sent").tag(OutboxMode.logOnly)
                     }
                     .pickerStyle(.radioGroup)
                     .labelsHidden()
                     if settings.outboxMode == .reviewFirst {
-                        Toggle("Approve automatically after \(Limits.autoApproveMinutes) minutes", isOn: $settings.autoApprove)
+                        Toggle("Auto-approve after \(Limits.autoApproveMinutes) minutes", isOn: $settings.autoApprove)
                             .toggleStyle(.switch)
                             .controlSize(.small)
                     }
@@ -172,16 +172,16 @@ struct OnboardingView: View {
     private var chooseApps: some View {
         VStack(alignment: .leading, spacing: Theme.Space.l) {
             stepHeader(
-                "Choose your apps",
+                "Choose Your Apps",
                 "Every app starts off.",
-                info: "The eye in your menu bar always shows whether capture is on, paused, or off. Pause and Delete all are one click there."
+                info: "The eye in your menu bar always shows whether capture is on, paused, or off. Pause and Delete All Data are one click away there."
             )
             GlassCard {
                 VStack(alignment: .leading, spacing: Theme.Space.m) {
                     HStack {
                         Text("Turn on the apps you work in")
                         Spacer()
-                        Button("Open the app list", action: openApps).buttonStyle(GhostButtonStyle(small: true))
+                        Button("Open App List", action: openApps).buttonStyle(GhostButtonStyle(small: true))
                     }
                     Toggle("Start capturing now", isOn: $settings.captureOn).toggleStyle(.switch).controlSize(.small)
                 }

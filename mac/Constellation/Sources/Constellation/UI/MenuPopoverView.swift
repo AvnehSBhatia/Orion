@@ -32,14 +32,14 @@ struct MenuPopoverView: View {
             HStack(spacing: Theme.Space.s) {
                 switch engine.status.state {
                 case .off:
-                    Button("Turn on") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle())
+                    Button("Turn On") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle())
                 case .paused:
                     Button("Resume") { settings.resume() }.buttonStyle(PrimaryButtonStyle())
-                    Button("Turn off") { settings.captureOn = false }.buttonStyle(GhostButtonStyle())
+                    Button("Turn Off") { settings.captureOn = false }.buttonStyle(GhostButtonStyle())
                 case .on:
                     Menu {
-                        Button("For 1 hour") { settings.pause(for: 3600) }
-                        Button("Until tomorrow") { settings.pauseUntilTomorrow() }
+                        Button("For 1 Hour") { settings.pause(for: 3600) }
+                        Button("Until Tomorrow") { settings.pauseUntilTomorrow() }
                     } label: {
                         Label("Pause", systemImage: "pause.fill")
                     }
@@ -47,17 +47,17 @@ struct MenuPopoverView: View {
                     .buttonStyle(PrimaryButtonStyle())
                     .menuIndicator(.visible)
                     .fixedSize()
-                    Button("Turn off") { settings.captureOn = false }.buttonStyle(GhostButtonStyle())
+                    Button("Turn Off") { settings.captureOn = false }.buttonStyle(GhostButtonStyle())
                 }
             }
 
             ConstellationDivider()
 
             VStack(alignment: .leading, spacing: 2) {
-                row("Today's draft", symbol: "list.bullet.rectangle", action: actions.openDraft)
+                row("Today's Draft", symbol: "list.bullet.rectangle", action: actions.openDraft)
                 row("Outbox", symbol: "tray.and.arrow.up", badge: outbox.toReviewCount, action: actions.openOutbox)
-                row("Apps and privacy", symbol: "app.badge.checkmark", action: actions.openApps)
-                row("Welcome and permission", symbol: "hand.wave", action: actions.openWelcome)
+                row("Apps and Privacy", symbol: "app.badge.checkmark", action: actions.openApps)
+                row("Welcome and Permission", symbol: "hand.wave", action: actions.openWelcome)
                 row("Debug", symbol: "gauge.with.dots.needle.33percent", action: actions.openDebug)
             }
 
@@ -65,11 +65,11 @@ struct MenuPopoverView: View {
 
             HStack {
                 Button(role: .destructive, action: actions.deleteAll) {
-                    Label("Delete all data", systemImage: "trash")
+                    Label("Delete All Data", systemImage: "trash")
                 }
                 .buttonStyle(LinkButtonStyle(color: Theme.danger))
                 .fixedSize()
-                .help("Deletes every record, the Outbox, and the encryption key, in one click")
+                .help("Deletes every record, the Outbox, and the encryption key at once.")
                 Spacer(minLength: Theme.Space.s)
                 Button(action: actions.quit) {
                     Label("Quit Constellation", systemImage: "power")
@@ -77,7 +77,7 @@ struct MenuPopoverView: View {
                 .buttonStyle(GhostButtonStyle(small: true))
                 .fixedSize()
                 .keyboardShortcut("q")
-                .help("Stop capturing and quit (Command-Q)")
+                .help("Stops capturing and quits Constellation (⌘Q).")
             }
         }
         .padding(Theme.Space.l + 2)
