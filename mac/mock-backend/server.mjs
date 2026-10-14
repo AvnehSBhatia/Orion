@@ -20,6 +20,7 @@ const DATA = process.env.MOCK_DATA_DIR
 const DEVICES_FILE = new URL('devices.json', DATA);
 const BLOCKS_FILE = new URL('work-blocks.jsonl', DATA);
 const CLIENTS_FILE = new URL('./clients.json', import.meta.url); // edit it to try your own clients
+const REVIEWS_FILE = new URL('reviews.json', DATA);
 const MAX_BODY = 5_000_000;
 
 const BLOCK_FIELDS = {
@@ -37,12 +38,69 @@ const LEAKS = [
 
 let devices = new Map(); // token -> device
 const blocks = new Map(); // block id -> { device_id, block }
+const reviews = new Map(); // draft entry id -> { status, description?, minutes?, client_id? (null = no client) }
 
 async function load() {
   await mkdir(DATA, { recursive: true });
   try {
     for (const device of JSON.parse(await readFile(DEVICES_FILE, 'utf8'))) devices.set(device.token, device);
   } catch { /* first run */ }
+  try {
+    for (const line of (await readFile(BLOCKS_FILE, 'utf8')).split('\n').filter(Boolean)) {
+      const { device_id, ...block } = JSON.parse(line);
+      blocks.set(block.id, { device_id, block });
+    }
+  } catch { /* none yet */ }
+  try {
+    for (const [id, review] of Object.entries(JSON.parse(await readFile(REVIEWS_FILE, 'utf8')))) reviews.set(id, review);
+  } catch { /* none yet */ }
+}
+
+const saveReviews = () => writeFile(REVIEWS_FILE, JSON.stringify(Object.fromEntries(reviews), null, 2));
+
+// The day "2026-10-13" of an ISO time, in the person's time zone.
+function localDay(iso, tz) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+}
+
+// A stand-in for the real backend's AI drafting: one entry per client for the day,
+// minutes from the blocks' spans, and a description listing what was worked on.
+function draftFor(device, tz) {
+  const today = localDay(new Date().toISOString(), tz);
+  const groups = new Map();
+  for (const { device_id, block } of blocks.values()) {
+    if (device_id !== device.device_id || localDay(block.started_at, tz) !== today) continue;
+    const key = block.client_id ?? 'none';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(block);
+  }
+  const entries = [...groups].map(([key, list]) => {
+    list.sort((a, b) => a.started_at.localeCompare(b.started_at));
+    const seconds = list.reduce((sum, b) => sum + Math.max(0, (new Date(b.ended_at) - new Date(b.started_at)) / 1000), 0);
+    const titles = [...new Set(list.map((b) => b.window_title).filter(Boolean))];
+    const apps = [...new Set(list.map((b) => b.app_name))].join(', ');
+    const id = `d_${today}_${key}`;
+    const entry = {
+      id,
+      client_id: key === 'none' ? null : key,
+      description: `${apps}: ${titles.slice(0, 3).join('; ')}${titles.length > 3 ? ` and ${titles.length - 3} more` : ''}`.slice(0, 500),
+      minutes: Math.max(1, Math.ceil(seconds / 60)),
+      started_at: list[0].started_at,
+      ended_at: list[list.length - 1].ended_at,
+      block_ids: list.map((b) => b.id),
+      status: 'pending',
+      edited: false,
+    };
+    const review = reviews.get(id);
+    if (review) {
+      entry.status = review.status;
+      if (review.description !== undefined) { entry.description = review.description; entry.edited = true; }
+      if (review.minutes !== undefined) { entry.minutes = review.minutes; entry.edited = true; }
+      if (review.client_id !== undefined) { entry.client_id = review.client_id; entry.edited = true; }
+    }
+    return entry;
+  });
+  return { date: today, entries };
 }
 
 const saveDevices = () => writeFile(DEVICES_FILE, JSON.stringify([...devices.values()], null, 2));
@@ -150,6 +208,41 @@ async function handle(req, res) {
     return send(res, 200, { clients, next_since: new Date().toISOString() });
   }
 
+  if (route === 'GET /v1/drafts/today') {
+    const device = deviceFor(req);
+    if (!device) return send(res, 401, { error: 'unknown or missing device token' });
+    const tz = url.searchParams.get('tz') || 'UTC';
+    try { new Intl.DateTimeFormat('en', { timeZone: tz }); } catch { return send(res, 400, { error: `unknown time zone ${tz}` }); }
+    const draft = draftFor(device, tz);
+    console.log(`draft for ${device.device_id}: ${draft.date}, ${draft.entries.length} entries`);
+    return send(res, 200, draft);
+  }
+
+  const reviewRoute = /^POST \/v1\/drafts\/entries\/([^/]+)\/review$/.exec(route);
+  if (reviewRoute) {
+    const device = deviceFor(req);
+    if (!device) return send(res, 401, { error: 'unknown or missing device token' });
+    const id = decodeURIComponent(reviewRoute[1]);
+    const body = await readBody(req);
+    const status = { accept: 'accepted', reject: 'rejected', edit: undefined }[body.action];
+    if (!['accept', 'reject', 'edit'].includes(body.action)) return send(res, 400, { error: 'action must be accept, reject, or edit' });
+    if (body.minutes !== undefined && !(Number.isInteger(body.minutes) && body.minutes >= 1 && body.minutes <= 1440)) {
+      return send(res, 400, { error: 'minutes must be 1 to 1440' });
+    }
+    const previous = reviews.get(id) ?? { status: 'pending' };
+    const review = { ...previous, status: status ?? previous.status };
+    if (body.description !== undefined) review.description = String(body.description).slice(0, 500);
+    if (body.minutes !== undefined) review.minutes = body.minutes;
+    if ('client_id' in body) review.client_id = body.client_id; // null means no client
+    reviews.set(id, review);
+    await saveReviews();
+    const entry = draftFor(device, url.searchParams.get('tz') || Intl.DateTimeFormat().resolvedOptions().timeZone)
+      .entries.find((e) => e.id === id);
+    if (!entry) return send(res, 404, { error: 'no such entry today' });
+    console.log(`review ${id}: ${body.action}${review.client_id !== undefined ? `, client ${review.client_id ?? 'none'}` : ''}`);
+    return send(res, 200, entry);
+  }
+
   if (route === 'DELETE /v1/me/data') {
     const device = deviceFor(req);
     if (!device) return send(res, 401, { error: 'unknown or missing device token' });
@@ -160,11 +253,7 @@ async function handle(req, res) {
     return res.end();
   }
 
-  // The rest of the contract arrives with the daily draft.
-  if (['GET /v1/drafts/today', 'POST /v1/baseline'].includes(route) ||
-      /^POST \/v1\/drafts\/entries\/[^/]+\/review$/.test(route)) {
-    return send(res, 501, { error: 'not in the mock yet' });
-  }
+  if (route === 'POST /v1/baseline') return send(res, 501, { error: 'not in the mock yet' });
   return send(res, 404, { error: 'not found' });
 }
 

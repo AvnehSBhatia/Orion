@@ -23,6 +23,7 @@ import CaptureCore
         engine.directory = directory
         return sender
     }()
+    private lazy var drafts = DraftModel(sender: sender, settings: settings)
     private var menuBar: MenuBarController?
 
     /// The encrypted store. If it cannot open (for example the Keychain refuses), capture
@@ -39,7 +40,7 @@ import CaptureCore
     func applicationDidFinishLaunching(_ notification: Notification) {
         // No permission prompt here: the welcome screens explain what is read first,
         // and ask for the permission themselves (spec 5.1).
-        menuBar = MenuBarController(settings: settings, engine: engine, stats: stats, outbox: outbox, sender: sender)
+        menuBar = MenuBarController(settings: settings, engine: engine, stats: stats, outbox: outbox, sender: sender, drafts: drafts)
 
         if smokeTest {
             // Build everything, start nothing, and quit: no app is read.

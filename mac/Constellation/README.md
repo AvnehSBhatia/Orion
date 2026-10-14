@@ -2,7 +2,7 @@
 
 Menu bar app that reads on-screen text from apps the user turns on, redacts it on the device, and (from M5 on) sends approved work records to the backend. `mac/AXProbe` is the separate M0 measurement tool.
 
-**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, M2 redaction, M3 encrypted store, M4 welcome and permission screen, M5 Outbox, sender, **client matching (current)**, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
+**Plan (changed from the original spec):** this is the capture front end, not a standalone app. Summaries and the star map live in the backend and the team UI. Milestones: M0 probe, M1 capture, M2 redaction, M3 encrypted store, M4 welcome and permission screen, M5 Outbox, sender, client matching, **daily draft review (current)**, M5 Outbox, then a sender to the backend, on-device client matching, and a daily draft review screen. M8 packaging later.
 
 ## Run it
 
@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 87 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 93 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -98,13 +98,23 @@ Each work block is matched to a client **on the Mac**, and only the client's id 
 - The Outbox shows the matched client for each item and why ("matched by domain acme.com"), and "What will be sent" includes the `client_id`.
 - Delete all clears the client list too; the next sync fetches it again.
 
+## Daily draft review
+
+"Today's draft…" in the menu shows the time entries the backend drafted from today's sent work blocks (`GET /v1/drafts/today`, with the Mac's time zone). For each entry the person can:
+
+- change the **client** (picker from the synced client list, or "No client"),
+- change the **time** (5 minute steps, 1 minute to 24 hours) and the **description**,
+- **Accept** (with any changes), **Reject**, or **Save changes** and decide later (`POST /v1/drafts/entries/:id/review`).
+
+Edited descriptions go through the person's redaction choices before they're sent. The header shows the day's total (rejected entries excluded) and how many are left to review. The mock backend drafts one entry per client from the day's blocks, with minutes from the blocks' spans and a description listing their titles; the real backend's summaries replace that.
+
 ### Mock backend
 
 ```sh
 node ~/Documents/constellation-mac/mac/mock-backend/server.mjs     # port 8787, no packages needed
 ```
 
-It implements register, work blocks, clients, and delete my data per the contract, prints one line per received block (app, times, size, redaction count), warns if anything that looks like an unredacted email, phone number, or key arrives, and saves everything to `mac/mock-backend/data/` (git ignored) so you can read exactly what arrived. Registered devices survive a restart of the mock.
+It implements register, work blocks, clients, today's draft, reviews, and delete my data per the contract, prints one line per received block (app, times, size, redaction count), warns if anything that looks like an unredacted email, phone number, or key arrives, and saves everything to `mac/mock-backend/data/` (git ignored) so you can read exactly what arrived. Registered devices survive a restart of the mock.
 
 Its clients come from `mac/mock-backend/clients.json`: sample clients (Acme, Globex, Initech, and Apple, so Apple emails match). Edit it to try your own; it's read on every sync. Mark a client `"deleted": true` to remove it from the Mac.
 
@@ -152,7 +162,7 @@ It fails if the label is gone. Without the variable it is skipped.
 
 ## Not built yet
 
-- The daily draft review screen comes next.
+- `POST /v1/baseline` isn't used yet.
 
 ## Check it by hand
 

@@ -126,13 +126,55 @@ Response `200`:
 
 How the device matches (so the backend knows what `client_id` means): it scores each client against the block's browser page domain, window title, browser path, and text. Domain of the browser page is the strongest signal, then a project code or name in the title, then signals in the text. It sends a `client_id` only if one client clearly wins; a tie, or only weak signals such as a name mentioned once in body text, sends `null`. Email addresses are redacted before matching, so email domains don't count. The client list is stored encrypted on the device, and client names are exempt from the optional name masking.
 
+## GET /v1/drafts/today?tz=
+
+The person's time entries for today, drafted by the backend from the work blocks it received (summaries are the backend's job). `tz` is the Mac's IANA time zone, e.g. `America/Los_Angeles`, so "today" is the person's local day.
+
+Response `200`:
+
+```json
+{
+  "date": "2026-10-13",
+  "entries": [
+    {
+      "id": "d_2026-10-13_c_acme",
+      "client_id": "c_acme",
+      "description": "Reviewed and answered the Acme renewal emails",
+      "minutes": 45,
+      "started_at": "2026-10-13T16:02:11Z",
+      "ended_at": "2026-10-13T16:47:00Z",
+      "block_ids": ["0B2D6C1E-7A4F-4E21-8D3B-5C9A1F2E6B70"],
+      "status": "pending",
+      "edited": false
+    }
+  ]
+}
+```
+
+- `status`: `pending`, `accepted`, or `rejected`. `edited`: the person changed the description, minutes, or client.
+- `client_id` may be `null` (no client). The app shows client names from its synced list, so names don't need to be in the draft.
+- Times may include fractional seconds. `started_at`, `ended_at`, `block_ids`, `status`, and `edited` are optional.
+- The app shows the total of entries that aren't rejected.
+
+## POST /v1/drafts/entries/:id/review
+
+The person's decision on one entry. `:id` is URL-encoded.
+
+```json
+{ "action": "accept", "description": "Renewal emails with Acme legal", "minutes": 40, "client_id": "c_globex" }
+```
+
+- `action`: `accept` (approve, applying any fields sent), `reject` (not work to record), or `edit` (save changes, keep it pending). Reviewing again replaces the earlier decision.
+- `description`, `minutes` (1 to 1440), and `client_id` are present only if the person changed them. **`"client_id": null` means "no client"; a missing `client_id` means "keep the current client".** Descriptions the person typed have gone through their redaction choices.
+
+Response `200`: the entry as it now stands (same shape as in the draft).
+
 ## DELETE /v1/me/data
 
 Deletes everything this device sent. Response `204` with an empty body. (The app has the call; the button for it comes later.)
 
 ## Defined later
 
-These arrive with the next steps, and their bodies will be added here then:
+Not used by the app yet:
 
-- `GET /v1/drafts/today` and `POST /v1/drafts/entries/:id/review`: the daily draft review screen (accept, edit, reject, change client).
 - `POST /v1/baseline`

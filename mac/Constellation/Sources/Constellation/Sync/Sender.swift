@@ -109,6 +109,28 @@ import Foundation
         }
     }
 
+    // MARK: Daily draft
+
+    func fetchDraft() async throws -> Draft {
+        try await withBackend { client, credentials in try await client.fetchDraft(credentials: credentials) }
+    }
+
+    func review(entry id: String, _ review: DraftReview) async throws -> DraftEntry {
+        try await withBackend { client, credentials in try await client.review(entry: id, review, credentials: credentials) }
+    }
+
+    /// Runs a call with the current connection; a rejected token disconnects, as for sending.
+    private func withBackend<T: Sendable>(_ call: (BackendClient, DeviceCredentials) async throws -> T) async throws -> T {
+        guard let credentials, let client else { throw BackendError.notConnected }
+        do {
+            return try await call(client, credentials)
+        } catch BackendError.unauthorized {
+            disconnect()
+            state = .failed(BackendError.unauthorized.localizedDescription)
+            throw BackendError.unauthorized
+        }
+    }
+
     /// GET /v1/clients: only what changed since the last sync.
     func syncClients() async {
         guard let credentials, let client else { return }

@@ -185,6 +185,17 @@ struct LiveBackendTests {
         #expect(first.accepted == [record.id.uuidString])
         let again = try await client.postWorkBlocks([WorkBlockPayload(record)], credentials: credentials) // resend is safe
         #expect(again.accepted == [record.id.uuidString])
+        // Today's draft has an entry made from that block; accept it, moved to no client.
+        let draft = try await client.fetchDraft(credentials: credentials)
+        let entry = try #require(draft.entries.first { $0.blockIds.contains(record.id.uuidString) })
+        let reviewed = try await client.review(
+            entry: entry.id, DraftReview(action: .accept, minutes: 15, clientId: nil, changeClient: true), credentials: credentials
+        )
+        #expect(reviewed.status == .accepted)
+        #expect(reviewed.minutes == 15)
+        #expect(reviewed.clientId == nil)
+        #expect(reviewed.edited)
+
         try await client.deleteMyData(credentials: credentials)
         await #expect(throws: BackendError.unauthorized) {
             try await client.postWorkBlocks([WorkBlockPayload(record)], credentials: DeviceCredentials(deviceId: "x", token: "wrong"))

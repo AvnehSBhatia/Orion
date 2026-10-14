@@ -11,15 +11,17 @@ import SwiftUI
     private let stats: DebugStats
     private let outbox: OutboxModel
     private let sender: Sender
+    private let drafts: DraftModel
     private var windows: [String: NSWindow] = [:]
     private var sink: AnyCancellable?
 
-    init(settings: Settings, engine: CaptureEngine, stats: DebugStats, outbox: OutboxModel, sender: Sender) {
+    init(settings: Settings, engine: CaptureEngine, stats: DebugStats, outbox: OutboxModel, sender: Sender, drafts: DraftModel) {
         self.settings = settings
         self.engine = engine
         self.stats = stats
         self.outbox = outbox
         self.sender = sender
+        self.drafts = drafts
         super.init()
         let menu = NSMenu()
         menu.delegate = self
@@ -62,6 +64,7 @@ import SwiftUI
         menu.addItem(.separator())
         let waiting = outbox.toReviewCount
         menu.addItem(action(waiting > 0 ? "Outbox (\(waiting) to review)…" : "Outbox…", #selector(showOutbox)))
+        menu.addItem(action("Today's draft…", #selector(showDraft)))
         menu.addItem(action("Choose apps…", #selector(showApps)))
         menu.addItem(action("Welcome and permission…", #selector(showWelcome)))
         menu.addItem(action("Debug view…", #selector(showDebug)))
@@ -102,6 +105,10 @@ import SwiftUI
         show("outbox", title: "Constellation: Outbox", OutboxView(model: outbox, settings: settings, sender: sender))
     }
 
+    @objc func showDraft() {
+        show("draft", title: "Constellation: today's draft", DraftView(model: drafts, directory: sender.directory))
+    }
+
     @objc func showWelcome() {
         show("welcome", title: "Welcome to Constellation", OnboardingView(
             settings: settings,
@@ -120,7 +127,8 @@ import SwiftUI
         let debug = NSHostingController(rootView: DebugView(stats: stats, engine: engine))
         let welcome = NSHostingController(rootView: OnboardingView(settings: settings, openApps: {}, finish: {}))
         let outboxWindow = NSHostingController(rootView: OutboxView(model: outbox, settings: settings, sender: sender))
-        let views = [apps.view, debug.view, welcome.view, outboxWindow.view]
+        let draftWindow = NSHostingController(rootView: DraftView(model: drafts, directory: sender.directory))
+        let views = [apps.view, debug.view, welcome.view, outboxWindow.view, draftWindow.view]
         views.forEach { $0.layoutSubtreeIfNeeded() }
         return views.allSatisfy { $0.fittingSize.width > 0 }
     }

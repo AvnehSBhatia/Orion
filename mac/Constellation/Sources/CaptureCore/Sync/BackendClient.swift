@@ -5,6 +5,7 @@ import Foundation
 
 public enum BackendError: Error, Equatable {
     case invalidURL
+    case notConnected
     /// Only https, except http to this Mac (localhost) for testing.
     case insecureURL
     /// The backend no longer accepts this device's token.
@@ -18,6 +19,7 @@ extension BackendError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidURL: "That isn't a valid web address."
+        case .notConnected: "Connect to the backend in the Outbox first."
         case .insecureURL: "Use an https address (http is only allowed for localhost)."
         case .unauthorized: "The backend no longer accepts this Mac. Connect again."
         case .server(let status): "The backend answered with an error (\(status))."
@@ -154,6 +156,20 @@ public struct BackendClient: Sendable {
         return try await send("GET", components.string ?? "/v1/clients", body: Empty?.none, token: credentials.token)
     }
 
+    /// GET /v1/drafts/today?tz=  "Today" is the person's local day, so the time zone goes along.
+    public func fetchDraft(timeZone: TimeZone = .current, credentials: DeviceCredentials) async throws -> Draft {
+        var components = URLComponents()
+        components.path = "/v1/drafts/today"
+        components.queryItems = [URLQueryItem(name: "tz", value: timeZone.identifier)]
+        return try await send("GET", components.string ?? "/v1/drafts/today", body: Empty?.none, token: credentials.token)
+    }
+
+    /// POST /v1/drafts/entries/:id/review. Returns the entry as the backend now has it.
+    public func review(entry id: String, _ review: DraftReview, credentials: DeviceCredentials) async throws -> DraftEntry {
+        let escaped = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? id
+        return try await send("POST", "/v1/drafts/entries/\(escaped)/review", body: review, token: credentials.token)
+    }
+
     /// DELETE /v1/me/data
     public func deleteMyData(credentials: DeviceCredentials) async throws {
         let _: Empty = try await send("DELETE", "/v1/me/data", body: Empty?.none, token: credentials.token)
@@ -162,6 +178,21 @@ public struct BackendClient: Sendable {
     // MARK: Plumbing
 
     struct Empty: Codable {}
+
+    /// ISO 8601 with or without fractional seconds ("2026-10-13T17:02:11Z" or "...11.482Z",
+    /// which JavaScript's toISOString produces).
+    static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let text = try decoder.singleValueContainer().decode(String.self)
+            let plain = ISO8601DateFormatter()
+            let fractional = ISO8601DateFormatter()
+            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = plain.date(from: text) ?? fractional.date(from: text) { return date }
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Not an ISO 8601 date: \(text)"))
+        }
+        return decoder
+    }()
 
     func makeRequest<Body: Encodable>(_ method: String, _ path: String, body: Body?, token: String?) throws -> URLRequest {
         guard let url = URL(string: path, relativeTo: baseURL) else { throw BackendError.invalidURL }
@@ -192,9 +223,7 @@ public struct BackendClient: Sendable {
         guard (200..<300).contains(http.statusCode) else { throw BackendError.server(status: http.statusCode) }
         if Response.self == Empty.self, data.isEmpty { return Empty() as! Response }
         do {
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            return try decoder.decode(Response.self, from: data)
+            return try Self.decoder.decode(Response.self, from: data)
         } catch {
             throw BackendError.badResponse
         }
