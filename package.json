@@ -16,7 +16,8 @@
     "swarm": "npm --prefix stress run swarm --",
     "ask": "npm --prefix stress run ask --",
     "bench": "tsx scripts/bench.ts",
-    "bench:embed": "tsx scripts/bench-embed.ts"
+    "bench:embed": "tsx scripts/bench-embed.ts",
+    "eval": "EMBED_PROVIDER=gemma tsx scripts/eval.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",
