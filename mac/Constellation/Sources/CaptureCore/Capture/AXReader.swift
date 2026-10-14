@@ -54,9 +54,11 @@ public enum AXReader {
             let subrole = shape[1] as? String ?? ""
             if role == "AXSecureTextField" || subrole == "AXSecureTextField" { walk.secureSkipped += 1; continue }
             if skipRoles.contains(role) || skipSubroles.contains(subrole) { continue }
-            if !skip.isEmpty, let identifier = shape[3] as? String, skip.contains(identifier) { continue }
+            if !skip.isEmpty, let identifier = shape[3] as? String, AppProfile.skips(identifier, skip) { continue }
 
-            for value in copyMultiple(node, textAttributes) {
+            // The window's own title is already the record's title; reading it again
+            // only adds a line like "Inbox — 26 messages" to the text.
+            for value in depth == 0 ? [] : copyMultiple(node, textAttributes) {
                 guard let text = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
                       !text.isEmpty, seen.insert(text).inserted else { continue }
                 let room = Limits.maxSnapshotChars - walk.chars

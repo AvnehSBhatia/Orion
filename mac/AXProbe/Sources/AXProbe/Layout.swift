@@ -14,7 +14,12 @@ enum Layout {
     final class Walk {
         var nodes = 0
         var focused: AXUIElement?
+        var skip: [String] = []
+        var skipped = 0
     }
+
+    /// `--all`: print every child instead of summarising long lists.
+    nonisolated(unsafe) static var expandAll = false
 
     struct Node {
         var role = "?"
@@ -28,7 +33,8 @@ enum Layout {
         var hiddenChildren = 0 // past maxNodes or maxDepth
     }
 
-    static func run() {
+    static func run(all: Bool = false, skip: [String] = []) {
+        expandAll = all
         Matrix.countdown("the app and window to map")
         guard let front = Apps.frontmost() else { print("Could not tell which app is in front."); return }
         let app = AXUIElementCreateApplication(front.pid)
@@ -36,12 +42,14 @@ enum Layout {
         guard let window = AXReader.focusedWindow(of: app) else { print("\(front.name) has no focused window."); return }
 
         let walk = Walk()
+        walk.skip = skip
         walk.focused = AXReader.element(AXReader.copy(app, kAXFocusedUIElementAttribute))
         let root = build(window, depth: 0, walk: walk)
 
         print("\nLayout of \(front.name)'s front window (\(front.kind.rawValue)). Character counts only; no text is shown.")
         print("own = characters on that element, all = including everything inside it. [selected] / [focused] mark the selection and keyboard focus.\n")
         printNode(root, indent: 0)
+        if walk.skipped > 0 { print("\n\(walk.skipped) views left out by --skip.") }
         print("\n\(walk.nodes) elements read.\(walk.nodes >= maxNodes ? " Stopped at the \(maxNodes) element limit." : "")")
     }
 
@@ -68,6 +76,12 @@ enum Layout {
 
         let children = (attributes[4] as? [AnyObject])?.compactMap(AXReader.element) ?? []
         for child in children {
+            if !walk.skip.isEmpty,
+               let id = AXReader.copy(child, kAXIdentifierAttribute) as? String,
+               walk.skip.contains(where: { $0 == id || ($0.hasSuffix(".") && id.hasPrefix($0)) }) {
+                walk.skipped += 1
+                continue
+            }
             guard depth + 1 <= maxDepth, walk.nodes < maxNodes else {
                 node.hiddenChildren += 1
                 continue
@@ -90,7 +104,7 @@ enum Layout {
         print(line)
 
         // Long runs of similar children (list rows, table cells) are summarised.
-        let shown = node.children.count > listShown * 2 ? Array(node.children.prefix(listShown)) : node.children
+        let shown = !expandAll && node.children.count > listShown * 2 ? Array(node.children.prefix(listShown)) : node.children
         for child in shown { printNode(child, indent: indent + 1) }
         let rest = node.children.dropFirst(shown.count)
         if !rest.isEmpty {

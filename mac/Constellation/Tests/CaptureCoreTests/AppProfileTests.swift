@@ -6,9 +6,19 @@ struct AppProfileTests {
     @Test("Mail skips the mailbox list and the list of emails, and titles by the open email")
     func mail() throws {
         let mail = try #require(AppProfile.forApp("com.apple.mail"))
-        #expect(mail.skipIdentifiers == ["MailboxesOutlineView", "Mail.messageList"])
+        #expect(mail.skipIdentifiers == ["MailboxesOutlineView", "Mail.messageList", "Mail.categoryBucket."])
         #expect(mail.title?.list == "Mail.messageList")
         #expect(mail.title?.fields.first == "Mail.messageList.cell.view.subjectLabel")
+    }
+
+    @Test("An entry ending in a dot skips a whole family of views")
+    func prefixSkip() {
+        let skip: Set<String> = ["Mail.messageList", "Mail.categoryBucket."]
+        #expect(AppProfile.skips("Mail.categoryBucket.primary", skip))
+        #expect(AppProfile.skips("Mail.categoryBucket.allMail", skip))
+        #expect(AppProfile.skips("Mail.messageList", skip))
+        #expect(!AppProfile.skips("Mail.messageList.cell.view.subjectLabel", skip)) // exact entries stay exact
+        #expect(!AppProfile.skips("Mail.messageViewer", skip))
     }
 
     @Test("Apps without a profile read the whole window as before")

@@ -209,11 +209,41 @@ private struct BatchRow: View {
     let kind: BatchSection.Kind
     let model: OutboxModel
     @Binding var editing: OutboxItem?
-    @State private var expanded = false
+    @State private var expanded: Bool
     @State private var confirmDelete = false
 
+    init(batch: OutboxBatch, kind: BatchSection.Kind, model: OutboxModel, editing: Binding<OutboxItem?>) {
+        self.batch = batch
+        self.kind = kind
+        self.model = model
+        _editing = editing
+        #if DEBUG
+        _expanded = State(initialValue: batch.items.contains { $0.id == model.sampleOpen })
+        #else
+        _expanded = State(initialValue: false)
+        #endif
+    }
+
+    /// "Email · Your Apple ID was used… · Web page · Pricing · +12 more": scan a batch without opening it.
+    private var preview: String {
+        let heads = batch.items.prefix(3).map { item -> String in
+            let summary = ItemSummary(item.record)
+            return "\(summary.kind): \(summary.headline)"
+        }
+        let more = batch.items.count - heads.count
+        return heads.joined(separator: "  ·  ") + (more > 0 ? "  ·  +\(more) more" : "")
+    }
+
+    private func isSampleOpen(_ item: OutboxItem) -> Bool {
+        #if DEBUG
+        item.id == model.sampleOpen
+        #else
+        false
+        #endif
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
             HStack(spacing: Theme.Space.s) {
                 Button { expanded.toggle() } label: {
                     HStack(spacing: Theme.Space.s) {
@@ -226,7 +256,7 @@ private struct BatchRow: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(expanded ? "Hide the payload" : "Show exactly what is sent")
+                .help(expanded ? "Hide the items" : "Show the items")
 
                 Chip(text: "\(batch.items.count) \(batch.items.count == 1 ? "item" : "items")")
                 Chip(text: "\(batch.redactions) \(batch.redactions == 1 ? "redaction" : "redactions")")
@@ -237,11 +267,21 @@ private struct BatchRow: View {
                 }
                 IconButton(symbol: "trash", help: "Delete this batch", color: Theme.danger) { confirmDelete = true }
             }
-            if expanded {
-                ForEach(batch.items) { item in
-                    ItemDetail(item: item, match: model.match(item), preview: model.preview(item), sent: kind == .sent,
-                               onEdit: { editing = item }, onDelete: { model.delete([item.id]) })
+            if !expanded {
+                Text(preview)
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textSecondary)
+                    .lineLimit(1)
+                    .padding(.leading, 18)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(batch.items.enumerated()), id: \.element.id) { index, item in
+                        if index > 0 { Divider().overlay(Color.white.opacity(0.05)) }
+                        ItemRow(item: item, match: model.match(item), preview: model.preview(item), sent: kind == .sent,
+                                startOpen: isSampleOpen(item), onEdit: { editing = item }, onDelete: { model.delete([item.id]) })
+                    }
                 }
+                .padding(.leading, 18)
             }
         }
         .padding(Theme.Space.m)
@@ -255,49 +295,129 @@ private struct BatchRow: View {
     }
 }
 
-/// One item: app, time, client, and the exact payload in a monospaced inset, with names highlighted.
-private struct ItemDetail: View {
+/// One item as a single readable line ("Email · subject · from sender"); click to
+/// read a short excerpt, the full text, or the exact data that is sent.
+private struct ItemRow: View {
     let item: OutboxItem
     let match: ClientMatch?
     let preview: String
     let sent: Bool
     let onEdit: () -> Void
     let onDelete: () -> Void
-    @State private var highlighted: AttributedString?
+    @State private var open: Bool
+    @State private var showFull = false
+    @State private var showData = false
     @State private var confirmDelete = false
 
+    init(item: OutboxItem, match: ClientMatch?, preview: String, sent: Bool, startOpen: Bool = false,
+         onEdit: @escaping () -> Void, onDelete: @escaping () -> Void) {
+        self.item = item
+        self.match = match
+        self.preview = preview
+        self.sent = sent
+        self.onEdit = onEdit
+        self.onDelete = onDelete
+        _open = State(initialValue: startOpen)
+    }
+
+    private var summary: ItemSummary { ItemSummary(item.record) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
             HStack(spacing: Theme.Space.s) {
-                Text(item.record.appName).font(Theme.Typo.bodyStrong)
-                Text(timeRange(item.record.startedAt, item.record.endedAt)).font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
+                Button { open.toggle() } label: {
+                    HStack(spacing: Theme.Space.s) {
+                        Image(systemName: summary.symbol).foregroundStyle(Theme.textSecondary).frame(width: 16)
+                        Text(summary.headline).lineLimit(1).truncationMode(.tail)
+                        if let detail = summary.detail {
+                            Text(detail).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(open ? "Hide" : "Read it")
+                Spacer(minLength: Theme.Space.s)
                 if let match {
                     Label(match.client.name, systemImage: "star.fill")
                         .font(Theme.Typo.caption.weight(.medium))
                         .foregroundStyle(Theme.success)
+                        .lineLimit(1)
                         .help("Matched by \(match.reason)")
                 } else {
                     StarBadge(kind: .noClient, label: "No client")
                 }
-                if item.edited { Chip(text: "edited") }
-                Spacer(minLength: Theme.Space.s)
-                if let sentAt = item.sentAt {
-                    Text("sent \(sentAt.formatted(date: .omitted, time: .shortened)) to \(item.sentTo ?? "the backend")")
-                        .font(Theme.Typo.caption).foregroundStyle(Theme.line)
-                }
+                Text(item.record.startedAt.formatted(date: .omitted, time: .shortened))
+                    .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary).monospacedDigit()
                 if !sent { IconButton(symbol: "pencil", help: "Edit the text", action: onEdit) } // what was sent can't change
                 IconButton(symbol: "trash", help: "Delete this item", color: Theme.danger) { confirmDelete = true }
             }
-            InsetPanel {
-                ScrollView {
-                    Text(highlighted ?? AttributedString(preview))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 4)
+
+            if open {
+                VStack(alignment: .leading, spacing: Theme.Space.s) {
+                    HStack(spacing: Theme.Space.s) {
+                        Chip(text: summary.kind)
+                        Text("\(item.record.appName) · \(timeRange(item.record.startedAt, item.record.endedAt))")
+                            .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
+                        if item.record.redactionCount > 0 {
+                            Chip(text: "\(item.record.redactionCount) \(item.record.redactionCount == 1 ? "redaction" : "redactions")")
+                        }
+                        if item.edited { Chip(text: "edited") }
+                        if let sentAt = item.sentAt {
+                            Text("sent \(sentAt.formatted(date: .omitted, time: .shortened)) to \(item.sentTo ?? "the backend")")
+                                .font(Theme.Typo.caption).foregroundStyle(Theme.line)
+                        }
+                    }
+                    let lines = ItemSummary.excerpt(item.record)
+                    if item.record.text.isEmpty {
+                        Text("No text: browsers send the title and address only.")
+                            .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
+                    } else if lines.isEmpty {
+                        Text("Only short labels were captured. Open the full text to see them.")
+                            .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
+                    } else {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                                Text(Highlight.apply(line)).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                    HStack(spacing: Theme.Space.l) {
+                        if !item.record.text.isEmpty {
+                            Button(showFull ? "Hide full text" : "Show full text") { showFull.toggle() }
+                                .buttonStyle(LinkButtonStyle())
+                        }
+                        Button(showData ? "Hide exact data" : "Show exact data") { showData.toggle() }
+                            .buttonStyle(LinkButtonStyle(color: Theme.textSecondary))
+                    }
+                    if showFull {
+                        InsetPanel {
+                            ScrollView {
+                                Text(Highlight.apply(item.record.text))
+                                    .font(Theme.Typo.body)
+                                    .foregroundStyle(Theme.textPrimary)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 260)
+                        }
+                    }
+                    if showData {
+                        InsetPanel {
+                            ScrollView {
+                                Text(Highlight.apply(preview))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 220)
+                        }
+                    }
                 }
-                .frame(maxHeight: 220)
+                .padding(.leading, 24)
+                .padding(.bottom, Theme.Space.s)
             }
         }
-        .onAppear { highlighted = Highlight.apply(preview) }
         .confirmationDialog("Delete this item permanently?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive, action: onDelete)
         }

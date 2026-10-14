@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 93 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 94 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -60,7 +60,8 @@ Nothing leaves the Mac unless it appears in the Outbox first (spec 2.5, 9). Open
 - A record goes to the Outbox when it **closes**: the app, window, or page changes, or 2 minutes pass with no new capture. The record still being written never appears. Records left open when the app quit are closed at the next launch.
 - **Review first** (default): items wait under "Waiting for review". **Approve automatically after 30 minutes** is on by default and can be turned off. **Log only**: items are approved as soon as they close. The mode is chosen in the welcome screens and can be changed in the Outbox.
 - Items are grouped into **30 minute batches**. A batch can be approved or deleted as a whole; each item can be edited or deleted on its own.
-- Each item shows the app, times, title, web address, text, and redaction count. **People's names are highlighted** in yellow (spec 8) and redaction markers like `[EMAIL]` are greyed. "What will be sent" shows the exact JSON, produced by the same code the sender will use.
+- A collapsed batch lists its first few items ("Email: Re: Acme renewal · Web page: Pricing – Initech · +3 more"), so it can be scanned without opening it.
+- Each item is **one readable line**: what it was (an envelope for an email, a globe for a web page), the subject or title, who it's from or which site, the matched client, and the time. Click it to read a short excerpt: the first few sentence-like lines, leaving out the title, the sender, and short interface labels ("Summarize", "message headers"). **Show full text** shows everything captured; **Show exact data** shows the JSON the sender posts, produced by the same code. **People's names are highlighted** in yellow (spec 8) and redaction markers like `[EMAIL]` are greyed. The excerpt is a reading aid only; what is sent doesn't change.
 - **Edits are redacted again** before they are saved, so nothing typed into an edit skips redaction. Edited items are marked.
 - **Delete is permanent**: the row is removed and, with `secure_delete`, overwritten.
 - Approved items wait under "Approved, waiting to send" until the sender delivers them (see Sender). Nothing is sent while not connected.
@@ -95,9 +96,13 @@ Some apps keep everything in one window. Mail shows the mailbox list, the list o
 
 A profile (`Sources/CaptureCore/Capture/AppProfiles.swift`) names views to skip and where the real title is, by the developer identifiers the app gives its views, found with `ax-probe layout` (counts only, no text). For Mail:
 
-- Skipped: `MailboxesOutlineView` (sidebar) and `Mail.messageList` (the list of emails and their previews).
+- Skipped: `MailboxesOutlineView` (sidebar), `Mail.messageList` (the list of emails and their previews), and `Mail.categoryBucket.` (the All Mail / Primary / Promotions tabs; an entry ending in a dot skips every identifier starting with it).
 - Title: the selected email's subject and sender, e.g. "Your Apple ID was used to sign in — Apple". So each email is its own block, and the sender counts as a strong client signal.
 - Text: what's left, which is the open email.
+
+The window's own title is never read into the text of any app, since it is already the record's title ("Inbox – Primary · 26 messages" no longer shows up in Mail text).
+
+To map what else a window holds, `ax-probe layout --all` prints every element instead of summarising long lists, and `--skip Mail.messageList,MailboxesOutlineView` leaves views out (counts only, still no text).
 
 Clicking another email changes the selection but not the window title, so selection changes (`AXSelectedRowsChanged`, `AXSelectedChildrenChanged`) now trigger a read about 1 second later, plus the usual re-read. Apps without a profile are read whole, as before.
 

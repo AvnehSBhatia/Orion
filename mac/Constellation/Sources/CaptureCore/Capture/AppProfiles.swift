@@ -15,7 +15,8 @@ public struct AppProfile: Sendable {
         public var fields: [String]
     }
 
-    /// Views never read, and nothing inside them.
+    /// Views never read, and nothing inside them. An entry ending in "." skips every
+    /// identifier that starts with it ("Mail.categoryBucket." covers each category tab).
     public var skipIdentifiers: Set<String>
     public var title: SelectedRowTitle?
 
@@ -25,13 +26,18 @@ public struct AppProfile: Sendable {
 
     static let profiles: [String: AppProfile] = [
         "com.apple.mail": AppProfile(
-            skipIdentifiers: ["MailboxesOutlineView", "Mail.messageList"], // sidebar, list of emails
+            // Sidebar, list of emails, and the All Mail / Primary / Promotions tabs.
+            skipIdentifiers: ["MailboxesOutlineView", "Mail.messageList", "Mail.categoryBucket."],
             title: SelectedRowTitle(
                 list: "Mail.messageList",
                 fields: ["Mail.messageList.cell.view.subjectLabel", "Mail.messageList.cell.view.addressLabel"]
             )
         ),
     ]
+
+    static func skips(_ identifier: String, _ skip: Set<String>) -> Bool {
+        skip.contains(identifier) || skip.contains { $0.hasSuffix(".") && identifier.hasPrefix($0) }
+    }
 
     /// "Subject — Sender", skipping empty parts.
     public static func composeTitle(_ parts: [String?]) -> String? {
