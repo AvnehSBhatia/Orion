@@ -155,6 +155,8 @@ export type WidgetFilter = {
   nodeIds: string[] | null;
   owner: string | null;
   query: string | null; // case-insensitive substring over label + summary
+  sinceHours?: number | null; // only work updated (or captured) in the last N hours
+  source?: string | null; // where it was captured, matched against the page URL or title ("google ads", "hubspot", "code")
 };
 
 export type Widget = {

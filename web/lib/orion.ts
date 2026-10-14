@@ -87,6 +87,8 @@ export type WidgetFilter = {
   nodeIds: string[] | null;
   owner: string | null;
   query: string | null; // case-insensitive substring over label + summary
+  sinceHours?: number | null; // only work updated (or captured) in the last N hours
+  source?: string | null; // where it was captured, matched against the page URL or title ("google ads", "hubspot", "code")
 };
 
 export type Widget = {
@@ -229,9 +231,49 @@ export const orion = {
     }
     throw new Error("the answer stream ended early");
   },
-  /** One fast model call that reshapes (and saves) the dashboard; null when the message was not a layout request. */
-  askDashboard: (orgId: string, userId: string, message: string) =>
-    j<{ dashboard: DashboardSpec | null }>("/api/dashboard/ask", { method: "POST", body: JSON.stringify({ orgId, userId, message }) }),
+  /**
+   * Reshapes (and saves) the dashboard. `onDraft` gets the instant draft the server builds without a model,
+   * usually within a few ms; the promise resolves with the refined spec (null when the message was not a
+   * layout request). Streams NDJSON from /api/dashboard/ask?stream=1.
+   */
+  askDashboard: async (
+    orgId: string,
+    userId: string,
+    message: string,
+    onDraft?: (spec: DashboardSpec) => void,
+  ): Promise<{ dashboard: DashboardSpec | null }> => {
+    const res = await fetch(`${API}/api/dashboard/ask?stream=1`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ orgId, userId, message }),
+      cache: "no-store",
+    });
+    if (!res.ok || !res.body) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error((body as { error?: string }).error || `/api/dashboard/ask returned ${res.status}`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let draft: DashboardSpec | null = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (value) buf += decoder.decode(value, { stream: !done });
+      let end: number;
+      while ((end = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, end).trim();
+        buf = buf.slice(end + 1);
+        if (!line) continue;
+        const msg = JSON.parse(line) as { draft?: DashboardSpec; dashboard?: DashboardSpec | null };
+        if (msg.draft) {
+          draft = msg.draft;
+          onDraft?.(msg.draft);
+        } else if ("dashboard" in msg) return { dashboard: msg.dashboard ?? draft };
+      }
+      if (done) break;
+    }
+    return { dashboard: draft };
+  },
   imageUrl: (orgId: string, sourceId: string) => `${API}/api/sources/${sourceId}/image${q({ orgId })}`,
 };
 

@@ -208,7 +208,19 @@ export const widgetFilter = z.object({
     .transform((v) => (v?.length ? [...new Set(v)].slice(0, 50) : null)),
   owner: optText(80),
   query: optText(120),
-});
+  // Additive: recency window in hours, and where the work was captured (a tool or site, e.g. "google ads").
+  sinceHours: z
+    .number()
+    .nullish()
+    .catch(null)
+    .transform((v) => (v && v > 0 ? Math.min(Math.round(v), 24 * 90) : null)),
+  source: optText(60),
+}).transform(({ sinceHours, source, ...rest }) => ({
+  ...rest,
+  // Left out when unused, so specs saved before these fields existed parse back unchanged.
+  ...(sinceHours !== null ? { sinceHours } : {}),
+  ...(source !== null ? { source } : {}),
+}));
 
 const widgetSchema = z.object({
   id: z.string().nullish().catch(null),

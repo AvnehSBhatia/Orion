@@ -452,7 +452,7 @@ function WidgetView({
       const sources = codeOnly
         ? all.filter((s) => s.kind === "code")
         : filtered
-          ? all.filter((s) => sourceMatches(s, ids, w.filter?.query ?? null))
+          ? all.filter((s) => sourceMatches(s, ids, w.filter))
           : all;
       return (
         <WidgetCard title={w.title || "Activity"} note={<LiveDot on={!!activity} label={activity ? `${activity.counts.lastHour}/hr` : "…"} />} flush>
