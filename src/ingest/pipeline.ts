@@ -8,6 +8,7 @@ import { HttpError } from "@/server/http";
 import { maintainInBackground } from "@/pseudo/maintain";
 import { recomputeUserVectors, refreshInBackground } from "@/steer/users";
 import { config } from "@/config";
+import { pageDiff, pageOf, samePage, withChanges } from "./diff";
 import { prepareScreenshot, pruneImage, shrinkImage, type OcrFn } from "./image";
 
 export type IngestDeps = {
@@ -29,6 +30,8 @@ const ALWAYS_EXCLUDE = [
 
 /** Visible page text sent to the extractor. */
 const MAX_PAGE_TEXT = 30_000;
+/** Page text sent alongside a change block: the change carries the news, the page only context. */
+export const MAX_PAGE_TEXT_WITH_DIFF = 8_000;
 /** The extension sends every 5 seconds; a repeat of the sender's last capture of a URL within this window is skipped. */
 export const CAPTURE_REPEAT_MS = 30 * 60_000;
 
@@ -145,7 +148,40 @@ function pruneInBackground(deps: IngestDeps, id: string, image: Buffer): void {
 
 const visual = (status: ImageStatus) => status === "kept" || status === "pruned";
 
-/** Same page text, and same screenshot text when the screenshot carried something the page did not. */
+/**
+ * Full page text of each capture stored in this process, by source id, so the next capture of the URL is diffed against
+ * the whole page rather than the stored copy (cut at SOURCE_TEXT_MAX, and topped with its own change block).
+ */
+const lastPages = new WeakMap<Store, Map<string, string>>();
+
+function rememberPage(store: Store, id: string, text: string): void {
+  let pages = lastPages.get(store);
+  if (!pages) lastPages.set(store, (pages = new Map()));
+  pages.set(id, text);
+  if (pages.size > 500) pages.delete(pages.keys().next().value!);
+}
+
+type PrevSource = NonNullable<ReturnType<Store["lastSourceBy"]>>;
+
+/** The previous capture's page text, and whether it is cut short. */
+function prevPage(store: Store, prev: PrevSource): { page: string; truncated: boolean } {
+  const full = lastPages.get(store)?.get(prev.id);
+  if (full !== undefined) return { page: full, truncated: false };
+  return { page: pageOf(prev.text), truncated: prev.text.length >= SOURCE_TEXT_MAX };
+}
+
+/** What changed on the page since the sender's previous capture of this URL. Null on a first capture or no real change. */
+function changeSince(store: Store, prev: PrevSource | null, text: string): { since: string; diff: string } | null {
+  if (!prev) return null;
+  const { page, truncated } = prevPage(store, prev);
+  const diff = pageDiff(page, truncated ? text.slice(0, SOURCE_TEXT_MAX) : text, { prevTruncated: truncated });
+  return diff ? { since: prev.createdAt, diff } : null;
+}
+
+/**
+ * Same page text (ignoring clock times and "updated N minutes ago" stamps),
+ * and same screenshot text when the screenshot carried something the page did not.
+ */
 function repeatOf(
   deps: IngestDeps,
   body: { url: string; userId: string },
@@ -155,7 +191,8 @@ function repeatOf(
 ) {
   const prev = deps.store.lastSourceBy("extension", body.url, body.userId);
   if (!prev || now - Date.parse(prev.createdAt) > CAPTURE_REPEAT_MS) return null;
-  if (prev.text !== text.slice(0, SOURCE_TEXT_MAX)) return null;
+  const { page, truncated } = prevPage(deps.store, prev);
+  if (!samePage(page, truncated ? text.slice(0, page.length) : text)) return null;
   const ocr = (s: { ocrText: string; status: ImageStatus }) => (visual(s.status) ? s.ocrText.slice(0, SOURCE_TEXT_MAX) : "");
   return ocr({ ocrText: prev.ocrText, status: prev.imageStatus }) === ocr(shot) ? prev : null;
 }
@@ -164,6 +201,8 @@ function repeatOf(
  * The screenshot goes through OCR first. If its text is already on the page it is dropped (text only);
  * otherwise it is trimmed and shrunk, the extractor reads its OCR text, and it is pruned in the background.
  * A repeat of the sender's last capture of the same URL is answered from that capture without calling the model.
+ * Otherwise, when the sender captured the URL before, the extractor gets what changed since then ahead of a shorter page,
+ * and the change block is kept at the top of the stored source text.
  * A page the model finds no work in is not stored at all (`notWork`), and is not re-judged while it stays the same.
  */
 export async function ingestCapture(
@@ -197,9 +236,15 @@ export async function ingestCapture(
   const words = wordSet(seen);
   if (seenAsNotWork(deps.store, key, words, now)) return { nodesTouched: [], sourceId: null, imageStatus, notWork: true };
 
+  const change = changeSince(deps.store, deps.store.lastSourceBy("extension", body.url, body.userId), text);
   const update = await extractOrNull(() =>
     deps.extractor.fromCapture(
-      { url: body.url, title: body.title, text: seen.slice(0, MAX_PAGE_TEXT) },
+      {
+        url: body.url,
+        title: body.title,
+        text: seen.slice(0, change ? MAX_PAGE_TEXT_WITH_DIFF : MAX_PAGE_TEXT),
+        ...(change && { changes: change }),
+      },
       known(deps.store),
       aboutFor(deps.store, body.userId),
     ),
@@ -211,10 +256,11 @@ export async function ingestCapture(
   const res = await applyUpdate(
     deps,
     update ?? NOTHING,
-    { kind: "extension", ref: body.url, title, text, image: shot?.image ?? null, ocrText: shot?.ocrText ?? "", imageStatus },
+    { kind: "extension", ref: body.url, title, text: withChanges(text, change?.diff ?? null, change?.since ?? ""), image: shot?.image ?? null, ocrText: shot?.ocrText ?? "", imageStatus },
     body.userId,
     new Date(now).toISOString(),
   );
+  rememberPage(deps.store, res.sourceId, text);
   if (shot?.image && deps.background && !light) pruneInBackground(deps, res.sourceId, shot.image);
   return { ...res, imageStatus };
 }

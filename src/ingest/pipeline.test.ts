@@ -100,6 +100,74 @@ describe("repeat captures", () => {
   });
 });
 
+describe("change-aware captures", () => {
+  const T0 = Date.parse("2026-10-10T12:00:00Z");
+  const page = (budget: string, stamp = "12:00 PM") =>
+    `<p>Q4 search campaign</p><p>Daily budget $${budget}</p><p>Status: Enabled</p><div>Cost per signup 41</div><p>Last updated ${stamp}</p>`;
+  type Sent = { text: string; changes?: { since: string; diff: string } };
+
+  it("sends no change block on a first capture", async () => {
+    const store = memoryStore({ seed: true });
+    const d = deps(store, WORK);
+    const res = await ingestCapture(d, { ...capture, html: page("900") }, T0);
+    const sent = d.extractor.calls[0] as Sent;
+    expect(sent.changes).toBeUndefined();
+    expect(store.getSource(res.sourceId!)!.text.startsWith("Q4 search campaign")).toBe(true);
+  });
+
+  it("passes what changed since the last capture and keeps it at the top of the stored source", async () => {
+    const store = memoryStore({ seed: true });
+    const d = deps(store, WORK);
+    await ingestCapture(d, { ...capture, html: page("900") }, T0);
+    const res = await ingestCapture(d, { ...capture, html: page("1,200", "12:01 PM") }, T0 + 5_000);
+    const sent = d.extractor.calls[1] as Sent;
+    expect(sent.changes).toEqual({
+      since: "2026-10-10T12:00:00.000Z",
+      diff: 'Changed: "Daily budget $900" -> "Daily budget $1,200" ($900 -> $1,200)',
+    });
+    expect(sent.text).toContain("Daily budget $1,200");
+    const stored = store.getSource(res.sourceId!)!;
+    expect(stored.text).toBe(
+      'What changed since the last capture (at 2026-10-10T12:00:00.000Z):\nChanged: "Daily budget $900" -> "Daily budget $1,200" ($900 -> $1,200)\n\nPage now:\n' +
+        "Q4 search campaign\nDaily budget $1,200\nStatus: Enabled\nCost per signup 41\nLast updated 12:01 PM",
+    );
+  });
+
+  it("diffs the next capture against the page, not the stored change block, and repeats still dedupe", async () => {
+    const store = memoryStore({ seed: true });
+    const d = deps(store, WORK);
+    await ingestCapture(d, { ...capture, html: page("900") }, T0);
+    const second = await ingestCapture(d, { ...capture, html: page("1,200") }, T0 + 5_000);
+    const again = await ingestCapture(d, { ...capture, html: page("1,200") }, T0 + 10_000);
+    expect(again.duplicateOf).toBe(second.sourceId);
+    await ingestCapture(d, { ...capture, html: page("1,500") }, T0 + 15_000);
+    expect(d.extractor.calls).toHaveLength(3);
+    expect((d.extractor.calls[2] as Sent).changes!.diff).toBe('Changed: "Daily budget $1,200" -> "Daily budget $1,500" ($1,200 -> $1,500)');
+  });
+
+  it("treats a capture whose only change is a timestamp as a repeat, without calling the model", async () => {
+    const store = memoryStore({ seed: true });
+    const d = deps(store, WORK);
+    const first = await ingestCapture(d, { ...capture, html: page("900") }, T0);
+    const tick = await ingestCapture(d, { ...capture, html: page("900", "12:05 PM") }, T0 + 5_000);
+    expect(tick.duplicateOf).toBe(first.sourceId);
+    expect(d.extractor.calls).toHaveLength(1);
+  });
+
+  it("shortens the page text sent with a change block", async () => {
+    const store = memoryStore({ seed: true });
+    const d = deps(store, WORK);
+    const filler = Array.from({ length: 1500 }, (_, i) => `<p>Keyword ${i} impressions ${i * 7}</p>`).join("");
+    const first = await ingestCapture(d, { ...capture, html: page("900") + filler }, T0);
+    await ingestCapture(d, { ...capture, html: page("1,200") + filler }, T0 + 5_000);
+    const [a, b] = d.extractor.calls as Sent[];
+    expect(a.text.length).toBeGreaterThan(8_000);
+    expect(b.text).toHaveLength(8_000);
+    expect(b.changes!.diff).toContain("($900 -> $1,200)");
+    expect(first.sourceId).toBeTruthy();
+  });
+});
+
 describe("pages with no work on them", () => {
   const T0 = Date.parse("2026-10-10T12:00:00Z");
   const inbox = {
