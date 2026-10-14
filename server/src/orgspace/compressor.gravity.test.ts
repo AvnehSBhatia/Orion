@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalize } from "@/llm/embed";
+import { normalize } from "@/lib/vector";
 import { IN_DIM, OUT_DIM, compress, mrlCompressor, neighborRecall, trainCompressor } from "./compressor";
 import { GRAVITY, corpusMean, fitGravity, gravityScore, packGravity, pull, unpackGravity } from "./gravity";
 

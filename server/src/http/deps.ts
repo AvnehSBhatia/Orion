@@ -10,7 +10,7 @@ import { LlmChat, type ChatModel } from "@/llm/chat";
 import { createEmbedder, type Embedder } from "@/llm/embed";
 import { LlmExtractor, type Extractor } from "@/llm/extract";
 import { OpenRouterClient, type LlmClient } from "@/llm/openrouter";
-import { HttpError } from "./http";
+import { HttpError } from "./error";
 
 type Singletons = { stores: Map<string, Store>; embedder?: Embedder; extractor?: Extractor; chat?: ChatModel; llm?: LlmClient };
 

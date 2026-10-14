@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { getAuthDb } from "@/auth/db";
-import { preflight, requirePrincipal, route } from "@/server/http";
+import { preflight, requirePrincipal, route } from "@/http/route";
 
 export const runtime = "nodejs";
 

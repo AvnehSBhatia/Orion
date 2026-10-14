@@ -1,6 +1,6 @@
 import type { EmbeddingPoint, EmbeddingsResponse } from "@/contract/types";
 import type { Store } from "@/db/store";
-import { publicClusters } from "@/steer/context";
+import { publicClusters } from "@/retrieval/context";
 import { readGraph } from "./view";
 
 export const MAX_POINTS = 1_500;

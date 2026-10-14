@@ -2,11 +2,11 @@ import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { DOMAINS, NODE_TYPES, STATUSES } from "@/contract/types";
 import { readGraph } from "@/graph/view";
-import { buildContext, findNodes, findSources, publicClusters } from "@/steer/context";
-import { feedFor } from "@/steer/feed";
+import { buildContext, findNodes, findSources, publicClusters } from "@/retrieval/context";
+import { feedFor } from "@/retrieval/feed";
 import { neighborhood } from "@/mcp/neighborhood";
 import { buildTaskContext, WRITE_TO } from "@/mcp/taskContext";
-import { getEmbedder, getStore, requireUser } from "./deps";
+import { getEmbedder, getStore, requireUser } from "@/http/deps";
 
 const INSTRUCTIONS = `Orion holds the latest work context for one person in one org: what teammates captured from web pages and screenshots (Google Ads, HubSpot, docs, consoles), what they committed, and the work graph built from it (status, owners, blockers), ranked for this person.
 At the start of any task, call context_for_task with the task in the user's words and save the returned markdown to ${WRITE_TO}. Then drill in with read_document (full text of a source id), graph_neighborhood (what blocks or feeds an item), search_context, and whats_new.

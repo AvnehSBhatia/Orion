@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { actingAs, adminOnly, route, sameOrg, scopedBody, scopedQuery } from "@/server/http";
+import { actingAs, adminOnly, route, sameOrg, scopedBody, scopedQuery } from "@/http/route";
 import { memoryStore } from "@/test/helpers";
 import { hashPassword, sha256, verifyPassword } from "./crypto";
 import { AuthDb, setAuthDb, type Principal } from "./db";

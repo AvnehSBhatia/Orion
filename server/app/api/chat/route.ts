@@ -4,9 +4,10 @@ import type { ChatResponse } from "@/contract/types";
 import { toPublicUser, type Store } from "@/db/store";
 import { readGraph } from "@/graph/view";
 import { LlmChat, MAX_ITEMS, type ChatModel, type OnDelta } from "@/llm/chat";
-import { getChat, getEmbedder, getLlm, getStore, requireUser } from "@/server/deps";
-import { HttpError, actingAs, preflight, route, scopedBody } from "@/server/http";
-import { buildContext } from "@/steer/context";
+import { getChat, getEmbedder, getLlm, getStore, requireUser } from "@/http/deps";
+import { HttpError } from "@/http/error";
+import { actingAs, preflight, route, scopedBody } from "@/http/route";
+import { buildContext } from "@/retrieval/context";
 import { askAndSaveDashboard } from "@/steer/dashboard";
 
 export const runtime = "nodejs";

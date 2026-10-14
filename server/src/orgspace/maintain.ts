@@ -1,9 +1,10 @@
 import type { Store } from "@/db/store";
 import type { Embedder } from "@/llm/embed";
 import type { LlmClient } from "@/llm/openrouter";
-import { HttpError } from "@/server/http";
-import { activeCompressor, ensurePseudo, recomputeUserVectors } from "@/steer/users";
-import { synthesizeDigests, type DigestReport } from "@/synth/digest";
+import { HttpError } from "@/http/error";
+import { activeCompressor, ensureOrgSpace } from "./embeddings";
+import { recomputeUserVectors } from "./personVectors";
+import { synthesizeDigests, type DigestReport } from "@/digests/synthesize";
 import { buildClusters } from "./clusters";
 import { labelFacets } from "./facets";
 import { MIN_TRAIN_VECTORS, RETRAIN_GROWTH, estimatedTrainingSize, lastTrainedSize, retrainCompressor, type RetrainResult } from "./retrain";
@@ -66,7 +67,7 @@ export async function maintainOrg(
       : { skipped: "corpus and labels unchanged enough" };
 
   const c = activeCompressor(store);
-  ensurePseudo(store, c);
+  ensureOrgSpace(store, c);
   const adopted = "status" in retrain && retrain.status === "adopted";
   if (adopted || relabeled > 0 || !store.listClusters(c.id).length) buildClusters(store, c);
 

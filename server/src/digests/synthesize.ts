@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { textHash, type StoredDigest, type StoredSource, type Store } from "@/db/store";
-import { doc, normalize, type Embedder } from "@/llm/embed";
+import { doc, type Embedder } from "@/llm/embed";
+import { dot, normalize } from "@/lib/vector";
 import { completeJson, type LlmClient } from "@/llm/openrouter";
 
 export const SYNTH = {
@@ -55,11 +56,6 @@ export type DigestReport = {
   details: { title: string; members: number; fidelity: number; minMember: number; accepted: boolean }[];
 };
 
-function cos(a: Float32Array, b: Float32Array): number {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
-  return s;
-}
 const body = (s: StoredSource) => (s.text.trim() ? s.text : s.ocrText);
 
 function mean(vs: Float32Array[]): Float32Array {
@@ -76,7 +72,7 @@ export function groupSimilar(ids: string[], vec: Map<string, Float32Array>): str
     if (!left.has(id)) continue;
     left.delete(id);
     const near = [...left]
-      .map((o) => [o, cos(vec.get(id)!, vec.get(o)!)] as const)
+      .map((o) => [o, dot(vec.get(id)!, vec.get(o)!)] as const)
       .filter(([, s]) => s >= SYNTH.mergeSim)
       .sort((a, b) => b[1] - a[1])
       .slice(0, SYNTH.maxMembers - 1)
@@ -119,7 +115,7 @@ export function groupCached(
       const eo = cache.get(o)!;
       if (!freshSet.has(o)) eo.near.delete(f); // drop what o remembered about f's old text
       else if (o < f) continue; // a pair of fresh sources is computed once
-      const sim = cos(vf, vec.get(o)!);
+      const sim = dot(vf, vec.get(o)!);
       if (sim < SYNTH.mergeSim) continue;
       ef.near.set(o, sim);
       eo.near.set(f, sim);
@@ -204,8 +200,8 @@ export async function synthesizeDigests(
     const { title, digest } = z.object({ title: z.string(), digest: z.string() }).parse(raw);
     const [dv] = await embedder.embed([doc(title, digest)]);
     const mv = members.map((m) => vec.get(m.id)!);
-    const fidelity = cos(dv, mean(mv));
-    const minMember = Math.min(...mv.map((v) => cos(dv, v)));
+    const fidelity = dot(dv, mean(mv));
+    const minMember = Math.min(...mv.map((v) => dot(dv, v)));
     const accepted = fidelity >= SYNTH.digestFidelity && minMember >= SYNTH.memberFloor;
     report.details.push({ title, members: members.length, fidelity, minMember, accepted });
     if (!accepted) {
@@ -287,7 +283,7 @@ async function memberText(
   });
   const summary = z.object({ summary: z.string() }).parse(raw).summary.trim();
   const [sv] = await embedder.embed([doc(m.title, summary)]);
-  const fidelity = cos(sv, original);
+  const fidelity = dot(sv, original);
   if (fidelity < SYNTH.summaryFidelity) return text.slice(0, SYNTH.summarizeOver);
   store.saveSummary({ sourceId: m.id, text: summary, textHash: hash, fidelity });
   report.summaries++;

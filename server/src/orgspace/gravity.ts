@@ -1,7 +1,7 @@
-import { normalize } from "@/llm/embed";
+import { normalize } from "@/lib/vector";
 
 export type Gravity = {
-  /** Where this person sits in the 128d space. Unit length. */
+  /** Where this person sits in the org space. Unit length. */
   center: Float32Array;
   /** Per-component pull strength in [0, G_MAX]. Unique to each person. */
   g: Float32Array;
@@ -21,12 +21,6 @@ export const GRAVITY = {
   /** Mass floor for a person we only know by role. */
   minMass: 0.5,
 } as const;
-
-function dot(a: Float32Array, b: Float32Array): number {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
-  return s;
-}
 
 /** Per-component mean of a set of vectors. */
 export function corpusMean(vectors: Float32Array[], dims: number): Float32Array {

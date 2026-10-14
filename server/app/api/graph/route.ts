@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import { orgQuery } from "@/contract/schemas";
 import { readGraph } from "@/graph/view";
-import { getStore, requireUser } from "@/server/deps";
-import { preflight, route, scopedQuery } from "@/server/http";
+import { getStore, requireUser } from "@/http/deps";
+import { preflight, route, scopedQuery } from "@/http/route";
 
 export const runtime = "nodejs";
 

@@ -5,21 +5,7 @@ import type { ErrorResponse } from "@/contract/types";
 import type { Principal } from "@/auth/db";
 import { authenticate } from "@/auth/request";
 import { SIGN_IN_REQUIRED, assertActingAs, assertAdmin, assertOrg, scopeInput } from "@/auth/scope";
-
-export class HttpError extends Error {
-  override readonly name = "HttpError";
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-
-  /** Matches by shape, so errors thrown by another copy of this module (dev reloads, bundles) still count. */
-  static [Symbol.hasInstance](v: unknown): boolean {
-    return v instanceof Error && v.name === "HttpError" && typeof (v as { status?: unknown }).status === "number";
-  }
-}
+import { HttpError } from "./error";
 
 function allowedOrigin(origin: string | null): string | null {
   if (!origin) return null;

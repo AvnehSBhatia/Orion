@@ -1,28 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { normalize } from "@/llm/embed";
-import { OUT_DIM, mrlCompressor } from "@/pseudo/compressor";
-import { unpackGravity } from "@/pseudo/gravity";
+import { dot, normalize } from "@/lib/vector";
+import { OUT_DIM, mrlCompressor } from "@/orgspace/compressor";
+import { embedsScreenshot } from "@/orgspace/embeddings";
+import { unpackGravity } from "@/orgspace/gravity";
+import { blend, mean, recomputeUserVectors } from "@/orgspace/personVectors";
+import { ownerMatches } from "@/orgs/people";
 import { deps, extracted, memoryStore } from "@/test/helpers";
 import {
   ADAPT,
   FRESHNESS,
   RERANK,
   asksRecent,
-  blend,
-  dot,
-  embedsScreenshot,
   freshness,
   getContextIds,
   getContextScored,
   lensFor,
-  mean,
   namesItem,
-  ownerMatches,
   rankNodes,
-  recomputeUserVectors,
   specificity,
   weightsFor,
-} from "./users";
+} from "./ranking";
 
 const v = (...xs: number[]) => Float32Array.from(xs);
 const HOUR = 3_600_000;

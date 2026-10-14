@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { textHash, type Facet, type StoredNode, type StoredSource, type Store } from "@/db/store";
 import { completeJson, type LlmClient } from "@/llm/openrouter";
-import { ownerMatches } from "@/steer/users";
+import { ownerMatches } from "@/orgs/people";
 
 /** How people use an item. A fixed set, so "same use" means the same thing across orgs. */
 export const USES = ["status update", "plan", "decision", "customer record", "code change", "metrics", "reference"] as const;

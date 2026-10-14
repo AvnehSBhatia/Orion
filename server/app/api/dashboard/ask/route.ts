@@ -2,8 +2,8 @@ import type { NextRequest } from "next/server";
 import { dashboardAskRequest } from "@/contract/schemas";
 import type { DashboardAskResponse, DashboardSpec } from "@/contract/types";
 import { toPublicUser } from "@/db/store";
-import { getLlm, getStore, requireUser } from "@/server/deps";
-import { actingAs, preflight, route, scopedBody } from "@/server/http";
+import { getLlm, getStore, requireUser } from "@/http/deps";
+import { actingAs, preflight, route, scopedBody } from "@/http/route";
 import { askAndSaveDashboard, type AskTrace } from "@/steer/dashboard";
 
 export const runtime = "nodejs";

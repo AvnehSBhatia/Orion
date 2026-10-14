@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { Store } from "@/db/store";
 import type { CompletionRequest, LlmClient } from "@/llm/openrouter";
 import { deps, memoryStore } from "@/test/helpers";
-import { ROUTING, activeCompressor, getContextScored, lensFor, rankNodes, recomputeUserVectors, routeOrder } from "@/steer/users";
+import { activeCompressor } from "@/orgspace/embeddings";
+import { recomputeUserVectors } from "@/orgspace/personVectors";
+import { ROUTING, getContextScored, lensFor, rankNodes, routeOrder } from "@/retrieval/ranking";
 import { buildClusters } from "./clusters";
 import { labelFacets } from "./facets";
 import { maintainOrg } from "./maintain";
@@ -116,7 +118,7 @@ describe("maintainOrg", () => {
 
     const down: LlmClient = {
       async complete() {
-        const { HttpError } = await import("@/server/http");
+        const { HttpError } = await import("@/http/error");
         throw new HttpError(503, "OPENROUTER_API_KEY is not set on the backend");
       },
     };

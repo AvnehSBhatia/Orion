@@ -2,7 +2,7 @@ import { config } from "@/config";
 import { viewCommand as viewCommandSchema } from "@/contract/schemas";
 import type { ChatAction, ChatResponse, ChatTurn, Org, PublicNode, Source, User, ViewCommand } from "@/contract/types";
 import { clamp, plain } from "@/lib/text";
-import { HttpError } from "@/server/http";
+import { HttpError } from "@/http/error";
 import { OpenRouterClient, type ChatMessage, type CompletionRequest, type LlmClient } from "./openrouter";
 
 type Why = { why?: string };

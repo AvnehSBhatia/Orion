@@ -1,10 +1,10 @@
 import type { NextRequest } from "next/server";
 import { contextQuery } from "@/contract/schemas";
 import type { ContextResponse } from "@/contract/types";
-import { getEmbedder, getStore, requireUser } from "@/server/deps";
-import { preflight, route, scopedQuery } from "@/server/http";
-import { buildContext, findNodes } from "@/steer/context";
-import { filterParams, isEmptyFilter } from "@/steer/filters";
+import { getEmbedder, getStore, requireUser } from "@/http/deps";
+import { preflight, route, scopedQuery } from "@/http/route";
+import { buildContext, findNodes } from "@/retrieval/context";
+import { filterParams, isEmptyFilter } from "@/retrieval/filters";
 
 export const runtime = "nodejs";
 

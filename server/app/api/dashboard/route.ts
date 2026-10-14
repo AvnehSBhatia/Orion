@@ -2,8 +2,9 @@ import type { NextRequest } from "next/server";
 import { dashboardQuery, dashboardRequest } from "@/contract/schemas";
 import type { DashboardResponse } from "@/contract/types";
 import { toPublicUser } from "@/db/store";
-import { getLlm, getStore, requireUser } from "@/server/deps";
-import { HttpError, actingAs, preflight, route, scopedBody, scopedQuery } from "@/server/http";
+import { getLlm, getStore, requireUser } from "@/http/deps";
+import { HttpError } from "@/http/error";
+import { actingAs, preflight, route, scopedBody, scopedQuery } from "@/http/route";
 import { resolveDashboard, sanitizeDashboard } from "@/steer/dashboard";
 
 export const runtime = "nodejs";

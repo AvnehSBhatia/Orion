@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Store } from "@/db/store";
-import { normalize } from "@/llm/embed";
+import { normalize } from "@/lib/vector";
 import type { CompletionRequest, LlmClient } from "@/llm/openrouter";
-import { collapseDigests } from "@/steer/context";
+import { collapseDigests } from "@/retrieval/context";
 import { deps, memoryStore } from "@/test/helpers";
-import { SYNTH, groupCached, groupSimilar, synthesizeDigests } from "./digest";
+import { SYNTH, groupCached, groupSimilar, synthesizeDigests } from "./synthesize";
 
 const NOW = "2026-10-10T12:00:00.000Z";
 

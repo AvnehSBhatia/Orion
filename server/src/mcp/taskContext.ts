@@ -3,8 +3,8 @@ import { toPublicNode, type Store } from "@/db/store";
 import { ripple } from "@/graph/ripple";
 import { readGraph } from "@/graph/view";
 import type { Embedder } from "@/llm/embed";
-import { buildContext, type ContextItem } from "@/steer/context";
-import { ownerMatches } from "@/steer/users";
+import { buildContext, type ContextItem } from "@/retrieval/context";
+import { ownerMatches } from "@/orgs/people";
 
 /** Where a coding agent should save the file, relative to the repo root. */
 export const WRITE_TO = ".orion/context.md";

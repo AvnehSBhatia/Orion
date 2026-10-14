@@ -1,6 +1,6 @@
 import type { Store } from "@/db/store";
 import { query, type Embedder } from "@/llm/embed";
-import { recomputeUserVectors } from "@/steer/users";
+import { recomputeUserVectors } from "@/orgspace/personVectors";
 import { trainCompressor, type CompressorMetrics, type Labels, type TrainOptions } from "./compressor";
 
 /** Below this many training vectors a learned map cannot beat Matryoshka truncation reliably. */

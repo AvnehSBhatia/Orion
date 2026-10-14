@@ -1,5 +1,5 @@
 import type { StoredCluster, Store } from "@/db/store";
-import { normalize } from "@/llm/embed";
+import { dot, normalize } from "@/lib/vector";
 import { slugify } from "@/lib/text";
 import type { Compressor } from "./compressor";
 
@@ -10,12 +10,6 @@ export const CLUSTER = {
 } as const;
 
 type Member = { kind: "node" | "source"; id: string; z: Float32Array; name: string };
-
-function dot(a: Float32Array, b: Float32Array): number {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
-  return s;
-}
 
 function centroid(zs: Float32Array[]): Float32Array {
   const out = new Float32Array(zs[0].length);

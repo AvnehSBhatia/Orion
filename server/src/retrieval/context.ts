@@ -3,7 +3,9 @@ import type { Store } from "@/db/store";
 import { readGraph } from "@/graph/view";
 import type { Embedder } from "@/llm/embed";
 import { isEmptyFilter, matchingIds, type NodeFilter } from "./filters";
-import { activeCompressor, dot, lensFor, rankNodes, rankSources, type Lens, type Scored } from "./users";
+import { dot } from "@/lib/vector";
+import { activeCompressor } from "@/orgspace/embeddings";
+import { lensFor, rankNodes, rankSources, type Lens, type Scored } from "./ranking";
 
 const EXPAND: ReadonlySet<Relation> = new Set(["blocks", "feeds", "part_of"]);
 /** The "latest" lane: changes this recent are pulled in even when they rank below the top hits. */

@@ -1,4 +1,4 @@
-import { normalize } from "@/llm/embed";
+import { dot, normalize } from "@/lib/vector";
 
 export const IN_DIM = 768;
 /** The org space: small enough to scan and cluster cheaply, trained per org on how its documents are used. */
@@ -64,15 +64,9 @@ function project(W: Float32Array, x: Float32Array): Float32Array {
   return z;
 }
 
-/** 768d unit vector to 128d unit vector. */
+/** 768d unit vector to an org-space (OUT_DIM) unit vector. */
 export function compress(c: Compressor, x: Float32Array): Float32Array {
   return normalize(project(c.weights, x));
-}
-
-function dotN(a: Float32Array, b: Float32Array): number {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
-  return s;
 }
 
 /**
@@ -83,7 +77,7 @@ function topKOf(a: Float32Array, vs: Float32Array[], k: number, skip: number): S
   const best: { s: number; j: number }[] = [];
   for (let j = 0; j < vs.length; j++) {
     if (j === skip) continue;
-    const s = dotN(a, vs[j]);
+    const s = dot(a, vs[j]);
     if (best.length === k && s <= best[k - 1].s) continue;
     let at = best.length;
     while (at > 0 && best[at - 1].s < s) at--;
@@ -235,7 +229,7 @@ export async function trainCompressor(xs: Float32Array[], opts: TrainOptions = {
     const B = idx.length;
     const X = idx.map((i) => xs[i]);
     const Z = X.map((x) => project(W, x));
-    const norms = Z.map((z) => Math.sqrt(dotN(z, z)) || 1);
+    const norms = Z.map((z) => Math.sqrt(dot(z, z)) || 1);
     const U = Z.map((z, i) => z.map((zz) => zz / norms[i]) as Float32Array);
 
     // G[i][j]: d loss / d s_ij from anchor i's row.
@@ -246,8 +240,8 @@ export async function trainCompressor(xs: Float32Array[], opts: TrainOptions = {
     const S = Array.from({ length: B }, () => new Float64Array(B));
     for (let i = 0; i < B; i++) {
       for (let j = i; j < B; j++) {
-        T[i][j] = T[j][i] = dotN(X[i], X[j]);
-        S[i][j] = S[j][i] = dotN(U[i], U[j]);
+        T[i][j] = T[j][i] = dot(X[i], X[j]);
+        S[i][j] = S[j][i] = dot(U[i], U[j]);
       }
     }
     for (let i = 0; i < B; i++) {

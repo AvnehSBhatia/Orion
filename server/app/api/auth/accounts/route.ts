@@ -1,9 +1,10 @@
 import type { NextRequest } from "next/server";
 import { getAuthDb } from "@/auth/db";
 import { createAccountIn, newAccountRequest } from "@/auth/service";
-import { getEmbedder, getStore } from "@/server/deps";
-import { HttpError, preflight, requirePrincipal, route } from "@/server/http";
-import { recomputeUserVectors } from "@/steer/users";
+import { getEmbedder, getStore } from "@/http/deps";
+import { HttpError } from "@/http/error";
+import { preflight, requirePrincipal, route } from "@/http/route";
+import { recomputeUserVectors } from "@/orgspace/personVectors";
 
 export const runtime = "nodejs";
 

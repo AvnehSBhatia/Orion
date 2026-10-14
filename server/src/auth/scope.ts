@@ -1,4 +1,4 @@
-import { HttpError } from "@/server/http";
+import { HttpError } from "@/http/error";
 import type { Principal } from "./db";
 
 export const SIGN_IN_REQUIRED = "sign in required";

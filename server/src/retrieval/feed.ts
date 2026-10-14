@@ -1,7 +1,8 @@
 import type { FeedItem, Relation, SourceChange } from "@/contract/types";
 import type { Store } from "@/db/store";
 import type { Embedder } from "@/llm/embed";
-import { lensFor, ownerMatches, rankSources } from "./users";
+import { ownerMatches } from "@/orgs/people";
+import { lensFor, rankSources } from "./ranking";
 
 /** Added to the gravity score when a document changed something tied to the reader. */
 export const IMPACT = { owned: 0.25, touched: 0.15, linked: 0.1, alarming: 0.05 } as const;

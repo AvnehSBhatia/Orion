@@ -7,7 +7,7 @@
 import { parseArgs } from "node:util";
 import { getAuthDb } from "@/auth/db";
 import { ensurePerson } from "@/auth/service";
-import { createOrgStore, getStore, orgExists } from "@/server/deps";
+import { createOrgStore, getStore, orgExists } from "@/http/deps";
 
 const [command, ...rest] = process.argv.slice(2);
 const { values } = parseArgs({

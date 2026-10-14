@@ -1,5 +1,5 @@
 import { config } from "@/config";
-import { HttpError } from "@/server/http";
+import { HttpError } from "@/http/error";
 
 const CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";
 

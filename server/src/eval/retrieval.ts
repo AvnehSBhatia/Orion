@@ -7,11 +7,13 @@
 import { seedDemo } from "@/db/seed";
 import { Store, textHash, type Facet } from "@/db/store";
 import type { Embedder, EmbedInput } from "@/llm/embed";
-import { buildClusters } from "@/pseudo/clusters";
-import { retrainCompressor } from "@/pseudo/retrain";
+import { buildClusters } from "@/orgspace/clusters";
+import { retrainCompressor } from "@/orgspace/retrain";
 import { buildTaskContext } from "@/mcp/taskContext";
-import { findNodes, findSources } from "@/steer/context";
-import { activeCompressor, ensurePseudo, ownerMatches, recomputeUserVectors } from "@/steer/users";
+import { findNodes, findSources } from "@/retrieval/context";
+import { activeCompressor, ensureOrgSpace } from "@/orgspace/embeddings";
+import { recomputeUserVectors } from "@/orgspace/personVectors";
+import { ownerMatches } from "@/orgs/people";
 
 /**
  * outside: an explicit topic query from someone who does not work on it (the asker's own work must not intrude).
@@ -158,7 +160,7 @@ export async function buildEvalOrg(embedder: Embedder, { train = true }: { train
   store.saveFacets(facets);
   if (train) await retrainCompressor(store, embedder, { force: true });
   const comp = activeCompressor(store);
-  ensurePseudo(store, comp);
+  ensureOrgSpace(store, comp);
   buildClusters(store, comp);
   return { store, now };
 }

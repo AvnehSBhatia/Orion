@@ -5,9 +5,10 @@ import { sessionCookie } from "@/auth/request";
 import { createAccountIn, newAccountRequest } from "@/auth/service";
 import { config } from "@/config";
 import { slugify } from "@/lib/text";
-import { createOrgStore, getEmbedder } from "@/server/deps";
-import { HttpError, preflight, route } from "@/server/http";
-import { recomputeUserVectors } from "@/steer/users";
+import { createOrgStore, getEmbedder } from "@/http/deps";
+import { HttpError } from "@/http/error";
+import { preflight, route } from "@/http/route";
+import { recomputeUserVectors } from "@/orgspace/personVectors";
 
 export const runtime = "nodejs";
 
