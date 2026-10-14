@@ -223,6 +223,11 @@ struct CaptureStatus: Equatable {
             if snapshot.skip == nil, snapshot.foundWindow {
                 lastTitle[pid] = snapshot.windowTitle
                 scheduler.noteRan(contentKey(pid))
+                // Back to the window just left: continue its record, no duplicate.
+                if let previous = segmenter.resumable(snapshot), store?.reopen(previous.id) ?? true {
+                    segmenter.resume()
+                    outbox?.refresh()
+                }
                 let outcome = segmenter.ingest(snapshot)
                 if let record = segmenter.current {
                     store?.save(record) // encrypted, in the background

@@ -18,6 +18,8 @@ struct TextCleanupTests {
         #expect(TextCleanup.dropTitleLines(lines, title: "Your Apple ID was used to sign in — Apple")
             == ["To:", "If this was you, ignore this message."])
         #expect(TextCleanup.dropTitleLines(["A", "B"], title: "") == ["A", "B"])
+        #expect(TextCleanup.dropTitleLines(["Primary · 26 messages, 12 unread", "Body"], title: "Inbox – Primary · 26 messages, 12 unread")
+            == ["Body"])
     }
 
     @Test("A sentence broken around a link is joined again")

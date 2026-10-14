@@ -84,7 +84,9 @@ public enum WindowCapture {
         } else {
             let walk = AXReader.walkText(window, start: start, skip: profile?.skipIdentifiers ?? [],
                                          dropAreaLabels: profile?.dropAreaLabels ?? false)
-            snapshot.lines = TextCleanup.joinFragments(TextCleanup.dropTitleLines(walk.lines, title: snapshot.windowTitle))
+            // Both the record's title and the window's own (Mail's mailbox name and count).
+            let lines = TextCleanup.dropTitleLines(TextCleanup.dropTitleLines(walk.lines, title: snapshot.windowTitle), title: title)
+            snapshot.lines = TextCleanup.joinFragments(lines)
             snapshot.chars = snapshot.lines.reduce(0) { $0 + $1.count }
             snapshot.nodes = walk.nodes
             snapshot.stoppedBy = walk.stoppedBy

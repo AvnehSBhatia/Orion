@@ -16,10 +16,29 @@ public struct Segmenter: Sendable {
     public private(set) var records: [ActivityRecord] = []
     private var seenLines = Set<String>() // lines already in the current record
     private var finished = false // the current record was ended early; the next snapshot starts a new one
+    private var resumed = false // the next snapshot continues a resumed record whatever the gap
 
     public init() {}
 
     public var current: ActivityRecord? { records.last }
+
+    /// The record just finished, if this snapshot is the same window soon after:
+    /// someone looked away (another app, the Outbox) and came back.
+    public func resumable(_ snapshot: Snapshot, within seconds: TimeInterval = Limits.resumeSeconds) -> ActivityRecord? {
+        guard finished, snapshot.skip == nil, snapshot.foundWindow, let current,
+              current.appBundleId == snapshot.appBundleId, current.windowTitle == snapshot.windowTitle,
+              current.domainPath == snapshot.domainPath,
+              snapshot.capturedAt.timeIntervalSince(current.endedAt) <= seconds
+        else { return nil }
+        return current
+    }
+
+    /// Continue the finished record (see `resumable`). Its seen lines are kept, so nothing repeats.
+    public mutating func resume() {
+        guard finished, current != nil else { return }
+        finished = false
+        resumed = true
+    }
 
     /// The record still being written, if any.
     public var open: ActivityRecord? { finished ? nil : current }
@@ -37,7 +56,8 @@ public struct Segmenter: Sendable {
     public mutating func ingest(_ snapshot: Snapshot) -> Outcome {
         guard snapshot.skip == nil, snapshot.foundWindow else { return .unchanged }
 
-        if let current, !finished, continues(current, with: snapshot) {
+        defer { resumed = false }
+        if let current, !finished, resumed || continues(current, with: snapshot) {
             let added = append(snapshot.lines)
             records[records.count - 1].endedAt = snapshot.capturedAt
             records[records.count - 1].snapshotCount += 1
@@ -63,6 +83,7 @@ public struct Segmenter: Sendable {
         records = []
         seenLines = []
         finished = false
+        resumed = false
     }
 
     private func continues(_ record: ActivityRecord, with snapshot: Snapshot) -> Bool {

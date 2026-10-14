@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 98 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 101 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -57,7 +57,7 @@ The debug view adds a **Redactions** count per app. Text is still never shown th
 
 Nothing leaves the Mac unless it appears in the Outbox first (spec 2.5, 9). Open it from the menu: "Outbox (N to review)…".
 
-- A record goes to the Outbox when it **closes**: you open another email, window, or page, you **leave the app** (even for an app that isn't captured, such as Terminal or this Outbox), or 2 minutes pass with no new capture. Records left open when the app quit are closed at the next launch.
+- A record goes to the Outbox when it **closes**: you open another email, window, or page, you **leave the app** (even for an app that isn't captured, such as Terminal or this Outbox), or 2 minutes pass with no new capture. Records left open when the app quit are closed at the next launch. Coming back to the window you just left within 5 minutes (say, after a look at the Outbox) continues its record rather than adding a duplicate, as long as it hasn't been approved or edited.
 - The card at the top says whether anything new can arrive: **Capture is off** or **Paused** (with Turn on / Resume), or **Capturing now** with the title of the record still being written (title only; its text appears once it closes).
 - **Review first** (default): items wait under "Waiting for Review". **Auto-approve after 30 minutes** is on by default and can be turned off. **Log only**: items are approved as soon as they close. The mode is chosen in the welcome screens and can be changed in the Outbox.
 - Items are grouped by **stretches of capturing**: a batch runs from the first thing captured to the last, and a gap of more than 5 minutes with nothing captured (capture off or paused, or only apps that are not read) starts the next one. Its header shows those real times. Batches only organise the Outbox; each item is still sent as its own work block. A batch can be approved or deleted as a whole; each item can be edited or deleted on its own.
@@ -103,7 +103,7 @@ A profile (`Sources/CaptureCore/Capture/AppProfiles.swift`) names views to skip 
 - Title: the selected email's subject and sender, e.g. "Your Apple ID was used to sign in — Apple". So each email is its own block, and the sender counts as a strong client signal.
 - Text: what's left, which is the open email.
 
-Captured text is tidied before it is redacted and stored (`TextCleanup.swift`): button and image labels ("Summarize", "Load Content Directly", an avatar's initial) are not read in any app; Mail's area labels ("message content", "message headers") are left out; lines that only repeat the title, subject, or sender are dropped; and sentences broken around a link ("Your Apple ID (" / ") was used…") are joined again. Browser titles lose the browser's name and the Chrome profile name ("Pricing - Google Chrome - Veer" becomes "Pricing").
+Captured text is tidied before it is redacted and stored (`TextCleanup.swift`): button and image labels ("Summarize", "Load Content Directly", an avatar's initial) are not read in any app; Mail's area labels ("message content", "message headers") are left out; lines that only repeat the title, subject, or sender, or the window's own title (Mail's "Primary · 26 messages, 12 unread"), are dropped; and sentences broken around a link ("Your Apple ID (" / ") was used…") are joined again. Browser titles lose the browser's name and the Chrome profile name ("Pricing - Google Chrome - Veer" becomes "Pricing").
 
 The window's own title is never read into the text of any app, since it is already the record's title ("Inbox – Primary · 26 messages" no longer shows up in Mail text).
 

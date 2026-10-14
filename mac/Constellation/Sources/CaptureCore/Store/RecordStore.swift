@@ -169,6 +169,16 @@ public final class RecordStore: @unchecked Sendable { // every database call run
         }
     }
 
+    /// Back to "being written", for returning to a window soon after leaving it.
+    /// Only a record still waiting for review and not edited. Runs after pending saves and closes.
+    public func reopen(_ id: UUID) -> Bool {
+        (try? queue.sync { () -> Bool in
+            try run("UPDATE records SET status = 'local', queued_at = NULL WHERE id = ? AND status = 'queued' AND edited = 0",
+                    [.text(id.uuidString)])
+            return sqlite3_changes(db) > 0
+        }) ?? false
+    }
+
     /// Records in the Outbox with the given statuses, newest first (or oldest first, for sending).
     public func outbox(_ statuses: [RecordStatus] = [.queued, .approved], limit: Int = 1_000, oldestFirst: Bool = false) throws -> [OutboxItem] {
         try queue.sync {

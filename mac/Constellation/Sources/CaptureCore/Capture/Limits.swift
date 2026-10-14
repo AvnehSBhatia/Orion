@@ -46,6 +46,9 @@ public enum Limits {
     /// A batch is one stretch of capturing; a longer gap with nothing captured
     /// (capture off or paused, or only apps that aren't read) starts the next one.
     public static let batchGapSeconds: TimeInterval = 300
+    /// Coming back to the window you just left within this long continues its
+    /// record instead of starting a duplicate (if it hasn't been approved or edited).
+    public static let resumeSeconds: TimeInterval = 300
     public static let autoApproveMinutes = 30 // Review first: approve automatically after this, if on
     public static let outboxCheckSeconds: TimeInterval = 30 // close idle records, auto approve
 

@@ -53,6 +53,27 @@ struct OutboxTests {
         #expect(try store.outbox().map(\.id) == [idle.id])
     }
 
+    @Test("A record waiting for review can be reopened; approved or edited ones can't")
+    func reopen() throws {
+        var item = record("first look")
+        try store.saveNow(item)
+        store.closeOpen(except: nil, endedBefore: nil, approve: false)
+        #expect(store.reopen(item.id))
+        #expect(try store.outbox().isEmpty) // being written again, so out of the Outbox
+        item.text = "first look\nsecond look"
+        try store.saveNow(item) // saves apply again while it's open
+        store.closeOpen(except: nil, endedBefore: nil, approve: false)
+        #expect(try store.outbox().first?.record.text == "first look\nsecond look")
+
+        try store.approve([item.id])
+        #expect(!store.reopen(item.id))
+        let edited = record("edited")
+        try store.saveNow(edited)
+        store.closeOpen(except: nil, endedBefore: nil, approve: false)
+        try store.updateText(edited.id, text: "changed", redactionCount: 0)
+        #expect(!store.reopen(edited.id))
+    }
+
     @Test("Saving again never overwrites a record after it has closed")
     func noOverwriteAfterClose() throws {
         var item = record("original")

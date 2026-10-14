@@ -24,10 +24,11 @@ public enum TextCleanup {
         return kept.isEmpty ? title : kept
     }
 
-    /// Lines that are just the title or a part of it ("Subject — Sender"): the
-    /// record already has them as its title.
+    /// Lines that are just the title or a part of it ("Subject — Sender", or Mail's
+    /// "Inbox – Primary · 26 messages"): the record already has them as its title.
     public static func dropTitleLines(_ lines: [String], title: String) -> [String] {
-        let parts = Set(([title] + title.components(separatedBy: " — "))
+        let pieces = separators.reduce([title]) { parts, separator in parts.flatMap { $0.components(separatedBy: separator) } }
+        let parts = Set(([title] + pieces)
             .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
             .filter { $0.count >= 3 })
         guard !parts.isEmpty else { return lines }

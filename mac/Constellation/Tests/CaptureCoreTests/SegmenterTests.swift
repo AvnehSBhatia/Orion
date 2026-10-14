@@ -43,6 +43,29 @@ struct SegmenterTests {
         #expect(segmenter.open?.id == segmenter.records.last?.id)
     }
 
+    @Test("Coming back to the window just left continues its record without repeating lines")
+    func resumeSameWindow() {
+        var segmenter = Segmenter()
+        segmenter.ingest(snapshot(title: "Your Apple ID — Apple", lines: ["Hello", "Body"]))
+        segmenter.finishCurrent()
+        let back = snapshot(title: "Your Apple ID — Apple", lines: ["Hello", "Body", "More"], at: 200) // past the idle gap, within resume
+        #expect(segmenter.resumable(back) != nil)
+        segmenter.resume()
+        #expect(segmenter.ingest(back) == .appended(chars: 4)) // only "More" is new
+        #expect(segmenter.records.count == 1)
+        #expect(segmenter.current?.text == "Hello\nBody\nMore")
+    }
+
+    @Test("Another window, or coming back too late, starts a new record")
+    func noResume() {
+        var segmenter = Segmenter()
+        segmenter.ingest(snapshot(title: "A"))
+        #expect(segmenter.resumable(snapshot(title: "A", at: 10)) == nil) // not finished: it simply continues
+        segmenter.finishCurrent()
+        #expect(segmenter.resumable(snapshot(title: "B", at: 10)) == nil)
+        #expect(segmenter.resumable(snapshot(title: "A", at: Limits.resumeSeconds + 1)) == nil)
+    }
+
     @Test("Same window appends only new lines")
     func appendsNewLines() {
         var segmenter = Segmenter()
