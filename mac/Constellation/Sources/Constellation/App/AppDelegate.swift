@@ -16,7 +16,7 @@ import CaptureCore
     }()
     private lazy var directory = ClientDirectory(store: engine.store, names: engine.names)
     private lazy var sender: Sender = {
-        let sender = Sender(settings: settings, store: engine.store, directory: directory)
+        let sender = Sender(settings: settings, store: engine.store, directory: directory, useKeychain: !smokeTest)
         sender.outbox = outbox
         outbox.sender = sender
         outbox.directory = directory

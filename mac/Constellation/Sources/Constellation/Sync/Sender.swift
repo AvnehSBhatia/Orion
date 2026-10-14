@@ -32,11 +32,13 @@ import Foundation
     static let checkSeconds: TimeInterval = 60
     static let maxBackoffSeconds: TimeInterval = 900
 
-    init(settings: Settings, store: RecordStore?, directory: ClientDirectory) {
+    /// `useKeychain: false` (the smoke test) never touches the Keychain: a rebuilt
+    /// binary makes macOS ask first, and nobody is there to answer.
+    init(settings: Settings, store: RecordStore?, directory: ClientDirectory, useKeychain: Bool = true) {
         self.settings = settings
         self.store = store
         self.directory = directory
-        credentials = DeviceCredentials.load()
+        credentials = useKeychain ? DeviceCredentials.load() : nil
         state = credentials == nil ? .notConnected : .connected
         destination = credentials == nil ? nil : client?.destination
     }
