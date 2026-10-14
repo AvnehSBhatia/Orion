@@ -3,7 +3,26 @@ import { normalize } from "@/llm/embed";
 import { OUT_DIM, mrlCompressor } from "@/pseudo/compressor";
 import { unpackGravity } from "@/pseudo/gravity";
 import { deps, extracted, memoryStore } from "@/test/helpers";
-import { FRESHNESS, blend, dot, embedsScreenshot, freshness, getContextIds, getContextScored, mean, ownerMatches, recomputeUserVectors } from "./users";
+import {
+  ADAPT,
+  FRESHNESS,
+  RERANK,
+  asksRecent,
+  blend,
+  dot,
+  embedsScreenshot,
+  freshness,
+  getContextIds,
+  getContextScored,
+  lensFor,
+  mean,
+  namesItem,
+  ownerMatches,
+  rankNodes,
+  recomputeUserVectors,
+  specificity,
+  weightsFor,
+} from "./users";
 
 const v = (...xs: number[]) => Float32Array.from(xs);
 const HOUR = 3_600_000;
@@ -96,12 +115,33 @@ describe("steering on the seed graph", () => {
   it("queries blend 768d cosine, the pulled org-space score, the person, and freshness", async () => {
     const store = memoryStore({ seed: true });
     const { embedder } = deps(store);
-    const scored = await getContextScored(store, embedder, { userId: "mina", q: "google ads daily budget campaign", k: 3 });
-    expect(scored.map((s) => s.id)).toContain("q4-search-campaign");
-    for (const s of scored) {
-      expect(s.fresh).toBeGreaterThan(0);
-      expect(s.score).toBeCloseTo(0.4 * s.score768 + 0.3 * s.scoreZ + 0.3 * s.person + s.fresh);
+    for (const q of ["google ads daily budget campaign", "what should I work on today"]) {
+      const lens = (await lensFor(store, embedder, { userId: "mina", q }))!;
+      const w = weightsFor(lens.q!.specificity);
+      expect(w.query768 + w.queryZ + w.person).toBeCloseTo(1);
+      expect(w.query768 / w.queryZ).toBeCloseTo(RERANK.query768 / RERANK.queryZ);
+      const scored = rankNodes(store, lens, 3);
+      if (q.startsWith("google")) expect(scored.map((s) => s.id)).toContain("q4-search-campaign");
+      for (const s of scored) {
+        expect(s.fresh).toBeGreaterThan(0);
+        expect(s.score).toBeCloseTo(w.query768 * s.score768 + w.queryZ * s.scoreZ + w.person * s.person + s.fresh);
+      }
     }
+  });
+
+  it("weighs the person by how vague the question is", async () => {
+    expect(weightsFor(0).person).toBeCloseTo(ADAPT.personVague);
+    expect(weightsFor(1).person).toBeCloseTo(ADAPT.personSpecific);
+    expect(specificity([0.1, 0.1, 0.1])).toBe(0);
+    expect(specificity([0.9, 0.1, 0.1, 0.1])).toBe(1);
+    expect(namesItem("who owns the audio streaming service?", ["Audio streaming service"])).toBe(true);
+    expect(namesItem("streaming of audio", ["Audio streaming service"])).toBe(false);
+    expect(asksRecent("what changed today")).toBe(true);
+    expect(asksRecent("what should I work on today")).toBe(false);
+    const store = memoryStore({ seed: true });
+    const { embedder } = deps(store);
+    const spec = async (q: string) => (await lensFor(store, embedder, { userId: "devon", q }))!.q!.specificity;
+    expect(await spec("google ads daily budget campaign")).toBeGreaterThan(await spec("what should I work on today"));
   });
 
   it("a fresh update to a node lifts it in the person's ranking", async () => {
@@ -130,13 +170,18 @@ describe("steering on the seed graph", () => {
     expect(store.listNodes().every((n) => n.embedModel === embedder.model && n.z?.length === OUT_DIM)).toBe(true);
   });
 
-  it("embeds the question with the asker's role, so the same question ranks differently per person", async () => {
+  it("finds an explicit topic for anyone, while a vague question ranks each person's own work first", async () => {
     const store = memoryStore({ seed: true });
     const { embedder } = deps(store);
-    const ask = async (userId: string) =>
-      (await getContextScored(store, embedder, { userId, q: "google ads daily budget campaign", k: 16 })).map((s) => s.id);
-    const [mina, devon] = [await ask("mina"), await ask("devon")];
-    expect(mina.indexOf("q4-search-campaign")).toBeLessThan(devon.indexOf("q4-search-campaign"));
+    const ask = async (userId: string, q: string) => (await getContextScored(store, embedder, { userId, q, k: 16 })).map((s) => s.id);
+    for (const userId of ["mina", "devon"]) {
+      expect((await ask(userId, "google ads daily budget campaign")).slice(0, 2)).toContain("q4-search-campaign");
+    }
+    const vague = "what should I work on today";
+    const [mina, devon] = [await ask("mina", vague), await ask("devon", vague)];
+    expect(mina).not.toEqual(devon);
+    expect(store.getNode(mina[0])!.owner).toBe("Mina Rao");
+    expect(store.getNode(devon[0])!.owner).toBe("Devon Park");
   });
 
   it("re-embeds a person's documents when their role changes", async () => {

@@ -3,13 +3,20 @@ import type { Store } from "@/db/store";
 import { readGraph } from "@/graph/view";
 import type { Embedder } from "@/llm/embed";
 import { isEmptyFilter, matchingIds, type NodeFilter } from "./filters";
-import { activeCompressor, lensFor, rankNodes, rankSources, type Lens, type Scored } from "./users";
+import { activeCompressor, dot, lensFor, rankNodes, rankSources, type Lens, type Scored } from "./users";
 
 const EXPAND: ReadonlySet<Relation> = new Set(["blocks", "feeds", "part_of"]);
 /** The "latest" lane: changes this recent are pulled in even when they rank below the top hits. */
 export const LATEST = { withinHours: 72, max: 3 } as const;
+/**
+ * From this specificity (see ADAPT in users.ts) a question is specific: it gets no "for you" lane, so it leads
+ * with its own hits rather than the asker's work, and its hits and latest lane keep only matches (MATCH).
+ */
+export const SPECIFIC = 0.5;
 /** Documents handed to the model: best matching ones plus the newest behind the leading nodes. */
 export const SOURCES = { matches: 4, perNode: 1, max: 8 } as const;
+/** Blockers, feeders, and parents are expanded from this many leading query hits (plus any for-you items). */
+export const NEIGHBORS = { fromHits: 2 } as const;
 
 export type ContextItem = PublicNode & { why: string };
 export type ContextSource = Source & { why: string };
@@ -99,10 +106,14 @@ export async function findSources(
 
 /**
  * What the model sees up front for one person and one question, in this order:
- * 1. for you: the top of the person's own ranking (gravity plus freshness), so open questions land on their work,
- * 2. best: the top hits for the question (128d gravity scan, 768d rerank, person term, freshness),
- * 3. latest: the most relevant changes from the last few days not already included,
- * 4. direct blockers, feeders, and parents of the leading items, so it can explain why something is at risk,
+ * 1. for you: the top of the person's own ranking (gravity plus freshness), so open questions land on their work;
+ *    left out for specific questions and for "what changed" ones (SPECIFIC),
+ * 2. best: the top hits for the question (org-space scan, 768d rerank, person term scaled by how vague the
+ *    question is, freshness),
+ * 3. direct blockers, feeders, and parents of the leading items (for-you items and the top hits), so it can
+ *    explain why something is at risk,
+ * 4. latest: the most relevant changes from the last few days not already included; for a specific question
+ *    only those that match it (SPECIFIC),
  * 5. ripple statuses and gap todos already applied by readGraph.
  * Plus the documents: the best matching sources for the question, then the newest source behind each leading node.
  * The question is embedded once and used for both.
@@ -130,17 +141,25 @@ export async function buildContext(
     }
   };
 
-  add(nodesFrom(store, lens, forYou, { withQuery: false }), forYou, (n) => `for you, ${ago(n.updatedAt, now)}`);
-  add(nodesFrom(store, lens, hits + out.size), hits, (n) => n.why);
+  // "What changed" is answered by the hits (person-weighted, freshness-heavy) and the latest lane, not by standing work.
+  const mine = lens.q && (lens.q.recent || lens.q.specificity >= SPECIFIC) ? 0 : forYou;
+  if (mine) add(nodesFrom(store, lens, mine, { withQuery: false }), mine, (n) => `for you, ${ago(n.updatedAt, now)}`);
+  const forYouIds = [...out.keys()];
+  // A specific question keeps only real matches (MATCH in users.ts), so the tail is not filled with whatever
+  // ranks next; the best hit always stays.
+  const specific = !!lens.q && lens.q.specificity >= SPECIFIC && !lens.q.recent;
+  const nodeVecs = new Map(store.listNodes().map((n) => [n.id, n.embedding]));
+  const matches = (id: string) => {
+    const v = nodeVecs.get(id);
+    return !specific || (!!v && v.length === lens.q!.bare.length && dot(lens.q!.bare, v) >= lens.q!.floor);
+  };
+  const hitList = nodesFrom(store, lens, hits + out.size).filter((n, i) => i === 0 || matches(n.id));
+  add(hitList, hits, (n) => n.why);
 
-  // News crosses areas, so the latest lane ranks every item rather than routing to one cluster.
-  const since = now - LATEST.withinHours * 3_600_000;
-  add(
-    nodesFrom(store, lens, store.listNodes().length, { route: false }).filter((n) => Date.parse(n.updatedAt) >= since),
-    LATEST.max,
-    (n) => `latest, ${ago(n.updatedAt, now)}`,
-  );
-  const top = [...out.values()].slice(0, forYou + 1);
+  // Neighbors of what the answer leads with: the for-you items and the best few hits, not the tail.
+  // They come before the latest lane, so a blocker of the top hit is never crowded out by unrelated news.
+  const leadIds = new Set([...forYouIds, ...hitList.slice(0, NEIGHBORS.fromHits).map((n) => n.id)]);
+  const top = [...out.values()].filter((n) => leadIds.has(n.id));
 
   const graph = readGraph(store);
   const byId = new Map<string, PublicNode>(graph.nodes.map((n) => [n.id, n]));
@@ -157,6 +176,16 @@ export async function buildContext(
       out.set(n.id, { ...n, why: e.source === other ? `${e.relation} ${hit.label}` : `${hit.label} ${e.relation} this` });
     }
   }
+
+  // News crosses areas, so the latest lane ranks every item rather than routing to one cluster. For a specific
+  // question it only admits recent changes that match it (possibly from another area); for an open or
+  // "what changed" question, any recent change ranked for the person.
+  const since = now - LATEST.withinHours * 3_600_000;
+  add(
+    nodesFrom(store, lens, store.listNodes().length, { route: false }).filter((n) => Date.parse(n.updatedAt) >= since && matches(n.id)),
+    LATEST.max,
+    (n) => `latest, ${ago(n.updatedAt, now)}`,
+  );
   const items = [...out.values()];
 
   const sources = new Map<string, ContextSource>();

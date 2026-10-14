@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Store } from "@/db/store";
 import type { CompletionRequest, LlmClient } from "@/llm/openrouter";
 import { deps, memoryStore } from "@/test/helpers";
-import { activeCompressor, getContextScored, lensFor, rankNodes, recomputeUserVectors, routeOrder } from "@/steer/users";
+import { ROUTING, activeCompressor, getContextScored, lensFor, rankNodes, recomputeUserVectors, routeOrder } from "@/steer/users";
 import { buildClusters } from "./clusters";
 import { labelFacets } from "./facets";
 import { maintainOrg } from "./maintain";
@@ -69,13 +69,16 @@ describe("clusters and routing", () => {
     expect(store.listNodes().every((n) => n.clusterId)).toBe(true);
   });
 
-  it("a question searches only the cluster whose centroid fits it best", async () => {
+  it("a question searches only the cluster whose centroid fits it best, plus any within the tie margin", async () => {
     const { store, embedder } = await org();
-    const q = "google ads daily budget campaign";
-    const top = routeOrder((await lensFor(store, embedder, { userId: "mina", q }))!)[0].cluster;
+    // (With the hash embedder "google ads daily budget campaign" fits every centroid at exactly 0: a full tie.)
+    const q = "google ads campaign budget and cost per signup";
+    const order = routeOrder((await lensFor(store, embedder, { userId: "mina", q }))!);
+    const near = new Set(order.filter((o) => order[0].score - o.score <= ROUTING.margin * order[0].score).map((o) => o.cluster.id));
+    expect(near.size).toBeLessThan(order.length);
     const scored = await getContextScored(store, embedder, { userId: "mina", q, k: 2 });
     expect(scored).toHaveLength(2);
-    expect(scored.every((s) => s.cluster === top.label && store.getNode(s.id)!.clusterId === top.id)).toBe(true);
+    expect(scored.every((s) => near.has(store.getNode(s.id)!.clusterId!))).toBe(true);
   });
 
   it("routes on the bare question, so the same question picks the same area for everyone", async () => {
