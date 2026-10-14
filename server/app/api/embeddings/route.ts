@@ -2,8 +2,8 @@ import type { NextRequest } from "next/server";
 import { orgQuery } from "@/contract/schemas";
 import type { EmbeddingsResponse } from "@/contract/types";
 import { projectEmbeddings } from "@/graph/projection";
-import { getStore } from "@/server/deps";
-import { preflight, route, scopedQuery } from "@/server/http";
+import { getStore } from "@/http/deps";
+import { preflight, route, scopedQuery } from "@/http/route";
 
 export const runtime = "nodejs";
 

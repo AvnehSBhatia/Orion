@@ -3,9 +3,9 @@ import { orgQuery, upsertUserRequest } from "@/contract/schemas";
 import type { UpsertUserResponse, UsersResponse } from "@/contract/types";
 import { toPublicUser } from "@/db/store";
 import { slugify } from "@/lib/text";
-import { getEmbedder, getStore } from "@/server/deps";
-import { actingAs, preflight, route, scopedBody, scopedQuery } from "@/server/http";
-import { recomputeUserVectors } from "@/steer/users";
+import { getEmbedder, getStore } from "@/http/deps";
+import { actingAs, preflight, route, scopedBody, scopedQuery } from "@/http/route";
+import { recomputeUserVectors } from "@/orgspace/personVectors";
 
 export const runtime = "nodejs";
 

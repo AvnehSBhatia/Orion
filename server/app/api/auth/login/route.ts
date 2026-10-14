@@ -3,7 +3,7 @@ import { getAuthDb } from "@/auth/db";
 import { loginLimiter } from "@/auth/ratelimit";
 import { clientIp, sessionCookie } from "@/auth/request";
 import { login, loginRequest } from "@/auth/service";
-import { preflight, route } from "@/server/http";
+import { preflight, route } from "@/http/route";
 
 export const runtime = "nodejs";
 

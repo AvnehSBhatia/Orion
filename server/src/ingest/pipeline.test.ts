@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { OUT_DIM } from "@/pseudo/compressor";
-import { HttpError } from "@/server/http";
+import { OUT_DIM } from "@/orgspace/compressor";
+import { HttpError } from "@/http/error";
 import { deps, extracted, memoryStore } from "@/test/helpers";
 import { ingestCapture, ingestCode, isAlwaysExcluded } from "./pipeline";
 

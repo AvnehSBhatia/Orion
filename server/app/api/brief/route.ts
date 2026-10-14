@@ -2,9 +2,9 @@ import type { NextRequest } from "next/server";
 import { briefQuery } from "@/contract/schemas";
 import type { BriefResponse } from "@/contract/types";
 import { toPublicUser } from "@/db/store";
-import { getEmbedder, getLlm, getStore, requireUser } from "@/server/deps";
-import { preflight, route, scopedQuery } from "@/server/http";
-import { briefFor, cachedBrief, hasModelKey } from "@/steer/brief";
+import { getEmbedder, getLlm, getStore, requireUser } from "@/http/deps";
+import { preflight, route, scopedQuery } from "@/http/route";
+import { briefFor, cachedBrief, hasModelKey } from "@/retrieval/brief";
 
 export const runtime = "nodejs";
 

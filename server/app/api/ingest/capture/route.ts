@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import { captureRequest } from "@/contract/schemas";
 import { ingestCapture } from "@/ingest/pipeline";
-import { getIngestDeps, requireUser } from "@/server/deps";
-import { actingAs, preflight, route, scopedBody } from "@/server/http";
+import { getIngestDeps, requireUser } from "@/http/deps";
+import { actingAs, preflight, route, scopedBody } from "@/http/route";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;

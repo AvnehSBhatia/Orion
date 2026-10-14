@@ -1,7 +1,15 @@
+/** Every environment setting the server reads, with its default. Getters, so tests can change env between cases. */
 export const config = {
-  /** Built-in assistant. Needs tools and structured outputs on OpenRouter. */
+  /** Composes each person's default dashboard from their role. Needs structured outputs on OpenRouter. */
   get chatModel(): string {
     return process.env.OPENROUTER_CHAT_MODEL || "deepseek/deepseek-v4-flash";
+  },
+  /**
+   * Interactive answers, the brief, and dashboard edits. Measured on OpenRouter (8 items, 200 tokens):
+   * gemini-2.5-flash-lite starts in about 0.5s, deepseek-v4-flash in about 1.6 to 2.1s.
+   */
+  get fastModel(): string {
+    return process.env.OPENROUTER_FAST_MODEL || "google/gemini-2.5-flash-lite";
   },
   /** Turns captured pages and commits into graph nodes. */
   get extractModel(): string {

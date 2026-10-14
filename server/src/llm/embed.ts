@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { config } from "@/config";
-import { HttpError } from "@/server/http";
+import { HttpError } from "@/http/error";
+import { normalize } from "@/lib/vector";
 import { GemmaEmbedder } from "./gemma";
 
 /**
@@ -36,16 +37,6 @@ export function withContext(input: EmbedInput): string {
 function plainText(input: EmbedInput): string {
   const text = withContext(input);
   return input.kind === "document" && input.title ? `${input.title}. ${text}` : text;
-}
-
-export function normalize(v: Float32Array): Float32Array {
-  let sum = 0;
-  for (let i = 0; i < v.length; i++) sum += v[i] * v[i];
-  const norm = Math.sqrt(sum);
-  if (norm === 0) return v;
-  const out = new Float32Array(v.length);
-  for (let i = 0; i < v.length; i++) out[i] = v[i] / norm;
-  return out;
 }
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/embeddings";

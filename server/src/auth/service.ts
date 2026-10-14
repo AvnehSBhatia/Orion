@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Store } from "@/db/store";
-import { HttpError } from "@/server/http";
+import { HttpError } from "@/http/error";
 import { dummyHash, verifyPassword } from "./crypto";
 import { MIN_PASSWORD, normalizeUsername, type Account, type AuthDb } from "./db";
 import type { LoginLimiter } from "./ratelimit";

@@ -2,8 +2,9 @@ import type { NextRequest } from "next/server";
 import { orgId as orgIdSchema, updateOrgRequest } from "@/contract/schemas";
 import type { OrgResponse } from "@/contract/types";
 import { toPublicUser, type Store } from "@/db/store";
-import { getStore } from "@/server/deps";
-import { HttpError, adminOnly, preflight, route, sameOrg } from "@/server/http";
+import { getStore } from "@/http/deps";
+import { HttpError } from "@/http/error";
+import { adminOnly, preflight, route, sameOrg } from "@/http/route";
 
 export const runtime = "nodejs";
 

@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import { activityQuery } from "@/contract/schemas";
 import type { ActivityPerson, ActivityResponse } from "@/contract/types";
-import { getStore } from "@/server/deps";
-import { preflight, route, scopedQuery } from "@/server/http";
+import { getStore } from "@/http/deps";
+import { preflight, route, scopedQuery } from "@/http/route";
 
 export const runtime = "nodejs";
 

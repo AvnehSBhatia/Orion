@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
 import { feedQuery } from "@/contract/schemas";
 import type { FeedResponse } from "@/contract/types";
-import { getEmbedder, getStore, requireUser } from "@/server/deps";
-import { preflight, route, scopedQuery } from "@/server/http";
-import { feedFor } from "@/steer/feed";
+import { getEmbedder, getStore, requireUser } from "@/http/deps";
+import { preflight, route, scopedQuery } from "@/http/route";
+import { feedFor } from "@/retrieval/feed";
 
 export const runtime = "nodejs";
 

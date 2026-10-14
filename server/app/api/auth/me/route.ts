@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { authenticate } from "@/auth/request";
 import { config } from "@/config";
-import { HttpError, preflight, route } from "@/server/http";
+import { HttpError } from "@/http/error";
+import { preflight, route } from "@/http/route";
 
 export const runtime = "nodejs";
 

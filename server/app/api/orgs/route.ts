@@ -3,9 +3,10 @@ import { createOrgRequest } from "@/contract/schemas";
 import type { OrgResponse, OrgsResponse } from "@/contract/types";
 import { toPublicUser } from "@/db/store";
 import { slugify } from "@/lib/text";
-import { createOrgStore, getEmbedder, listOrgs } from "@/server/deps";
-import { HttpError, preflight, principalOf, route } from "@/server/http";
-import { recomputeUserVectors } from "@/steer/users";
+import { createOrgStore, getEmbedder, listOrgs } from "@/http/deps";
+import { HttpError } from "@/http/error";
+import { preflight, principalOf, route } from "@/http/route";
+import { recomputeUserVectors } from "@/orgspace/personVectors";
 
 export const runtime = "nodejs";
 

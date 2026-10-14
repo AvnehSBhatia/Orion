@@ -3,8 +3,8 @@ import { z } from "zod";
 import { orgId } from "@/contract/schemas";
 import { authenticate } from "@/auth/request";
 import { config } from "@/config";
-import { mcpHandlerFor } from "@/server/mcp";
-import { HttpError } from "@/server/http";
+import { mcpHandlerFor } from "@/mcp/server";
+import { HttpError } from "@/http/error";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;

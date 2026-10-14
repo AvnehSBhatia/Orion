@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getAuthDb } from "@/auth/db";
 import { authenticate, clearedSessionCookie } from "@/auth/request";
-import { preflight, route } from "@/server/http";
+import { preflight, route } from "@/http/route";
 
 export const runtime = "nodejs";
 

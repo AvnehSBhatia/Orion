@@ -2,9 +2,11 @@ import type { NextRequest } from "next/server";
 import { dashboardQuery, dashboardRequest } from "@/contract/schemas";
 import type { DashboardResponse } from "@/contract/types";
 import { toPublicUser } from "@/db/store";
-import { getLlm, getStore, requireUser } from "@/server/deps";
-import { HttpError, actingAs, preflight, route, scopedBody, scopedQuery } from "@/server/http";
-import { resolveDashboard, sanitizeDashboard } from "@/steer/dashboard";
+import { getLlm, getStore, requireUser } from "@/http/deps";
+import { HttpError } from "@/http/error";
+import { actingAs, preflight, route, scopedBody, scopedQuery } from "@/http/route";
+import { resolveDashboard } from "@/dashboard/compose";
+import { sanitizeDashboard } from "@/dashboard/widgets";
 
 export const runtime = "nodejs";
 // Composing a dashboard from a role is one model call; only the first visit per person waits on it.

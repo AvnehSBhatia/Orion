@@ -2,7 +2,7 @@ import { z } from "zod";
 import { config } from "@/config";
 import { DOMAINS, NODE_TYPES, RELATIONS, STATUSES, type Domain, type FeatureCard, type NodeType, type Org } from "@/contract/types";
 import type { ExtractedNode, GraphUpdate, StoredNode } from "@/db/store";
-import { HttpError } from "@/server/http";
+import { HttpError } from "@/http/error";
 import { completeJson, nullable, OpenRouterClient, type LlmClient } from "./openrouter";
 
 /**

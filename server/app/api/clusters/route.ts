@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
 import { orgQuery } from "@/contract/schemas";
 import type { ClustersResponse } from "@/contract/types";
-import { getStore } from "@/server/deps";
-import { preflight, route, scopedQuery } from "@/server/http";
-import { publicClusters } from "@/steer/context";
+import { getStore } from "@/http/deps";
+import { preflight, route, scopedQuery } from "@/http/route";
+import { publicClusters } from "@/retrieval/context";
 
 export const runtime = "nodejs";
 

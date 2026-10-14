@@ -8,9 +8,9 @@ import { seedDemo } from "@/db/seed";
 import { Store } from "@/db/store";
 import { createEmbedder } from "@/llm/embed";
 import { OpenRouterClient } from "@/llm/openrouter";
-import { maintainOrg } from "@/pseudo/maintain";
-import { orgDbPath } from "@/server/deps";
-import { recomputeUserVectors } from "@/steer/users";
+import { maintainOrg } from "@/orgspace/maintain";
+import { orgDbPath } from "@/http/deps";
+import { recomputeUserVectors } from "@/orgspace/personVectors";
 
 const orgId = process.argv[2] ?? "demo";
 const store = Store.open(orgDbPath(orgId));

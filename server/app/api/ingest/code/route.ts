@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import { MAX_DIFF_CHARS, codeIngestRequest } from "@/contract/schemas";
 import { ingestCode } from "@/ingest/pipeline";
-import { getIngestDeps } from "@/server/deps";
-import { preflight, route, scopedBody } from "@/server/http";
+import { getIngestDeps } from "@/http/deps";
+import { preflight, route, scopedBody } from "@/http/route";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
