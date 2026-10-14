@@ -2,6 +2,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ignore from 'ignore';
 
+// Decides which repo paths may leave this machine. Two sources of rules:
+//
+// - Agent private paths: lines in the root .gitignore that start with "+.".
+//   Git reads them as patterns that match nothing, so they cost nothing in git;
+//   here the "+." is stripped and the rest is a gitignore pattern anchored to
+//   the repo root ("+./src/secret/" -> "/src/secret/").
+// - Everything git already ignores, plus a hard denylist of secrets and noise.
+
 // Excluded no matter what .gitignore says. Kept in its own matcher so a
 // "!.env.example" style negation in .gitignore cannot unblock these.
 const ALWAYS_EXCLUDED = [
@@ -36,25 +44,21 @@ export function privateGlobsFrom(gitignoreText: string): string[] {
     .filter((g) => g.length > 0);
 }
 
-export function loadPrivatePaths(repoRoot: string): string[] {
-  return privateGlobsFrom(readGitignore(repoRoot));
-}
-
 export function normalizePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+/, '');
 }
 
 export type PathFilter = {
-  privateGlobs: string[];
+  /** True for paths under a "+." rule. Used to count (never name) private changes. */
   isPrivate(path: string): boolean;
+  /** True only for paths that may be sent: not private, not git ignored, not on the denylist. */
   isAllowed(path: string): boolean;
 };
 
 export function createPathFilter(gitignoreText: string): PathFilter {
   const lines = splitLines(gitignoreText);
-  const privateGlobs = privateGlobsFrom(gitignoreText);
   const gitRules = ignore().add(lines.filter((l) => !l.trim().startsWith(PLUS_DOT)));
-  const privateRules = ignore().add(privateGlobs);
+  const privateRules = ignore().add(privateGlobsFrom(gitignoreText));
   const alwaysRules = ignore().add(ALWAYS_EXCLUDED);
 
   const isPrivate = (path: string) => {
@@ -71,7 +75,7 @@ export function createPathFilter(gitignoreText: string): PathFilter {
     return true;
   };
 
-  return { privateGlobs, isPrivate, isAllowed };
+  return { isPrivate, isAllowed };
 }
 
 export function loadPathFilter(repoRoot: string): PathFilter {

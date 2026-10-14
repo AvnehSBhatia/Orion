@@ -2,15 +2,18 @@
 // Paths that .gitignore marks with "+." never leave this machine, and their
 // names are never printed, so CI logs cannot leak them either.
 //
-// Usage: npm run ctx:sync [-- --dry-run]
-// Env:   BACKEND_URL (default http://localhost:3001), ORION_ORG_ID (default demo),
-//        ORION_USER_ID (optional; otherwise the backend matches the commit author), CTX_BASE_SHA (set by CI)
+// Usage: npm run ctx:sync [-- --dry-run]   (from the repo root)
+// Env:   BACKEND_URL    default http://localhost:3001
+//        ORION_TOKEN    Orion API token, sent as a bearer; the org then comes from it
+//        ORION_ORG_ID   org to sync into; default demo when there is no token
+//        ORION_USER_ID  optional; otherwise the backend matches the commit author
+//        CTX_BASE_SHA   base commit, set by CI to the previous push
 
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseCards, type FeatureCard } from './cards.ts';
 import * as g from './git.ts';
-import { loadPathFilter } from './privacy.ts';
+import { loadPathFilter, type PathFilter } from './privacy.ts';
 
 const MAX_FILES = 30;
 const MAX_DIFF_CHARS = 4000;
@@ -33,6 +36,9 @@ function truncate(diff: string): string {
   return diff.slice(0, MAX_DIFF_CHARS) + `\n[diff truncated, ${diff.length - MAX_DIFF_CHARS} more chars]`;
 }
 
+// The commit to diff against: CI's previous push, else the last successful
+// local sync, else the parent of HEAD. A sha that no longer exists (force push,
+// shallow clone) falls through to the next option.
 function pickBase(root: string): string {
   const candidates = [
     process.env.CTX_BASE_SHA?.trim(),
@@ -44,7 +50,7 @@ function pickBase(root: string): string {
   return g.parentOrEmpty(root);
 }
 
-function readCards(root: string, filter: ReturnType<typeof loadPathFilter>): FeatureCard[] {
+function readCards(root: string, filter: PathFilter): FeatureCard[] {
   const file = join(root, CARDS_FILE);
   if (!existsSync(file)) return [];
   let raw: unknown;
@@ -62,7 +68,6 @@ function readCards(root: string, filter: ReturnType<typeof loadPathFilter>): Fea
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
   const backend = (process.env.BACKEND_URL || 'http://localhost:3001').replace(/\/+$/, '');
-  // ORION_TOKEN (an API token from POST /api/auth/tokens) is sent as a bearer; the org then comes from it.
   const token = process.env.ORION_TOKEN?.trim() || undefined;
   const orgId = process.env.ORION_ORG_ID?.trim() || (token ? undefined : 'demo');
   const userId = process.env.ORION_USER_ID?.trim() || undefined;

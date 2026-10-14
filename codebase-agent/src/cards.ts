@@ -1,3 +1,7 @@
+// Feature cards: short, plain-language descriptions of a user-visible change,
+// written by the coding agent into .ctx-cards.json and sent with the sync.
+// The backend treats them as the author's own summary of the change.
+
 import { normalizePath, type PathFilter } from './privacy.ts';
 
 export type CardStatus = 'shipped' | 'in_beta' | 'in_progress';
@@ -18,12 +22,17 @@ export type CardResult = {
   dropped: { index: number; reason: string }[];
 };
 
+// Collapses whitespace, swaps em dashes for commas (cards are read by sales, so
+// they follow the plain-writing rules), and cuts to the backend's limit.
 function clip(s: string, max: number): string {
   const t = s.replace(/\u2014/g, ', ').replace(/\s+/g, ' ').trim();
   return t.length <= max ? t : t.slice(0, max - 1).trimEnd() + '.';
 }
 
-// Accepts either an array of cards or { cards: [...] }.
+// Accepts either an array of cards or { cards: [...] }. Invalid cards are
+// reported in `dropped` rather than thrown, so one bad card does not block a
+// sync. A card that names a private path is dropped whole, because its summary
+// may describe private work.
 export function parseCards(raw: unknown, filter: PathFilter): CardResult {
   const list = Array.isArray(raw) ? raw : (raw as { cards?: unknown })?.cards;
   const result: CardResult = { cards: [], dropped: [] };

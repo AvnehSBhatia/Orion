@@ -1,10 +1,14 @@
+// Thin wrappers over the git CLI. execFileSync with an argument array, so
+// paths are never interpreted by a shell.
+
 import { execFileSync } from 'node:child_process';
 import { basename } from 'node:path';
 
 // git's well-known empty tree, used as the base when HEAD has no parent.
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
 
-export function git(args: string[], cwd: string): string {
+// core.quotepath=off keeps non-ASCII paths readable instead of octal escaped.
+function git(args: string[], cwd: string): string {
   return execFileSync('git', ['-c', 'core.quotepath=off', ...args], {
     cwd,
     encoding: 'utf8',
@@ -54,6 +58,7 @@ export function headAuthor(root: string): { name: string; email: string } {
   return { name, email };
 }
 
+// "owner/repo": GitHub Actions sets it; locally it comes from the origin URL.
 export function repoName(root: string): string {
   if (process.env.GITHUB_REPOSITORY) return process.env.GITHUB_REPOSITORY;
   try {
