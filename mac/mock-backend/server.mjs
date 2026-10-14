@@ -132,7 +132,7 @@ async function handle(req, res) {
         `${block.text.length} chars, ${block.redaction_count} redactions` +
         (block.domain_path ? `, ${block.domain_path.split('/')[0]}` : '') +
         (block.client_id ? `, client ${block.client_id}` : '') +
-        (leaks.length ? `  WARNING: looks like an unredacted ${leaks.join(', ')}` : ''),
+        (leaks.length ? `  NOTE: contains what looks like a${leaks.length === 1 ? 'n' : ''} ${leaks.join(', ')} (expected only if that redaction was turned off; an api key should never appear)` : ''),
       );
     }
     console.log(`work blocks from ${device.device_id}: ${accepted.length} accepted, ${rejected.length} rejected`);

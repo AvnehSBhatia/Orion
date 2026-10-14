@@ -4,13 +4,28 @@ import Foundation
 // Redaction runs on the device before anything is stored or sent (spec 2.4, 8).
 // Matches become typed tokens: [EMAIL], [PHONE], [CARD], [SSN], [ADDRESS], [SECRET], [IP].
 
-public struct RedactionOptions: Sendable, Equatable {
+/// What the person chose to replace. Card numbers, SSNs, and API keys and tokens
+/// are always replaced and have no option.
+public struct RedactionOptions: Sendable, Equatable, Hashable {
+    /// Replace email addresses. On by default.
+    public var redactEmails: Bool
+    /// With emails replaced, keep the part after the @: "[EMAIL]@acme.com". Off by default.
+    public var keepEmailDomain: Bool
+    /// Replace phone numbers. On by default.
+    public var redactPhones: Bool
+    /// Replace street addresses. On by default.
+    public var redactAddresses: Bool
     /// Replace people's names with stable tokens ([Person 1], [Person 2]). Off by default (spec 8).
     public var maskNames: Bool
     /// Replace private network addresses (10.x, 172.16-31.x, 192.168.x). Off by default.
     public var redactPrivateIPs: Bool
 
-    public init(maskNames: Bool = false, redactPrivateIPs: Bool = false) {
+    public init(redactEmails: Bool = true, keepEmailDomain: Bool = false, redactPhones: Bool = true,
+                redactAddresses: Bool = true, maskNames: Bool = false, redactPrivateIPs: Bool = false) {
+        self.redactEmails = redactEmails
+        self.keepEmailDomain = keepEmailDomain
+        self.redactPhones = redactPhones
+        self.redactAddresses = redactAddresses
         self.maskNames = maskNames
         self.redactPrivateIPs = redactPrivateIPs
     }
@@ -27,7 +42,10 @@ public enum Redactor {
         // Links in text get the same treatment as browser addresses: domain and
         // path only, since query strings and fragments can carry tokens.
         let text = trimLinks(original)
-        var patterns = [Patterns.email] + Patterns.secrets + [Patterns.card, Patterns.ssn] + Patterns.phones
+        // Always on: keys and tokens, cards, SSNs. The rest follow the person's choices.
+        var patterns = Patterns.secrets + [Patterns.card, Patterns.ssn]
+        if options.redactEmails { patterns.append(Patterns.email) }
+        if options.redactPhones { patterns += Patterns.phones }
         if options.redactPrivateIPs { patterns.append(Patterns.privateIP) }
         patterns.append(Patterns.randomToken)
 
@@ -44,8 +62,10 @@ public enum Redactor {
 
         // Street addresses, found by Apple's on-device data detector (the one Mail
         // and Messages use), which handles real formats far better than a regex.
-        for match in addressDetector.matches(in: text, range: whole) {
-            found.append((match.range, Patterns.address))
+        if options.redactAddresses {
+            for match in addressDetector.matches(in: text, range: whole) {
+                found.append((match.range, Patterns.address))
+            }
         }
 
         // Where matches overlap, keep the higher priority one, then the longer one.
@@ -62,7 +82,11 @@ public enum Redactor {
         let output = NSMutableString(string: text)
         var counts: [RedactionKind: Int] = [:]
         for (range, kind) in kept.sorted(by: { $0.range.location > $1.range.location }) {
-            output.replaceCharacters(in: range, with: kind.token)
+            var replacement = kind.token
+            if kind == .email, options.keepEmailDomain, let at = source.substring(with: range).split(separator: "@").last {
+                replacement += "@" + at.lowercased() // "[EMAIL]@acme.com": which company, not who
+            }
+            output.replaceCharacters(in: range, with: replacement)
             counts[kind, default: 0] += 1
         }
         return Redacted(text: output as String, counts: counts)
@@ -150,7 +174,9 @@ final class LineCache: @unchecked Sendable { // guarded by `lock`
 
     func redacted(_ text: String, options: RedactionOptions) -> Redacted {
         var hasher = SHA256()
-        hasher.update(data: Data([options.redactPrivateIPs ? 1 : 0]))
+        // Every option changes the result, so every option is part of the key.
+        let flags = [options.redactEmails, options.keepEmailDomain, options.redactPhones, options.redactAddresses, options.redactPrivateIPs]
+        hasher.update(data: Data(flags.map { $0 ? 1 : 0 }))
         hasher.update(data: Data(text.utf8))
         let key = Data(hasher.finalize())
 

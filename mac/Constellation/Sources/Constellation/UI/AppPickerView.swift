@@ -43,11 +43,19 @@ struct AppPickerView: View {
 
             GroupBox("Privacy") {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Emails, phone numbers, street addresses, card numbers, SSNs, and API keys and tokens are always replaced before anything is kept.")
+                    Text("Chosen details are replaced on this Mac before anything is kept. Changes apply to what's captured from now on.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    Toggle("Replace email addresses", isOn: $settings.redactEmails)
+                    Toggle("Keep the company part, e.g. [EMAIL]@acme.com", isOn: $settings.keepEmailDomain)
+                        .padding(.leading, 20)
+                        .disabled(!settings.redactEmails)
+                    Toggle("Replace phone numbers", isOn: $settings.redactPhones)
+                    Toggle("Replace street addresses", isOn: $settings.redactAddresses)
                     Toggle("Replace people's names with Person 1, Person 2", isOn: $settings.maskNames)
                     Toggle("Replace private network addresses (10.x, 192.168.x)", isOn: $settings.redactPrivateIPs)
+                    Text("Card numbers, SSNs, passwords, and API keys and tokens are always replaced.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }

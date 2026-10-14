@@ -12,7 +12,8 @@ The app accepts only `https` base URLs, except `http://localhost` for testing.
 
 ## Rules the backend can rely on
 
-- **Everything is redacted on the device before it is sent.** Emails, phone numbers, street addresses, card numbers, SSNs, and API keys and tokens arrive as `[EMAIL]`, `[PHONE]`, `[ADDRESS]`, `[CARD]`, `[SSN]`, `[SECRET]`. Optionally private IPs arrive as `[IP]`, and people's names as `[Person 1]`, `[Person 2]` (stable within a session).
+- **Everything is redacted on the device before it is sent.** Always: card numbers, SSNs, and API keys and tokens arrive as `[CARD]`, `[SSN]`, `[SECRET]`. By default, also email addresses, phone numbers, and street addresses as `[EMAIL]`, `[PHONE]`, `[ADDRESS]`; **the person can turn each of these off**, so real addresses and numbers may arrive. Email addresses can also arrive as `[EMAIL]@acme.com` if the person chose to keep the company part. Optionally private IPs arrive as `[IP]`, and people's names as `[Person 1]`, `[Person 2]` (stable within a session). There is no company-wide override of these choices.
+- **Links in text are cut to domain and path** (no query string or fragment).
 - **Only blocks the person approved are sent** (or auto approved, by their choice).
 - **Browsers send no page text.** For browsers, `text` is empty, and `domain_path` is the domain plus path with no query string or fragment.
 - **No screenshots, ever.**

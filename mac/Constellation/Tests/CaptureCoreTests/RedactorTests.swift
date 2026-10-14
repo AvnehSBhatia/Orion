@@ -213,3 +213,55 @@ struct LinkTrimmingTests {
         #expect(Redactor.redact(text).text == "Open docs.google.com/document/d/[SECRET]/edit")
     }
 }
+
+@Suite("Redaction choices")
+struct RedactionChoiceTests {
+    let text = "Mail jane.doe@acme.com, call 415-555-0132, visit 1 Infinite Loop, Cupertino, CA 95014. Card 4111 1111 1111 1111, key sk-proj-1a2B3c4D5e6F7g8H9i0J, SSN 123-45-6789."
+
+    @Test("By default emails, phones, and addresses are replaced")
+    func defaults() {
+        let result = Redactor.redact(text).text
+        #expect(result.contains("[EMAIL]") && result.contains("[PHONE]") && result.contains("[ADDRESS]"))
+        #expect(!result.contains("acme.com"))
+    }
+
+    @Test("Each one can be turned off")
+    func turnedOff() {
+        let none = RedactionOptions(redactEmails: false, redactPhones: false, redactAddresses: false)
+        let result = Redactor.redact(text, options: none).text
+        #expect(result.contains("jane.doe@acme.com"))
+        #expect(result.contains("415-555-0132"))
+        #expect(result.contains("Infinite Loop"))
+    }
+
+    @Test("Cards, keys, and SSNs are replaced whatever the choices")
+    func alwaysOn() {
+        let none = RedactionOptions(redactEmails: false, redactPhones: false, redactAddresses: false)
+        let result = Redactor.redact(text, options: none).text
+        #expect(result.contains("[CARD]") && result.contains("[SECRET]") && result.contains("[SSN]"))
+        #expect(!result.contains("4111") && !result.contains("sk-proj") && !result.contains("123-45-6789"))
+    }
+
+    @Test("Keeping the company part of email addresses")
+    func keepDomain() {
+        let result = Redactor.redact("From Jane.Doe@Acme.COM and ops@globex.com", options: RedactionOptions(keepEmailDomain: true))
+        #expect(result.text == "From [EMAIL]@acme.com and [EMAIL]@globex.com")
+        #expect(result.counts[.email] == 2)
+        #expect(Redactor.countTokens(in: result.text) == 2)
+        // The domain then helps client matching.
+        let acme = Client(id: "c_acme", name: "Acme Corp", domains: ["acme.com"])
+        #expect(ClientMatcher(clients: [acme]).match(title: "Re: renewal from [EMAIL]@acme.com", domainPath: nil, text: "")?.client.id == "c_acme")
+    }
+
+    @Test("Remembered lines follow the current choices")
+    func cacheRespectsChoices() {
+        var on = Snapshot(appBundleId: "com.apple.mail", appName: "Mail")
+        on.lines = ["reach me at jane@acme.com"]
+        Redactor.redact(&on, options: RedactionOptions(), names: nil)
+        var off = Snapshot(appBundleId: "com.apple.mail", appName: "Mail")
+        off.lines = ["reach me at jane@acme.com"]
+        Redactor.redact(&off, options: RedactionOptions(redactEmails: false), names: nil)
+        #expect(on.lines == ["reach me at [EMAIL]"])
+        #expect(off.lines == ["reach me at jane@acme.com"])
+    }
+}

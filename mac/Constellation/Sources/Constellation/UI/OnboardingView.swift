@@ -83,7 +83,7 @@ struct OnboardingView: View {
                     Bullet("Apps you haven't turned on, or anything while paused or locked")
                 }
             }
-            Text("Before anything is kept, emails, phone numbers, street addresses, card numbers, and keys are replaced with markers like [EMAIL]. What's kept is encrypted on this Mac. Nothing is sent anywhere in this version.")
+            Text("Before anything is kept, card numbers and keys are always replaced with markers like [CARD], and by default so are emails, phone numbers, and street addresses. You can change those in the app list. What's kept is encrypted on this Mac. Nothing is sent anywhere in this version.")
                 .foregroundStyle(.secondary)
         }
         .fixedSize(horizontal: false, vertical: true)

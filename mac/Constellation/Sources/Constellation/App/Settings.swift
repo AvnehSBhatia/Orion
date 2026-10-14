@@ -15,6 +15,10 @@ enum CaptureState: Equatable {
         static let allowed = "allowedBundleIds"
         static let skipDomains = "skipDomains"
         static let skipWords = "skipWords"
+        static let redactEmails = "redactEmails"
+        static let keepEmailDomain = "keepEmailDomain"
+        static let redactPhones = "redactPhones"
+        static let redactAddresses = "redactAddresses"
         static let maskNames = "maskNames"
         static let redactPrivateIPs = "redactPrivateIPs"
         static let onboardingDone = "onboardingDone"
@@ -33,6 +37,11 @@ enum CaptureState: Equatable {
     @Published var allowed: Set<String> { didSet { defaults.set(allowed.sorted(), forKey: Key.allowed) } }
     @Published var skipDomains: [String] { didSet { defaults.set(skipDomains, forKey: Key.skipDomains) } }
     @Published var skipWords: [String] { didSet { defaults.set(skipWords, forKey: Key.skipWords) } }
+    // Redaction choices: the person's own, with no company override.
+    @Published var redactEmails: Bool { didSet { defaults.set(redactEmails, forKey: Key.redactEmails) } }
+    @Published var keepEmailDomain: Bool { didSet { defaults.set(keepEmailDomain, forKey: Key.keepEmailDomain) } }
+    @Published var redactPhones: Bool { didSet { defaults.set(redactPhones, forKey: Key.redactPhones) } }
+    @Published var redactAddresses: Bool { didSet { defaults.set(redactAddresses, forKey: Key.redactAddresses) } }
     /// Replace people's names with [Person 1], [Person 2]. Off by default (spec 8).
     @Published var maskNames: Bool { didSet { defaults.set(maskNames, forKey: Key.maskNames) } }
     @Published var redactPrivateIPs: Bool { didSet { defaults.set(redactPrivateIPs, forKey: Key.redactPrivateIPs) } }
@@ -53,6 +62,10 @@ enum CaptureState: Equatable {
         allowed = Set(defaults.stringArray(forKey: Key.allowed) ?? [])
         skipDomains = defaults.stringArray(forKey: Key.skipDomains) ?? ExclusionRules.defaultSkipDomains
         skipWords = defaults.stringArray(forKey: Key.skipWords) ?? []
+        redactEmails = defaults.object(forKey: Key.redactEmails) as? Bool ?? true
+        keepEmailDomain = defaults.bool(forKey: Key.keepEmailDomain)
+        redactPhones = defaults.object(forKey: Key.redactPhones) as? Bool ?? true
+        redactAddresses = defaults.object(forKey: Key.redactAddresses) as? Bool ?? true
         maskNames = defaults.bool(forKey: Key.maskNames)
         redactPrivateIPs = defaults.bool(forKey: Key.redactPrivateIPs)
         onboardingDone = defaults.bool(forKey: Key.onboardingDone)
@@ -69,7 +82,12 @@ enum CaptureState: Equatable {
 
     var rules: ExclusionRules { ExclusionRules(skipDomains: skipDomains, skipWords: skipWords) }
 
-    var redaction: RedactionOptions { RedactionOptions(maskNames: maskNames, redactPrivateIPs: redactPrivateIPs) }
+    var redaction: RedactionOptions {
+        RedactionOptions(
+            redactEmails: redactEmails, keepEmailDomain: keepEmailDomain, redactPhones: redactPhones,
+            redactAddresses: redactAddresses, maskNames: maskNames, redactPrivateIPs: redactPrivateIPs
+        )
+    }
 
     var isPaused: Bool {
         guard let pausedUntil else { return false }
