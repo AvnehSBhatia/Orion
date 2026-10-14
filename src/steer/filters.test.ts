@@ -35,18 +35,27 @@ describe("filterParams", () => {
 });
 
 describe("buildContext", () => {
-  it("adds the latest relevant change even when it misses the top hits", async () => {
+  it("adds the latest relevant change even when it misses the top hits, but not unrelated news to a specific question", async () => {
     const store = memoryStore({ seed: true });
     const { embedder } = deps(store);
     const now = Date.now() + 200 * 3_600_000;
     store.upsertGraph(
-      { nodes: [extracted({ label: "Pricing page copy refresh", domain: "marketing", type: "campaign" })], edges: [] },
+      {
+        nodes: [
+          extracted({ label: "Pricing page copy refresh", domain: "marketing", type: "campaign" }),
+          extracted({ label: "Acme renewal security questionnaire", summary: "Acme renewal needs the security questionnaire.", domain: "sales", type: "task" }),
+        ],
+        edges: [],
+      },
       { sourceKind: "extension", sourceRef: "test", now: new Date(now - 3_600_000).toISOString() },
     );
-    const ctx = (await buildContext(store, embedder, { userId: "sam", q: "acme renewal", hits: 3, now })).items;
-    const fresh = ctx.find((n) => n.id === "pricing-page-copy-refresh");
-    expect(fresh?.why).toMatch(/updated 1h ago$/);
-    expect(ctx.slice(3, 6).every((n) => n.why.startsWith("match"))).toBe(true);
+    const ctx = (await buildContext(store, embedder, { userId: "sam", q: "acme renewal", hits: 1, now })).items;
+    expect(ctx[0].why).toMatch(/^match/);
+    expect(ctx.find((n) => n.id === "acme-renewal-security-questionnaire")?.why).toMatch(/updated 1h ago$/);
+    expect(ctx.find((n) => n.id === "pricing-page-copy-refresh")).toBeUndefined();
+
+    const open = (await buildContext(store, embedder, { userId: "sam", q: "what changed for me", hits: 3, now })).items;
+    expect(open.find((n) => n.id === "pricing-page-copy-refresh")?.why).toMatch(/updated 1h ago$/);
   });
 
   it("leads with the person's own top items so open questions land on their work", async () => {

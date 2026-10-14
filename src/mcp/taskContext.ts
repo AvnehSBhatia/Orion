@@ -60,7 +60,8 @@ export async function buildTaskContext(
   embedder: Embedder,
   { userId, task, k = 10, sinceHours = 168, now = Date.now() }: { userId: string; task: string; k?: number; sinceHours?: number; now?: number },
 ): Promise<TaskContext> {
-  // Task first: one "for you" slot, the rest on the task, plus room for the blockers and feeders of the leaders.
+  // Task first: at most one "for you" slot (none for a specific task, see SPECIFIC in steer/context), the rest on
+  // the task, plus room for the blockers and feeders of the leaders.
   const ctx = await buildContext(store, embedder, { userId, q: task, k: k + 3, forYou: 1, hits: Math.max(2, k - 4), now });
   const user = store.getUser(userId);
   const graph = readGraph(store);
