@@ -77,6 +77,18 @@ Sends **approved** Outbox items to the backend. Request and response shapes are 
 - If the backend can't be reached, it tries again after 30 s, then 1, 2, 4 ... minutes, up to 15 minutes. If the backend rejects the token (401 or 403), the app disconnects and asks to connect again. Approved items keep waiting either way.
 - Log only mode now means: items close, are approved, and are sent within a minute.
 
+## Look (space theme)
+
+All screens share one dark "space" theme: `Sources/Constellation/UI/Theme/` holds the tokens (`Theme.swift`: colors, spacing, type), the star field background (`SpaceBackground.swift`, a fixed-seed Canvas with no animation, so it costs nothing when idle), and the components every screen uses (`Components.swift`: GlassCard, StarBadge, StatusPill, GlowDot, Chip, Primary/Ghost/Icon buttons, SectionHeader, InfoButton, ConstellationDivider, EmptyState). Windows have a transparent title bar with content running under it, are always dark, and have default and minimum sizes in `MenuBarController.sizes`. The menu bar eye opens a popover (status, Pause, the windows, Delete all, Quit).
+
+Text contrast is at least 4.5:1 on every surface (tertiary text is 56% opacity rather than 50% for that reason). Reduce Transparency swaps translucent cards for solid ones.
+
+To look at every screen without opening anything, a debug build can render them to PNGs with fake sample data:
+
+```sh
+swift build && CONSTELLATION_RENDER_DIR=/tmp/constellation-screens .build/debug/Constellation --smoke-test
+```
+
 ## App profiles (Mail)
 
 Some apps keep everything in one window. Mail shows the mailbox list, the list of emails (each with a preview of up to 1,000 characters), and the open email side by side, and its window title stays "Inbox – Primary · 26 messages" whichever email is open. Read whole, a Mail block was a mix of many emails, never split per email, and couldn't be matched to a client.

@@ -8,47 +8,32 @@ struct OutboxView: View {
     @ObservedObject var settings: Settings
     @ObservedObject var sender: Sender
     @State private var editing: OutboxItem?
+    @State private var showAllSent = false
+
+    static let sentCollapsed = 5
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Outbox").font(.title2.bold())
-            Text("Nothing leaves this Mac unless it appears here first. What you see is exactly what would be sent.")
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 16) {
-                Picker("Mode", selection: $settings.outboxMode) {
-                    Text("Review first").tag(OutboxMode.reviewFirst)
-                    Text("Log only").tag(OutboxMode.logOnly)
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 280)
-                if settings.outboxMode == .reviewFirst {
-                    Toggle("Approve automatically after \(Limits.autoApproveMinutes) minutes", isOn: $settings.autoApprove)
-                } else {
-                    Text("New items are approved as soon as they close.").foregroundStyle(.secondary)
-                }
-            }
-
-            ConnectionBox(sender: sender, settings: settings, directory: sender.directory)
-
+        SpaceScreen {
+            WindowHeader(title: "Outbox", subtitle: "Nothing leaves this Mac until it's here first.")
+        } content: {
+            modeRow
+            ConnectionCard(sender: sender, settings: settings, directory: sender.directory)
             if !model.available {
-                Text("The encrypted store is unavailable, so there is nothing to show.").foregroundStyle(.orange)
+                Label("The encrypted store is unavailable, so there is nothing to show.", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(Theme.warning)
             }
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    BatchSection(title: "Waiting for review", empty: "Nothing to review.", batches: model.toReview,
-                                 canApprove: true, model: model, editing: $editing)
-                    BatchSection(title: "Approved, waiting to send", empty: "Nothing approved yet.", batches: model.approved,
-                                 canApprove: false, model: model, editing: $editing)
-                    BatchSection(title: "Sent (latest \(OutboxModel.sentShown))", empty: "Nothing sent yet.", batches: model.sent,
-                                 canApprove: false, model: model, editing: $editing)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            BatchSection(title: "Waiting for review", empty: "Nothing to review.", batches: model.toReview,
+                         kind: .review, model: model, editing: $editing)
+            BatchSection(title: "Approved", empty: "Nothing approved yet.", batches: model.approved,
+                         kind: .approved, model: model, editing: $editing)
+            BatchSection(title: "Sent", empty: "Nothing sent yet.",
+                         batches: showAllSent ? model.sent : Array(model.sent.prefix(Self.sentCollapsed)),
+                         kind: .sent, model: model, editing: $editing, total: model.sent.reduce(0) { $0 + $1.items.count })
+            if model.sent.count > Self.sentCollapsed {
+                Button(showAllSent ? "Show fewer" : "Show all \(model.sent.count) sent batches") { showAllSent.toggle() }
+                    .buttonStyle(LinkButtonStyle())
             }
         }
-        .padding(20)
-        .frame(minWidth: 780, minHeight: 580)
         .onAppear { model.refresh() }
         .sheet(item: $editing) { item in
             EditTextSheet(item: item) { text in
@@ -59,202 +44,267 @@ struct OutboxView: View {
             }
         }
     }
-}
 
-private struct BatchSection: View {
-    let title: String
-    let empty: String
-    let batches: [OutboxBatch]
-    let canApprove: Bool
-    let model: OutboxModel
-    @Binding var editing: OutboxItem?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("\(title) (\(batches.reduce(0) { $0 + $1.items.count }))").font(.headline)
-            if batches.isEmpty {
-                Text(empty).foregroundStyle(.secondary)
-            }
-            ForEach(batches) { batch in
-                DisclosureGroup {
-                    VStack(alignment: .leading, spacing: 10) {
-                        ForEach(batch.items) { item in
-                            ItemCard(item: item, match: model.match(item), preview: model.preview(item),
-                                     onEdit: { editing = item }, onDelete: { model.delete([item.id]) })
-                        }
-                    }
-                    .padding(.top, 6)
-                } label: {
-                    HStack {
-                        Text(timeRange(batch.start, batch.end)).font(.body.weight(.medium))
-                        Text("\(batch.items.count) \(batch.items.count == 1 ? "item" : "items") · \(batch.redactions) redactions")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        if canApprove { Button("Approve") { model.approve(batch) } }
-                        Button("Delete", role: .destructive) { model.delete(batch.items.map(\.id)) }
-                    }
-                }
-                .padding(10)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
-            }
-        }
-    }
-}
-
-private struct ItemCard: View {
-    let item: OutboxItem
-    let match: ClientMatch?
-    let preview: String
-    let onEdit: () -> Void
-    let onDelete: () -> Void
-    @State private var title: AttributedString?
-    @State private var text: AttributedString?
-
-    var body: some View {
+    // Mode and auto approve in one compact row, the explanation in small text.
+    private var modeRow: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(item.record.appName).font(.body.weight(.semibold))
-                Text(timeRange(item.record.startedAt, item.record.endedAt))
-                Text("· \(item.record.redactionCount) redactions")
-                if item.edited { Text("· edited") }
-                if let sentAt = item.sentAt {
-                    Text("· sent \(sentAt.formatted(date: .omitted, time: .shortened)) to \(item.sentTo ?? "the backend")")
-                        .foregroundStyle(.green)
+            HStack(spacing: Theme.Space.l) {
+                Picker("Mode", selection: $settings.outboxMode) {
+                    Text("Review first").tag(OutboxMode.reviewFirst)
+                    Text("Log only").tag(OutboxMode.logOnly)
                 }
-                Spacer()
-                if item.sentAt == nil { Button("Edit", action: onEdit) } // what was sent can't be changed
-                Button("Delete", role: .destructive, action: onDelete)
-            }
-            .foregroundStyle(.primary)
-
-            field("Client") {
-                if let match {
-                    Text(match.client.name).font(.body.weight(.medium))
-                    Text("matched by \(match.reason)").foregroundStyle(.secondary)
-                } else {
-                    Text("No client matched").foregroundStyle(.secondary)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 220)
+                if settings.outboxMode == .reviewFirst {
+                    Toggle("Auto approve after \(Limits.autoApproveMinutes) min", isOn: $settings.autoApprove)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
                 }
+                Spacer(minLength: 0)
             }
-            field("Title") { Text(title ?? AttributedString(item.record.windowTitle)) }
-            if let domainPath = item.record.domainPath {
-                field("Web address") { Text(domainPath) }
-            }
-            field("Text") {
-                if item.record.text.isEmpty {
-                    Text("None (browsers send title and web address only)").foregroundStyle(.secondary)
-                } else {
-                    ScrollView {
-                        Text(text ?? AttributedString(item.record.text))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 150)
-                }
-            }
-            DisclosureGroup("What will be sent") {
-                Text(preview)
-                    .font(.caption.monospaced())
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-            }
-            .font(.caption)
-        }
-        .textSelection(.enabled)
-        .padding(10)
-        .background(.background, in: RoundedRectangle(cornerRadius: 6))
-        .onAppear {
-            title = Highlight.apply(item.record.windowTitle)
-            text = Highlight.apply(item.record.text)
-        }
-    }
-
-    private func field<Content: View>(_ label: String, @ViewBuilder _ content: () -> Content) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(label).foregroundStyle(.secondary).frame(width: 90, alignment: .leading)
-            content()
+            Text(settings.outboxMode == .reviewFirst
+                 ? "You approve batches before they're sent."
+                 : "Batches are approved as soon as they close, and listed here as a log.")
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
         }
     }
 }
 
-/// Where approved items go: connect (register this Mac), send now, disconnect.
-private struct ConnectionBox: View {
+// MARK: Connection
+
+/// One card: a glowing dot and one line of status; the address is editable only after Edit.
+private struct ConnectionCard: View {
     @ObservedObject var sender: Sender
     @ObservedObject var settings: Settings
     @ObservedObject var directory: ClientDirectory
+    @State private var editing = false
     @State private var url = ""
     @State private var code = ""
 
     var body: some View {
-        GroupBox("Backend") {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    TextField("Backend address, e.g. https://api.example.com", text: $url)
-                        .textFieldStyle(.roundedBorder)
-                        .disabled(sender.isConnected)
+        GlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: Theme.Space.m) {
+                    GlowDot(color: dotColor)
+                    Text(line).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: Theme.Space.s)
                     if sender.isConnected {
-                        Button("Send now") { sender.sendNow() }
-                        Button("Disconnect") { sender.disconnect() }
+                        Button("Send now") { sender.sendNow() }.buttonStyle(PrimaryButtonStyle(small: true))
+                        Menu {
+                            Button("Sync clients") { Task { await sender.syncClients() } }
+                            Divider()
+                            Button("Disconnect", role: .destructive) { sender.disconnect() }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("More")
                     } else {
-                        Button("Connect") { Task { await sender.connect(urlText: url, enrollmentCode: code) } }
-                            .disabled(sender.state == .connecting)
+                        if !editing {
+                            IconButton(symbol: "pencil", help: "Edit the backend address") {
+                                url = settings.backendURL
+                                editing = true
+                            }
+                        }
+                        Button("Connect") {
+                            Task { await sender.connect(urlText: editing ? url : settings.backendURL, enrollmentCode: code) }
+                        }
+                        .buttonStyle(PrimaryButtonStyle(small: true))
+                        .disabled(sender.state == .connecting)
                     }
                 }
-                if !sender.isConnected {
-                    TextField("Enrollment code (only if your company gave you one)", text: $code)
-                        .textFieldStyle(.roundedBorder)
+
+                if editing && !sender.isConnected {
+                    TextField("Backend address, e.g. https://api.example.com", text: $url).spaceField()
+                    TextField("Enrollment code, only if your company gave you one", text: $code).spaceField()
+                    Button("Cancel") { editing = false }.buttonStyle(LinkButtonStyle(color: Theme.textSecondary))
                 }
-                Label(status, systemImage: icon)
-                    .foregroundStyle(color)
-                    .fixedSize(horizontal: false, vertical: true)
+
+                if case .failed(let message) = sender.state {
+                    Text(message).font(Theme.Typo.caption).foregroundStyle(Theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if sender.isConnected {
-                    HStack {
-                        Text(clientsStatus).foregroundStyle(directory.syncError == nil ? Color.secondary : Color.orange)
-                        Button("Sync clients") { Task { await sender.syncClients() } }
+                    Text(clientsCaption).font(Theme.Typo.caption)
+                        .foregroundStyle(directory.syncError == nil ? Theme.textTertiary : Theme.warning)
+                } else if !editing {
+                    Text(settings.backendURL).font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
+                }
+            }
+        }
+        .onChange(of: sender.isConnected) { _, connected in if connected { editing = false } }
+    }
+
+    private var host: String { sender.destination ?? settings.backendURL }
+
+    private var line: String {
+        switch sender.state {
+        case .notConnected: return "Not connected · approved items wait here"
+        case .connecting: return "Connecting…"
+        case .sending: return "Sending · \(host)"
+        case .failed: return sender.isConnected ? "Connected · \(host) · couldn't send" : "Not connected"
+        case .connected:
+            let last = sender.lastSentAt.map { "last sent \($0.formatted(date: .omitted, time: .shortened))" } ?? "nothing sent yet"
+            return "Connected · \(host) · \(last)"
+        }
+    }
+
+    private var dotColor: Color {
+        switch sender.state {
+        case .connected: Theme.success
+        case .sending, .connecting: Theme.warning
+        case .failed: sender.isConnected ? Theme.warning : Theme.danger
+        case .notConnected: Theme.danger
+        }
+    }
+
+    private var clientsCaption: String {
+        if let error = directory.syncError { return "Clients couldn't sync. \(error)" }
+        guard let at = directory.list.syncedAt else { return "Clients not synced yet" }
+        let count = directory.list.clients.count
+        return "\(count) \(count == 1 ? "client" : "clients") synced \(at.formatted(date: .omitted, time: .shortened))"
+    }
+}
+
+// MARK: Batches
+
+private struct BatchSection: View {
+    enum Kind { case review, approved, sent }
+
+    let title: String
+    let empty: String
+    let batches: [OutboxBatch]
+    let kind: Kind
+    let model: OutboxModel
+    @Binding var editing: OutboxItem?
+    /// Items in the whole section, when only some batches are shown.
+    var total: Int?
+
+    var body: some View {
+        let count = total ?? batches.reduce(0) { $0 + $1.items.count }
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            SectionHeader(title: title, count: count, countColor: kind == .review && count > 0 ? Theme.warning : Theme.textSecondary)
+            if batches.isEmpty {
+                Text(empty).font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
+            } else {
+                GlassCard(emphasis: kind == .review ? .warning : .normal, padding: 0) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(batches.enumerated()), id: \.element.id) { index, batch in
+                            if index > 0 { Divider().overlay(Color.white.opacity(0.06)) }
+                            BatchRow(batch: batch, kind: kind, model: model, editing: $editing)
+                        }
                     }
                 }
             }
-            .padding(4)
-        }
-        .onAppear { url = settings.backendURL }
-    }
-
-    private var status: String {
-        switch sender.state {
-        case .notConnected: return "Not connected. Approved items wait here; nothing is sent."
-        case .connecting: return "Connecting…"
-        case .sending: return "Sending…"
-        case .failed(let message): return message
-        case .connected:
-            var text = "Connected to \(sender.destination ?? "the backend"). Approved items are sent within a minute."
-            if let at = sender.lastSentAt {
-                text += " Last sent \(at.formatted(date: .omitted, time: .shortened)) (\(sender.lastSentCount))."
-            }
-            return text
-        }
-    }
-
-    private var clientsStatus: String {
-        if let error = directory.syncError { return "Clients: couldn't sync. \(error)" }
-        let count = directory.list.clients.count
-        guard let at = directory.list.syncedAt else { return "Clients: not synced yet." }
-        return "Clients: \(count) synced \(at.formatted(date: .omitted, time: .shortened))."
-    }
-
-    private var icon: String {
-        switch sender.state {
-        case .connected, .sending: "checkmark.circle.fill"
-        case .failed: "exclamationmark.triangle.fill"
-        default: "circle.dashed"
-        }
-    }
-
-    private var color: Color {
-        switch sender.state {
-        case .connected, .sending: .green
-        case .failed: .orange
-        default: .secondary
         }
     }
 }
+
+private struct BatchRow: View {
+    let batch: OutboxBatch
+    let kind: BatchSection.Kind
+    let model: OutboxModel
+    @Binding var editing: OutboxItem?
+    @State private var expanded = false
+    @State private var confirmDelete = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            HStack(spacing: Theme.Space.s) {
+                Button { expanded.toggle() } label: {
+                    HStack(spacing: Theme.Space.s) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                            .foregroundStyle(Theme.textSecondary)
+                        Text(timeRange(batch.start, batch.end)).font(Theme.Typo.bodyStrong)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(expanded ? "Hide the payload" : "Show exactly what is sent")
+
+                Chip(text: "\(batch.items.count) \(batch.items.count == 1 ? "item" : "items")")
+                Chip(text: "\(batch.redactions) \(batch.redactions == 1 ? "redaction" : "redactions")")
+                if kind == .sent { StarBadge(kind: .sent, label: "") }
+                Spacer(minLength: Theme.Space.s)
+                if kind == .review {
+                    Button("Approve") { model.approve(batch) }.buttonStyle(PrimaryButtonStyle(small: true))
+                }
+                IconButton(symbol: "trash", help: "Delete this batch", color: Theme.danger) { confirmDelete = true }
+            }
+            if expanded {
+                ForEach(batch.items) { item in
+                    ItemDetail(item: item, match: model.match(item), preview: model.preview(item), sent: kind == .sent,
+                               onEdit: { editing = item }, onDelete: { model.delete([item.id]) })
+                }
+            }
+        }
+        .padding(Theme.Space.m)
+        .confirmationDialog("Delete \(batch.items.count) \(batch.items.count == 1 ? "item" : "items") permanently?",
+                            isPresented: $confirmDelete) {
+            Button("Delete", role: .destructive) { model.delete(batch.items.map(\.id)) }
+        } message: {
+            Text(kind == .sent ? "They're removed from this Mac. Copies already sent stay with the backend."
+                               : "They're removed from this Mac and never sent.")
+        }
+    }
+}
+
+/// One item: app, time, client, and the exact payload in a monospaced inset, with names highlighted.
+private struct ItemDetail: View {
+    let item: OutboxItem
+    let match: ClientMatch?
+    let preview: String
+    let sent: Bool
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var highlighted: AttributedString?
+    @State private var confirmDelete = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: Theme.Space.s) {
+                Text(item.record.appName).font(Theme.Typo.bodyStrong)
+                Text(timeRange(item.record.startedAt, item.record.endedAt)).font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
+                if let match {
+                    Label(match.client.name, systemImage: "star.fill")
+                        .font(Theme.Typo.caption.weight(.medium))
+                        .foregroundStyle(Theme.success)
+                        .help("Matched by \(match.reason)")
+                } else {
+                    StarBadge(kind: .noClient, label: "No client")
+                }
+                if item.edited { Chip(text: "edited") }
+                Spacer(minLength: Theme.Space.s)
+                if let sentAt = item.sentAt {
+                    Text("sent \(sentAt.formatted(date: .omitted, time: .shortened)) to \(item.sentTo ?? "the backend")")
+                        .font(Theme.Typo.caption).foregroundStyle(Theme.line)
+                }
+                if !sent { IconButton(symbol: "pencil", help: "Edit the text", action: onEdit) } // what was sent can't change
+                IconButton(symbol: "trash", help: "Delete this item", color: Theme.danger) { confirmDelete = true }
+            }
+            InsetPanel {
+                ScrollView {
+                    Text(highlighted ?? AttributedString(preview))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 220)
+            }
+        }
+        .onAppear { highlighted = Highlight.apply(preview) }
+        .confirmationDialog("Delete this item permanently?", isPresented: $confirmDelete) {
+            Button("Delete", role: .destructive, action: onDelete)
+        }
+    }
+}
+
+// MARK: Edit
 
 private struct EditTextSheet: View {
     let item: OutboxItem
@@ -270,27 +320,38 @@ private struct EditTextSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Edit text").font(.title3.bold())
-            Text("\(item.record.appName) · \(timeRange(item.record.startedAt, item.record.endedAt)). Your edit is checked for private details again before it is saved.")
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            Text("Edit text").font(Theme.Typo.windowTitle)
+            HStack(spacing: 6) {
+                Text("\(item.record.appName) · \(timeRange(item.record.startedAt, item.record.endedAt))")
+                    .foregroundStyle(Theme.textSecondary)
+                InfoButton(text: "Your edit is checked for private details again, with your redaction choices, before it is saved.")
+            }
             TextEditor(text: $text)
-                .font(.body)
+                .font(Theme.Typo.body)
+                .scrollContentBackground(.hidden)
+                .padding(Theme.Space.s)
+                .background(Theme.fieldFill, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
+                .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Color.white.opacity(0.12)))
                 .frame(minHeight: 260)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
             HStack {
                 Spacer()
-                Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction)
-                Button("Save") { onSave(text) }.keyboardShortcut(.defaultAction)
+                Button("Cancel", action: onCancel).buttonStyle(GhostButtonStyle()).keyboardShortcut(.cancelAction)
+                Button("Save") { onSave(text) }.buttonStyle(PrimaryButtonStyle()).keyboardShortcut(.defaultAction)
             }
         }
-        .padding(20)
+        .padding(Theme.windowPadding)
         .frame(width: 620)
+        .background(SpaceBackground())
+        .foregroundStyle(Theme.textPrimary)
+        .preferredColorScheme(.dark)
     }
 }
 
-/// Names get a yellow highlight (spec 8: shown highlighted in the Outbox);
-/// redaction markers like [EMAIL] are greyed.
+// MARK: Helpers
+
+/// Names get an amber highlight (spec 8: shown highlighted in the Outbox);
+/// redaction markers like [EMAIL] are dimmed.
 enum Highlight {
     private static let tokens = try! NSRegularExpression(pattern: #"\[(?:EMAIL|PHONE|CARD|SSN|ADDRESS|SECRET|IP|Person \d+)\]"#)
 
@@ -298,14 +359,15 @@ enum Highlight {
         var result = AttributedString(text)
         for range in NameDetector.ranges(in: text) {
             if let attributed = Range(range, in: result) {
-                result[attributed].backgroundColor = .yellow.opacity(0.35)
+                result[attributed].backgroundColor = Theme.warning.opacity(0.28)
+                result[attributed].foregroundColor = Theme.textPrimary
             }
         }
         let whole = NSRange(text.startIndex..., in: text)
         for match in tokens.matches(in: text, range: whole) {
             if let stringRange = Range(match.range, in: text), let attributed = Range(stringRange, in: result) {
-                result[attributed].foregroundColor = .secondary
-                result[attributed].backgroundColor = .gray.opacity(0.18)
+                result[attributed].foregroundColor = Theme.textTertiary
+                result[attributed].backgroundColor = Color.white.opacity(0.08)
             }
         }
         return result

@@ -57,6 +57,11 @@ public struct ClientsResponse: Codable, Sendable, Equatable {
         case clients
         case nextSince = "next_since"
     }
+
+    public init(clients: [Client], nextSince: String?) {
+        self.clients = clients
+        self.nextSince = nextSince
+    }
 }
 
 /// The device's copy of the client list.

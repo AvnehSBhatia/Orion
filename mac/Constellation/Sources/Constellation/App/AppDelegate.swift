@@ -23,7 +23,7 @@ import CaptureCore
         engine.directory = directory
         return sender
     }()
-    private lazy var drafts = DraftModel(sender: sender, settings: settings)
+    private lazy var drafts = DraftModel(sender: sender, settings: settings, store: engine.store)
     private var menuBar: MenuBarController?
 
     /// The encrypted store. If it cannot open (for example the Keychain refuses), capture
@@ -44,6 +44,11 @@ import CaptureCore
 
         if smokeTest {
             // Build everything, start nothing, and quit: no app is read.
+            #if DEBUG
+            if let folder = ProcessInfo.processInfo.environment["CONSTELLATION_RENDER_DIR"] {
+                menuBar?.renderScreens(to: URL(fileURLWithPath: folder))
+            }
+            #endif
             let laidOut = menuBar?.layOutWindowsOffscreen() ?? false
             print("Smoke test: menu bar built, windows laid out: \(laidOut ? "yes" : "NO"), capture is \(settings.captureOn ? "on" : "off"), \(settings.allowed.count) app(s) turned on.")
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { NSApp.terminate(nil) }

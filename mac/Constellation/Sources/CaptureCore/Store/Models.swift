@@ -74,4 +74,20 @@ public struct ActivityRecord: Identifiable, Sendable {
     public var redactionCount: Int
     public var status: RecordStatus
     public var snapshotCount: Int
+
+    public init(id: UUID, startedAt: Date, endedAt: Date, appBundleId: String, appName: String, windowTitle: String,
+                domainPath: String?, text: String, textHash: String, redactionCount: Int, status: RecordStatus, snapshotCount: Int) {
+        self.id = id
+        self.startedAt = startedAt
+        self.endedAt = endedAt
+        self.appBundleId = appBundleId
+        self.appName = appName
+        self.windowTitle = windowTitle
+        self.domainPath = domainPath
+        self.text = text
+        self.textHash = textHash
+        self.redactionCount = redactionCount
+        self.status = status
+        self.snapshotCount = snapshotCount
+    }
 }

@@ -33,6 +33,30 @@ import Foundation
         sent = OutboxBatch.group((try? store.outbox([.sent], limit: Self.sentShown)) ?? [])
     }
 
+    #if DEBUG
+    /// Fake items for previews and screen renders. Never real captured text.
+    func loadSample() {
+        func item(_ minutesAgo: Double, _ app: String, _ title: String, _ text: String, status: RecordStatus) -> OutboxItem {
+            let end = Date().addingTimeInterval(-minutesAgo * 60)
+            let record = ActivityRecord(
+                id: UUID(), startedAt: end.addingTimeInterval(-240), endedAt: end, appBundleId: "com.example.\(app)", appName: app,
+                windowTitle: title, domainPath: nil, text: text, textHash: "", redactionCount: Redactor.countTokens(in: text),
+                status: status, snapshotCount: 1
+            )
+            return OutboxItem(record: record, sentAt: status == .sent ? end.addingTimeInterval(120) : nil,
+                              sentTo: status == .sent ? "localhost:8787" : nil)
+        }
+        toReview = OutboxBatch.group([
+            item(5, "Mail", "Re: Acme renewal — Jane Doe", "Hi Jane, the renewal draft is attached. Call me at [PHONE] or write to [EMAIL].", status: .queued),
+            item(8, "Mail", "Pricing questions — Globex", "Thanks Tom, here are the GLX-12 numbers we discussed.", status: .queued),
+        ])
+        approved = []
+        sent = OutboxBatch.group((0..<7).map { index in
+            item(Double(60 + index * 35), "Mail", "Weekly update \(index + 1)", "Status notes for the week, sent to [EMAIL].", status: .sent)
+        })
+    }
+    #endif
+
     func approve(_ batch: OutboxBatch) {
         try? store?.approve(batch.items.map(\.id))
         refresh()

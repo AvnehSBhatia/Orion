@@ -1,60 +1,64 @@
 import SwiftUI
 
 /// Per-app capture counts and read times. Counts only: captured text, window
-/// titles, and URLs are never shown here.
+/// titles, and URLs are never shown here. Kept low key and monospaced.
 struct DebugView: View {
     @ObservedObject var stats: DebugStats
     @ObservedObject var engine: CaptureEngine
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Capture debug").font(.title2.bold())
-            Text("Counts only. Captured text is redacted, then saved encrypted on this Mac. It is never shown here, logged, or sent.")
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 24) {
-                Summary(label: "Status", value: statusText)
-                Summary(label: stats.storeAvailable ? "Records saved (encrypted)" : "Records in memory (store unavailable)", value: "\(stats.recordCount)")
-                Summary(label: "Characters saved", value: "\(stats.storedChars)")
+        SpaceScreen(maxWidth: 1000) {
+            WindowHeader(title: "Debug", detail: "counts only") {
+                InfoButton(text: "Captured text is redacted, then saved encrypted on this Mac. It is never shown here, logged, or sent from this view.")
             }
-
-            // A plain grid rather than Table: Table's NSTableView warned about
-            // reentrant updates as rows changed under it.
-            ScrollView {
-                Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 8) {
-                    GridRow {
-                        ForEach(Self.headers, id: \.self) { Text($0) }
-                    }
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    Divider()
-                    ForEach(stats.sortedRows) { row in
-                        GridRow {
-                            Text(row.name)
-                            Text("\(row.captures)")
-                            Text(row.skips == 0 ? "0" : "\(row.skips): \(row.lastSkip)")
-                                .foregroundStyle(row.skips == 0 ? .primary : Color.orange)
-                            Text("\(row.lastChars) / \(row.avgChars)")
-                            Text("\(row.redactions)")
-                            Text("\(row.lastTitleChars)")
-                            Text(row.urlFound.map { $0 ? "yes" : "no" } ?? "-")
-                            Text("\(ms(row.lastMs)) / \(ms(row.avgMs)) / \(ms(row.maxMs))")
-                            Text("\(ms(row.lastRedactMs)) / \(ms(row.avgRedactMs)) / \(ms(row.maxRedactMs))")
-                            Text(row.lastTrigger)
+            HStack(spacing: Theme.Space.s) {
+                StatusPill(icon: "circle.fill", text: statusText, color: statusColor)
+                StatusPill(icon: "lock.fill",
+                           text: "\(stats.recordCount) \(stats.storeAvailable ? "records saved" : "records in memory (store unavailable)")")
+                StatusPill(icon: "textformat", text: "\(stats.storedChars) chars saved")
+            }
+        } content: {
+            GlassCard {
+                if stats.sortedRows.isEmpty {
+                    EmptyState(title: "No captures yet", message: "Switch to an app you turned on.")
+                } else {
+                    // A plain grid rather than Table: Table's NSTableView warned about
+                    // reentrant updates as rows changed under it.
+                    ScrollView(.horizontal) {
+                        Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 7) {
+                            GridRow {
+                                ForEach(Self.headers, id: \.self) { Text($0) }
+                            }
+                            .font(Theme.Typo.sectionHeader)
+                            .foregroundStyle(Theme.textTertiary)
+                            Divider().overlay(Color.white.opacity(0.08))
+                            ForEach(stats.sortedRows) { row in
+                                GridRow {
+                                    Text(row.name).foregroundStyle(Theme.textPrimary)
+                                    Text("\(row.captures)")
+                                    Text(row.skips == 0 ? "0" : "\(row.skips): \(row.lastSkip)")
+                                        .foregroundStyle(row.skips == 0 ? Theme.textSecondary : Theme.warning)
+                                    Text("\(row.lastChars) / \(row.avgChars)")
+                                    Text("\(row.redactions)")
+                                    Text("\(row.lastTitleChars)")
+                                    Text(row.urlFound.map { $0 ? "yes" : "no" } ?? "-")
+                                    Text("\(ms(row.lastMs)) / \(ms(row.avgMs)) / \(ms(row.maxMs))")
+                                    Text("\(ms(row.lastRedactMs)) / \(ms(row.avgRedactMs)) / \(ms(row.maxRedactMs))")
+                                    Text(row.lastTrigger)
+                                }
+                                .font(Theme.Typo.mono)
+                                .foregroundStyle(Theme.textSecondary)
+                            }
                         }
-                        .monospacedDigit()
+                        .padding(.bottom, Theme.Space.xs)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(minHeight: 220)
         }
-        .padding(20)
-        .frame(minWidth: 1120, minHeight: 400)
     }
 
     private static let headers = [
-        "App", "Captures", "Skips", "Chars last / avg", "Redactions", "Title chars", "URL", "Read ms last / avg / max", "Redact ms last / avg / max", "Last trigger",
+        "APP", "CAPTURES", "SKIPS", "CHARS LAST/AVG", "REDACTIONS", "TITLE", "URL", "READ MS L/A/M", "REDACT MS L/A/M", "TRIGGER",
     ]
 
     private var statusText: String {
@@ -63,22 +67,18 @@ struct DebugView: View {
         case .off: return "Off"
         case .paused(let until): return "Paused until \(until.formatted(date: .omitted, time: .shortened))"
         case .on:
-            if !status.trusted { return "Needs Accessibility permission" }
+            if !status.trusted { return "Needs permission" }
             return status.systemAvailable ? "On" : "On, waiting (locked or asleep)"
         }
     }
 
-    private func ms(_ value: Double) -> String { String(format: "%.1f", value) }
-}
-
-private struct Summary: View {
-    let label: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.title3.monospacedDigit())
+    private var statusColor: Color {
+        switch engine.status.state {
+        case .off: Theme.danger
+        case .paused: Theme.warning
+        case .on: engine.status.trusted && engine.status.systemAvailable ? Theme.success : Theme.warning
         }
     }
+
+    private func ms(_ value: Double) -> String { String(format: "%.1f", value) }
 }
