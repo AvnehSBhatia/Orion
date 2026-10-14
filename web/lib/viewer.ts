@@ -26,7 +26,7 @@ export function fetchSource(orgId: string, id: string): Promise<SourceDetail> {
   const key = `${orgId}:${id}`;
   let p = sourceCache.get(key);
   if (!p) {
-    p = fetch(`${API}/api/sources/${encodeURIComponent(id)}?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store" }).then(async (r) => {
+    p = fetch(`${API}/api/sources/${encodeURIComponent(id)}?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store", credentials: "include" }).then(async (r) => {
       const body = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error((body as { error?: string }).error || `source ${id} returned ${r.status}`);
       return body as SourceDetail;
