@@ -46,3 +46,7 @@ codebase-agent/mock/out/
 
 # Context files written by coding agents from the Orion MCP server
 .orion/
+
+# Rust build output
+server/target/
+server/*/target/
