@@ -14,7 +14,7 @@ The app accepts only `https` base URLs, except `http://localhost` for testing.
 
 - **Everything is redacted on the device before it is sent.** Always: card numbers, SSNs, and API keys and tokens arrive as `[CARD]`, `[SSN]`, `[SECRET]`. By default, also email addresses, phone numbers, and street addresses as `[EMAIL]`, `[PHONE]`, `[ADDRESS]`; **the person can turn each of these off**, so real addresses and numbers may arrive. Email addresses can also arrive as `[EMAIL]@acme.com` if the person chose to keep the company part. Optionally private IPs arrive as `[IP]`, and people's names as `[Person 1]`, `[Person 2]` (stable within a session). There is no company-wide override of these choices.
 - **Links in text are cut to domain and path** (no query string or fragment).
-- **Only blocks the person approved are sent** (or auto approved, by their choice).
+- **Only blocks the person approved are sent to `/v1/work-blocks`** (or auto approved, by their choice). Blocks still waiting for approval are sent only to `POST /v1/summaries`, which must not keep them.
 - **Browsers send no page text.** For browsers, `text` is empty, and `domain_path` is the domain plus path with no query string or fragment.
 - **No screenshots, ever.**
 
@@ -94,6 +94,41 @@ Response `200`:
 ```
 
 The app marks only `accepted` ids as sent, and shows the time and destination in the person's Outbox. Rejected blocks stay approved and are tried again, so reject only for problems a retry can fix, or the app keeps resending. `rejected` may be omitted.
+
+## POST /v1/summaries
+
+**The AI summary the person reads in their Outbox.** The app groups work into batches (one stretch of capturing; a gap of more than 5 minutes starts a new one) and, while a batch waits for approval, posts its blocks here and shows the returned summary at the top of the batch. The person approves or deletes based on it.
+
+Sent a few seconds after a batch changes (a new block, an edit, a delete), so the same batch can arrive several times as it grows; summarize the whole batch each time. Also sent for the most recent sent batches.
+
+**Must not store anything.** These blocks are not approved yet: do not save them, the summary, or the text in logs, databases, or AI provider training data. Only `/v1/work-blocks` is for keeping.
+
+Request (the blocks are exactly what `/v1/work-blocks` would get, same fields and redaction):
+
+```json
+{
+  "device_id": "dev_3f9a1c2e",
+  "blocks": [
+    { "id": "0B2D…", "started_at": "2026-10-12T17:02:11Z", "ended_at": "2026-10-12T17:14:40Z",
+      "app_bundle_id": "com.apple.mail", "app_name": "Mail",
+      "window_title": "Re: Acme renewal — Jane Doe", "domain_path": null,
+      "text": "Hi [Person 1], the renewal draft is attached. Call me at [PHONE].",
+      "redaction_count": 2, "client_id": "c_acme" }
+  ]
+}
+```
+
+Response `200`:
+
+```json
+{ "summary": "Replied to Jane Doe about the Acme renewal: sent the updated draft and moved the start date to November." }
+```
+
+- `summary`: plain text, a few sentences, past tense, about what the person did. Shown as is; keep markers like `[PHONE]` rather than guessing what they hide. Aim for under 600 characters.
+- Mail window titles are `Subject — Sender`. Browser blocks have only `window_title` and `domain_path`, no text.
+- Errors: `401`/`403` as everywhere; anything else shows "Couldn't get a summary" and the app tries again after a minute.
+
+The mock returns a plain list of what was worked on, ending in "(Mock summary…)".
 
 ## GET /v1/clients?since=
 

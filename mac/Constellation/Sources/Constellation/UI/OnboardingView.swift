@@ -149,7 +149,7 @@ struct OnboardingView: View {
             stepHeader(
                 "You Decide What's Shared",
                 "Finished work waits in the Outbox first.",
-                info: "In the Outbox you can read exactly what would be sent, edit it, or delete it. You can change this choice any time there."
+                info: "In the Outbox you read your company's AI summary of each batch and exactly what was captured, and can edit or delete it. To write the summary, your company's server reads the batch's cleaned text but keeps nothing until you approve. You can change this choice any time there."
             )
             GlassCard {
                 VStack(alignment: .leading, spacing: Theme.Space.m) {

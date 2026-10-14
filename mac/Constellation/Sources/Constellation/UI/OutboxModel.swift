@@ -8,6 +8,22 @@ import Foundation
     @Published private(set) var sent: [OutboxBatch] = []
     /// The record still being written; it joins "Waiting for review" when it closes.
     @Published var now: ActivityRecord?
+
+    /// The backend AI's summary of a batch, by batch id. Kept in memory only.
+    struct Summary: Equatable {
+        enum State: Equatable {
+            case loading
+            case ready
+            case failed(String)
+        }
+        /// The batch contents it was made from; a changed batch is summarized again.
+        var signature: String
+        var state: State
+        /// The latest summary, kept while a newer one loads.
+        var text: String?
+        var at = Date()
+    }
+    @Published var summaries: [UUID: Summary] = [:]
     var sender: Sender?
     var directory: ClientDirectory?
     static let sentShown = 100
@@ -33,7 +49,13 @@ import Foundation
         toReview = OutboxBatch.group(items.filter { $0.record.status == .queued })
         approved = OutboxBatch.group(items.filter { $0.record.status == .approved })
         sent = OutboxBatch.group((try? store.outbox([.sent], limit: Self.sentShown)) ?? [])
+        let ids = Set((toReview + approved + sent).map(\.id))
+        summaries = summaries.filter { ids.contains($0.key) }
+        sender?.summarizeSoon()
     }
+
+    /// Batches whose summary is worth having: everything not yet sent, and the sent ones on screen.
+    var summarizable: [OutboxBatch] { toReview + approved + Array(sent.prefix(OutboxView.sentCollapsed)) }
 
     #if DEBUG
     /// Fake items for previews and screen renders. Never real captured text.
@@ -72,6 +94,13 @@ import Foundation
             item(16, "com.microsoft.VSCode", "Code", "invoice.ts — acme-billing", "export function total(lines: Line[]) {\nreturn lines.reduce((sum, line) => sum + line.amount, 0)", status: .queued),
         ])
         approved = []
+        if let batch = toReview.first {
+            summaries[batch.id] = .init(signature: batch.signature, state: .ready, text: """
+                Replied to Jane Doe about the Acme renewal: sent the updated draft and moved the start date to November. \
+                Answered Globex's pricing questions with the GLX-12 numbers, checked Initech's pricing page, and worked on \
+                the invoice total in acme-billing.
+                """)
+        }
         sent = OutboxBatch.group((0..<7).map { index in
             item(Double(60 + index * 35), mail, "Mail", "Weekly update \(index + 1) — Acme", "Status notes for the week are below, and the open questions are at the end.", status: .sent)
         })

@@ -119,6 +119,38 @@ struct BackendClientTests {
         #expect(blocks.first?["started_at"] as? String == "2027-01-15T08:00:00Z")
     }
 
+    @Test("Summaries post the same blocks as sending and return the AI's text")
+    func summarize() async throws {
+        let payload = block()
+        StubProtocol.answer(host: host, status: 200, json: #"{"summary":"Replied about the plan."}"#)
+        let response = try await client.summarize([payload], credentials: credentials)
+        #expect(response.summary == "Replied about the plan.")
+
+        let request = try #require(StubProtocol.requests(host: host).last)
+        #expect(request.httpMethod == "POST")
+        #expect(request.url?.path == "/v1/summaries")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer secret-token")
+        let body = try #require(try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any])
+        #expect(Set(body.keys) == ["device_id", "blocks"])
+        #expect((body["blocks"] as? [[String: Any]])?.first?["text"] as? String == "call [PHONE]") // redacted, as sent
+    }
+
+    @Test("A batch's signature changes when an item is added or edited")
+    func signature() {
+        func item(_ text: String, id: UUID = UUID()) -> OutboxItem {
+            OutboxItem(record: ActivityRecord(
+                id: id, startedAt: Date(timeIntervalSince1970: 0), endedAt: Date(timeIntervalSince1970: 60),
+                appBundleId: "com.apple.mail", appName: "Mail", windowTitle: "Plan", domainPath: nil, text: text,
+                textHash: "", redactionCount: 0, status: .queued, snapshotCount: 1
+            ))
+        }
+        let id = UUID()
+        let one = OutboxBatch.group([item("a", id: id)])[0]
+        #expect(one.signature == OutboxBatch.group([item("a", id: id)])[0].signature)
+        #expect(one.signature != OutboxBatch.group([item("edited", id: id)])[0].signature)
+        #expect(one.signature != OutboxBatch.group([item("a", id: id), item("b")])[0].signature)
+    }
+
     @Test("A rejected token and server errors are told apart")
     func errors() async throws {
         StubProtocol.answer(host: host, status: 401, json: "{}")

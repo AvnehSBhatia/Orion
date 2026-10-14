@@ -14,7 +14,7 @@ struct OutboxView: View {
 
     var body: some View {
         SpaceScreen {
-            WindowHeader(title: "Outbox", subtitle: "Nothing leaves this Mac until it's here first.")
+            WindowHeader(title: "Outbox", subtitle: "Your company's AI summarizes each batch. Nothing is kept until you approve it.")
         } content: {
             NowCard(model: model, settings: settings)
             modeRow
@@ -24,12 +24,12 @@ struct OutboxView: View {
                     .foregroundStyle(Theme.warning)
             }
             BatchSection(title: "Waiting for Review", empty: "Nothing to review.", batches: model.toReview,
-                         kind: .review, model: model, editing: $editing)
+                         kind: .review, model: model, connected: sender.isConnected, editing: $editing)
             BatchSection(title: "Approved", empty: "Nothing approved yet.", batches: model.approved,
-                         kind: .approved, model: model, editing: $editing)
+                         kind: .approved, model: model, connected: sender.isConnected, editing: $editing)
             BatchSection(title: "Sent", empty: "Nothing sent yet.",
                          batches: showAllSent ? model.sent : Array(model.sent.prefix(Self.sentCollapsed)),
-                         kind: .sent, model: model, editing: $editing, total: model.sent.reduce(0) { $0 + $1.items.count })
+                         kind: .sent, model: model, connected: sender.isConnected, editing: $editing, total: model.sent.reduce(0) { $0 + $1.items.count })
             if model.sent.count > Self.sentCollapsed {
                 Button(showAllSent ? "Show Fewer" : "Show All \(model.sent.count) Sent Batches") { showAllSent.toggle() }
                     .buttonStyle(LinkButtonStyle())
@@ -65,7 +65,7 @@ struct OutboxView: View {
                 Spacer(minLength: 0)
             }
             Text(settings.outboxMode == .reviewFirst
-                 ? "You approve batches before they're sent."
+                 ? "You approve batches before your company keeps them."
                  : "Batches are approved as soon as they close, and listed here as a log.")
                 .font(Theme.Typo.caption)
                 .foregroundStyle(Theme.textSecondary)
@@ -239,6 +239,7 @@ private struct BatchSection: View {
     let batches: [OutboxBatch]
     let kind: Kind
     let model: OutboxModel
+    let connected: Bool
     @Binding var editing: OutboxItem?
     /// Items in the whole section, when only some batches are shown.
     var total: Int?
@@ -254,7 +255,7 @@ private struct BatchSection: View {
                     VStack(spacing: 0) {
                         ForEach(Array(batches.enumerated()), id: \.element.id) { index, batch in
                             if index > 0 { Divider().overlay(Color.white.opacity(0.06)) }
-                            BatchRow(batch: batch, kind: kind, model: model, editing: $editing)
+                            BatchRow(batch: batch, kind: kind, model: model, connected: connected, editing: $editing)
                         }
                     }
                 }
@@ -266,15 +267,17 @@ private struct BatchSection: View {
 private struct BatchRow: View {
     let batch: OutboxBatch
     let kind: BatchSection.Kind
-    let model: OutboxModel
+    @ObservedObject var model: OutboxModel // observed: summaries arrive after the batch is shown
+    let connected: Bool
     @Binding var editing: OutboxItem?
     @State private var expanded: Bool
     @State private var confirmDelete = false
 
-    init(batch: OutboxBatch, kind: BatchSection.Kind, model: OutboxModel, editing: Binding<OutboxItem?>) {
+    init(batch: OutboxBatch, kind: BatchSection.Kind, model: OutboxModel, connected: Bool, editing: Binding<OutboxItem?>) {
         self.batch = batch
         self.kind = kind
         self.model = model
+        self.connected = connected
         _editing = editing
         #if DEBUG
         _expanded = State(initialValue: batch.items.contains { $0.id == model.sampleOpen })
@@ -325,13 +328,16 @@ private struct BatchRow: View {
                 }
                 IconButton(symbol: "trash", help: "Delete this batch", color: Theme.danger) { confirmDelete = true }
             }
+            summaryView.padding(.leading, 18)
             if !expanded {
                 Text(preview)
                     .font(Theme.Typo.caption)
-                    .foregroundStyle(Theme.textSecondary)
+                    .foregroundStyle(Theme.textTertiary)
                     .lineLimit(1)
                     .padding(.leading, 18)
             } else {
+                Text("What was captured").font(Theme.Typo.caption.weight(.semibold)).foregroundStyle(Theme.textSecondary)
+                    .padding(.leading, 18).padding(.top, 4)
                 VStack(spacing: 0) {
                     ForEach(Array(batch.items.enumerated()), id: \.element.id) { index, item in
                         if index > 0 { Divider().overlay(Color.white.opacity(0.05)) }
@@ -348,7 +354,37 @@ private struct BatchRow: View {
             Button("Delete", role: .destructive) { model.delete(batch.items.map(\.id)) }
         } message: {
             Text(kind == .sent ? "They're removed from this Mac. Copies already sent stay with the backend."
-                               : "They're removed from this Mac and never sent.")
+                               : "They're removed from this Mac, and the backend never keeps them.")
+        }
+    }
+
+    /// The backend AI's summary: the first thing read in a batch.
+    @ViewBuilder private var summaryView: some View {
+        let summary = model.summaries[batch.id]
+        if let text = summary?.text {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(Highlight.apply(text))
+                    .font(Theme.Typo.body)
+                    .foregroundStyle(Theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                if summary?.state == .loading {
+                    Text("Updating the summary…").font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
+                } else if case .failed(let message) = summary?.state {
+                    Text("Couldn't update the summary. \(message)").font(Theme.Typo.caption).foregroundStyle(Theme.warning)
+                }
+            }
+        } else if summary?.state == .loading {
+            HStack(spacing: Theme.Space.s) {
+                ProgressView().controlSize(.small)
+                Text("Summarizing…").font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
+            }
+        } else if case .failed(let message) = summary?.state {
+            Text("Couldn't get a summary. \(message)").font(Theme.Typo.caption).foregroundStyle(Theme.warning)
+                .fixedSize(horizontal: false, vertical: true)
+        } else if !connected {
+            Text("Connect to the backend to see a summary of this batch.")
+                .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
         }
     }
 }

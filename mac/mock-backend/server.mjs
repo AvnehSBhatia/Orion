@@ -145,6 +145,28 @@ function checkBlock(block) {
   return null;
 }
 
+// "Read “Subject” from Sender. Viewed “Pricing” on initech.com." One phrase per
+// distinct thing, in order. A stand-in for the real AI summary.
+function mockSummary(list) {
+  const phrases = [];
+  for (const block of list) {
+    const title = block.window_title || block.app_name;
+    let phrase;
+    if (block.app_bundle_id === 'com.apple.mail') {
+      const cut = title.lastIndexOf(' — ');
+      phrase = cut > 0 ? `Read “${title.slice(0, cut)}” from ${title.slice(cut + 3)}` : `Read “${title}” in Mail`;
+    } else if (block.domain_path) {
+      phrase = `Viewed “${title}” on ${block.domain_path.split('/')[0]}`;
+    } else {
+      phrase = `Worked in ${block.app_name} on “${title}”`;
+    }
+    if (!phrases.includes(phrase)) phrases.push(phrase);
+  }
+  const shown = phrases.slice(0, 4).join('. ');
+  const more = phrases.length > 4 ? ` And ${phrases.length - 4} more.` : '.';
+  return `${shown}${more} (Mock summary: the real backend's AI writes this.)`;
+}
+
 const time = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 async function handle(req, res) {
@@ -195,6 +217,23 @@ async function handle(req, res) {
     }
     console.log(`work blocks from ${device.device_id}: ${accepted.length} accepted, ${rejected.length} rejected`);
     return send(res, 200, { accepted, rejected });
+  }
+
+  if (route === 'POST /v1/summaries') {
+    // Summarize a batch still waiting in the Outbox. Nothing here is saved or
+    // logged except counts: the blocks are not approved yet. The real backend's
+    // AI writes this text; the mock just lists what was worked on.
+    const device = deviceFor(req);
+    if (!device) return send(res, 401, { error: 'unknown or missing device token' });
+    const body = await readBody(req);
+    if (!Array.isArray(body.blocks) || body.blocks.length === 0) return send(res, 400, { error: 'blocks must be a non-empty array' });
+    if (body.device_id !== device.device_id) return send(res, 400, { error: 'device_id does not match the token' });
+    for (const block of body.blocks) {
+      const problem = checkBlock(block);
+      if (problem) return send(res, 400, { error: `block ${block?.id ?? ''}: ${problem}` });
+    }
+    console.log(`summary for ${device.device_id}: ${body.blocks.length} blocks (not stored)`);
+    return send(res, 200, { summary: mockSummary(body.blocks) });
   }
 
   if (route === 'GET /v1/clients') {

@@ -28,6 +28,8 @@ import Foundation
     private var inFlight = false
     private var failures = 0
     private var nextAttempt = Date.distantPast
+    private var summarizeTask: Task<Void, Never>?
+    private var summarizing = false
 
     static let checkSeconds: TimeInterval = 60
     static let maxBackoffSeconds: TimeInterval = 900
@@ -106,6 +108,43 @@ import Foundation
         Task {
             if directory.isDue { await syncClients() }
             await sendApproved()
+            await summarizePending()
+        }
+    }
+
+    // MARK: Summaries
+
+    /// Summarize shortly after the Outbox changes, once a burst of changes settles.
+    func summarizeSoon() {
+        summarizeTask?.cancel()
+        summarizeTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            await self?.summarizePending()
+        }
+    }
+
+    /// POST /v1/summaries for each batch that has none for its current contents.
+    /// Failures are tried again after a minute.
+    func summarizePending() async {
+        guard !summarizing, isConnected, let outbox else { return }
+        summarizing = true
+        defer { summarizing = false }
+        for batch in outbox.summarizable {
+            let signature = batch.signature
+            if let existing = outbox.summaries[batch.id], existing.signature == signature {
+                guard case .failed = existing.state, Date().timeIntervalSince(existing.at) > 60 else { continue }
+            }
+            let previous = outbox.summaries[batch.id]?.text
+            outbox.summaries[batch.id] = .init(signature: signature, state: .loading, text: previous)
+            let blocks = batch.items.map(directory.payload(for:)) // exactly what sending would post
+            do {
+                let response = try await withBackend { client, credentials in try await client.summarize(blocks, credentials: credentials) }
+                outbox.summaries[batch.id] = .init(signature: signature, state: .ready, text: response.summary)
+            } catch {
+                outbox.summaries[batch.id] = .init(signature: signature, state: .failed(error.localizedDescription), text: previous)
+                if case BackendError.unauthorized = error { return }
+            }
         }
     }
 

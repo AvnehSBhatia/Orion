@@ -148,6 +148,12 @@ public struct BackendClient: Sendable {
                        token: credentials.token)
     }
 
+    /// POST /v1/summaries  The AI's summary of a waiting batch. The backend keeps nothing.
+    public func summarize(_ blocks: [WorkBlockPayload], credentials: DeviceCredentials) async throws -> SummaryResponse {
+        try await send("POST", "/v1/summaries", body: SummaryRequest(deviceId: credentials.deviceId, blocks: blocks),
+                       token: credentials.token)
+    }
+
     /// GET /v1/clients?since=  Only changes since the last sync, once a cursor exists.
     public func fetchClients(since: String?, credentials: DeviceCredentials) async throws -> ClientsResponse {
         var components = URLComponents()
