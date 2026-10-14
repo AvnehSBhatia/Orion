@@ -1,16 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "Orion",
-  "description": "Shares what you are working on with your org's Orion map while capturing is on.",
-  "version": "0.3.0",
-  "icons": { "16": "icons/orion-16.png", "32": "icons/orion-32.png", "48": "icons/orion-48.png", "128": "icons/orion-128.png" },
-  "action": {
-    "default_popup": "popup.html",
-    "default_title": "Orion",
-    "default_icon": { "16": "icons/orion-16.png", "32": "icons/orion-32.png", "48": "icons/orion-48.png", "128": "icons/orion-128.png" }
-  },
+  "name": "Constellation",
+  "description": "Shares your screen with your company context map every few seconds.",
+  "version": "0.6.1",
+  "action": { "default_popup": "popup.html", "default_title": "Constellation" },
   "options_page": "options.html",
-  "permissions": ["activeTab", "scripting", "storage", "alarms"],
+  "permissions": ["activeTab", "scripting", "storage", "alarms", "desktopCapture"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "background.js" }
 }

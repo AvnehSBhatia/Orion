@@ -19,6 +19,9 @@ export const POST = route(async (req: NextRequest): Promise<UpsertUserResponse> 
   const body = upsertUserRequest.parse(await req.json());
   const store = getStore(body.orgId);
   const id = body.id ?? slugify(body.name);
+  // A new role means a new default dashboard; one they shaped by asking Orion stays.
+  const before = store.getUser(id);
+  if (before && before.role !== body.role && store.getDashboard(id)?.origin === "role") store.deleteDashboard(id);
   store.saveUser({ id, name: body.name, role: body.role, teamDescription: body.teamDescription });
   await recomputeUserVectors(store, getEmbedder());
   return { user: toPublicUser(store.getUser(id)!) };

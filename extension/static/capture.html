@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Constellation: choose what to share</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { padding: 24px 24px 0; }
+    h1 { font-size: 24px; }
+    .intro { margin-top: 12px; }
+    h2 { font-size: 18px; font-weight: 600; margin: 24px 0 8px; }
+    .muted { color: var(--muted); font-size: 16px; margin: 0 0 8px; }
+    .list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 8px 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 16px;
+    }
+    .item video { width: 160px; height: 90px; object-fit: cover; border-radius: 6px; background: #000; }
+    .item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .item .host { color: var(--muted); font-size: 14px; }
+    .item input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+    label.item { cursor: pointer; }
+    .empty { color: var(--muted); font-size: 14px; margin: 0; }
+    /* Keep start and stop visible however long the tab list gets. */
+    .footer {
+      position: sticky;
+      bottom: 0;
+      margin-top: 24px;
+      padding: 16px 0 24px;
+      background: rgba(11, 16, 32, 0.92);
+      border-top: 1px solid var(--border);
+      z-index: 2;
+    }
+    #status { color: var(--muted); font-size: 16px; min-height: 24px; margin: 0 0 8px; }
+    #toggle.stop { background: var(--alert); }
+  </style>
+</head>
+<body>
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+      <line x1="6" y1="29" x2="15" y2="14" />
+      <line x1="15" y1="14" x2="26" y2="19" />
+      <line x1="26" y1="19" x2="34" y2="7" />
+      <line x1="26" y1="19" x2="31" y2="33" />
+      <circle cx="6" cy="29" r="2.5" fill="#E3C26B" />
+      <circle cx="15" cy="14" r="3" fill="#6EA8FF" />
+      <circle cx="26" cy="19" r="3.5" fill="#F2F4F8" />
+      <circle cx="34" cy="7" r="2.5" fill="#5EEAD4" />
+      <circle cx="31" cy="33" r="2.5" fill="#FF9F6E" />
+    </svg>
+    <h1>Choose what Constellation can see</h1>
+  </div>
+  <p class="muted intro">Only what you pick here is captured, every 5 seconds. Nothing else is read.</p>
+
+  <h2>Windows and screens</h2>
+  <p class="muted">Chrome only lists windows that are open on screen. To add a minimized app, restore it first. You can minimize it again after adding it.</p>
+  <div id="shared" class="list"></div>
+  <button id="add" class="secondary">Add a window or screen</button>
+
+  <h2>Chrome tabs</h2>
+  <p class="muted">A ticked tab is captured, page text included, while it is the tab showing in its window.</p>
+  <div id="tabs" class="list"></div>
+
+  <div class="footer">
+    <p id="status" role="status"></p>
+    <button id="toggle" class="primary">Start capturing</button>
+  </div>
+
+  <script src="capture.js"></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DOMAINS, LAYOUTS } from "./types";
+import { DOMAINS, LAYOUTS, STATUSES, WIDGET_KINDS, WIDGET_METRICS, WIDGET_SIZES, type Widget } from "./types";
 
 export const MAX_HTML_CHARS = 60_000;
 export const MAX_SCREENSHOT_BYTES = 2 * 1024 * 1024;
@@ -62,11 +62,31 @@ export const viewCommand = z.object({
   caption: z.string(),
 });
 
+/** One earlier turn of the conversation, so follow-ups like "how would you fix this?" resolve. */
+export const MAX_HISTORY = 6;
+export const HISTORY_CHARS = 600;
+export const chatTurn = z.object({
+  role: z.enum(["user", "assistant"]),
+  text: z.string().transform((t) => t.slice(0, HISTORY_CHARS)),
+});
+
 export const chatRequest = z.object({
   orgId,
   userId: z.string().min(1),
   message: z.string().min(1).max(2_000),
   currentView: viewCommand.nullable().default(null),
+  /** The caller reshapes the dashboard itself through /api/dashboard/ask. */
+  skipDashboard: z.boolean().optional(),
+  /** The last turns, oldest first; longer lists keep the newest 6. */
+  history: z
+    .array(chatTurn)
+    .optional()
+    .transform((h) => h?.filter((t) => t.text.trim()).slice(-MAX_HISTORY)),
+});
+
+export const briefQuery = z.object({
+  orgId,
+  userId: z.string().min(1),
 });
 
 export const contextQuery = z.object({
@@ -147,4 +167,126 @@ export const upsertUserRequest = z.object({
   name: z.string().trim().min(1).max(80),
   role: z.string().trim().min(1).max(MAX_ROLE_CHARS),
   teamDescription: z.string().trim().max(MAX_ROLE_CHARS).default(""),
+});
+
+// ---- Dashboards ----
+// Lenient on purpose: specs come from the model and from the UI. Missing optional fields become null,
+// unknown enum values are dropped, malformed widgets are skipped, and at most MAX_WIDGETS are kept.
+
+export const MAX_WIDGETS = 12;
+
+const short = (max: number) => (s: string) => {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length <= max ? t : `${t.slice(0, max - 1).trimEnd()}.`;
+};
+
+/** A list of known values, deduped; empty or missing means null ("any"). */
+const enumList = <T extends string>(values: readonly T[]) =>
+  z
+    .array(z.unknown())
+    .nullish()
+    .catch(null)
+    .transform((v) => {
+      const kept = [...new Set((v ?? []).filter((x): x is T => values.includes(x as T)))];
+      return kept.length ? kept : null;
+    });
+
+const optText = (max: number) =>
+  z
+    .string()
+    .nullish()
+    .catch(null)
+    .transform((v) => (v?.trim() ? short(max)(v) : null));
+
+export const widgetFilter = z.object({
+  domains: enumList(DOMAINS),
+  statuses: enumList(STATUSES),
+  nodeIds: z
+    .array(z.string())
+    .nullish()
+    .catch(null)
+    .transform((v) => (v?.length ? [...new Set(v)].slice(0, 50) : null)),
+  owner: optText(80),
+  query: optText(120),
+});
+
+const widgetSchema = z.object({
+  id: z.string().nullish().catch(null),
+  kind: z.enum(WIDGET_KINDS),
+  title: z.string().nullish().catch(null).transform((v) => short(60)(v ?? "")),
+  size: z.enum(WIDGET_SIZES).catch("md"),
+  metric: z.enum(WIDGET_METRICS).nullish().catch(null),
+  filter: widgetFilter.nullish().catch(null),
+  text: optText(600),
+});
+
+const KIND_TITLES: Record<Widget["kind"], string> = {
+  kpi: "Metric",
+  status_breakdown: "Status",
+  domain_breakdown: "By domain",
+  node_list: "Work",
+  activity: "Live activity",
+  constellation: "Constellation",
+  map: "Star map",
+  gaps: "Gaps",
+  people: "Who is active",
+  note: "Note",
+};
+
+/** An empty filter (every field null) is no filter. */
+const isEmptyFilter = (f: Widget["filter"]) => !f || Object.values(f).every((v) => v === null);
+
+export const widgets = z
+  .array(z.unknown())
+  .catch([])
+  .transform((list): Widget[] => {
+    const ids = new Set<string>();
+    const out: Widget[] = [];
+    for (const raw of list) {
+      const p = widgetSchema.safeParse(raw);
+      if (!p.success) continue;
+      const w = p.data;
+      if (w.kind === "note" && !w.text) continue;
+      const base = (w.id ?? "").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || w.kind;
+      let id = base;
+      for (let n = 2; ids.has(id); n++) id = `${base}-${n}`;
+      ids.add(id);
+      out.push({
+        id,
+        kind: w.kind,
+        title: w.title || KIND_TITLES[w.kind],
+        size: w.size,
+        metric: w.kind === "kpi" ? (w.metric ?? "total_nodes") : (w.metric ?? null),
+        filter: isEmptyFilter(w.filter ?? null) ? null : (w.filter ?? null),
+        text: w.text,
+      });
+      if (out.length === MAX_WIDGETS) break;
+    }
+    return out;
+  });
+
+export const dashboardSpec = z.object({
+  title: z.string().nullish().catch(null).transform((v) => short(80)(v ?? "") || "Your dashboard"),
+  subtitle: z.string().nullish().catch(null).transform((v) => short(160)(v ?? "")),
+  widgets,
+  origin: z.enum(["role", "chat", "default"]).catch("chat"),
+  updatedAt: z.string().nullish().catch(null).transform((v) => (v && !Number.isNaN(Date.parse(v)) ? v : new Date().toISOString())),
+});
+
+export const dashboardAskRequest = z.object({ orgId, userId: z.string().min(1), message: z.string().min(1).max(2_000) });
+
+export const dashboardQuery = z.object({ orgId, userId: z.string().min(1) });
+
+export const dashboardRequest = z
+  .object({
+    orgId,
+    userId: z.string().min(1),
+    dashboard: dashboardSpec.optional(),
+    reset: z.boolean().optional(),
+  })
+  .refine((b) => b.reset === true || b.dashboard !== undefined, "send a dashboard, or reset: true");
+
+export const activityQuery = z.object({
+  orgId,
+  limit: z.coerce.number().int().min(1).max(200).default(40),
 });

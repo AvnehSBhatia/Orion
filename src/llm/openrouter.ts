@@ -40,13 +40,15 @@ export function tool(name: string, description: string, parameters: Record<strin
   return { type: "function", function: { name, description, parameters, strict: true } };
 }
 
+/** Models that rejected `reasoning: { enabled: false }`; requests to them omit it. */
+const reasoningRequired = new Set<string>();
+
 export class OpenRouterClient implements LlmClient {
   async complete(req: CompletionRequest): Promise<Completion> {
     const key = config.openRouterKey;
     if (!key) throw new HttpError(503, "OPENROUTER_API_KEY is not set on the backend");
-    let res: Response;
-    try {
-      res = await fetch(CHAT_URL, {
+    const send = (reasoningOff: boolean) =>
+      fetch(CHAT_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${key}`,
@@ -54,8 +56,20 @@ export class OpenRouterClient implements LlmClient {
           "X-Title": "Orion",
         },
         // require_parameters: only route to providers that honor tools and strict schemas.
-        body: JSON.stringify({ ...req, provider: { require_parameters: true } }),
+        // Reasoning off: hidden thinking ate the token budget and made replies slow or empty.
+        body: JSON.stringify({ ...(reasoningOff ? { reasoning: { enabled: false } } : {}), ...req, provider: { require_parameters: true } }),
       });
+    let res: Response;
+    try {
+      res = await send(!reasoningRequired.has(req.model));
+      // Some models refuse to run without reasoning; remember that and send it their way.
+      if (res.status === 400 && !reasoningRequired.has(req.model)) {
+        const body = await res.clone().text().catch(() => "");
+        if (/reasoning is mandatory/i.test(body)) {
+          reasoningRequired.add(req.model);
+          res = await send(false);
+        }
+      }
     } catch (err) {
       console.error("OpenRouter unreachable", err);
       throw new HttpError(502, "model provider failed");

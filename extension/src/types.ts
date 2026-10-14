@@ -1,48 +1,55 @@
-// Shapes shared with the backend (spec section 1.3) and between popup and service worker.
+// Shapes shared with the backend (spec section 1.3) and between popup, capture
+// window, and service worker.
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
+// What the user allowed this capture to come from.
+// 'tab': a Chrome tab they ticked. url, title, and html are that tab's.
+// 'window': an app window they picked. html is empty.
+// 'screen': a whole screen they picked. html is empty.
+export type SourceKind = 'tab' | 'window' | 'screen';
+
 export type CapturePayload = {
-  orgId: string;
   userId: string;
   url: string;
   title: string;
-  html: string; // empty when the page cannot be read
+  html: string; // empty when the page cannot be read or the source is not a tab
   screenshotB64: string;
   redactions?: Rect[];
+  source?: SourceKind;
 };
 
-export type CaptureResponse = {
-  nodesTouched: string[];
-  sourceId?: string | null;
-  imageStatus?: 'none' | 'text_only' | 'kept' | 'pruned';
-  duplicateOf?: string; // the backend already had this exact page from you and stored nothing new
-  notWork?: true; // the backend found no work on the page and stored nothing
+// A frame from one shared window or screen, plus a tiny grayscale copy used to
+// tell whether it changed enough to be worth sending.
+export type ScreenFrame = {
+  sourceId: string;
+  kind: 'window' | 'screen';
+  label: string; // "Window 2", "Entire screen"
+  dataUrl: string;
+  thumb: number[];
 };
 
-export type Settings = {
-  orgId: string;
-  orgName: string;
-  userId: string; // assigned by the backend when you join
-  name: string;
-  role: string; // one sentence, in your words
-  backendUrl: string;
-};
+export type CaptureResponse = { nodesTouched: string[] };
 
-export type ErrorCode = 'no_user' | 'unknown_user' | 'restricted' | 'timeout' | 'backend' | 'unknown';
+// orgId: which org's map captures land in. Empty means the backend's default org.
+export type Settings = { userId: string; backendUrl: string; orgId: string };
+
+export type ErrorCode = 'no_user' | 'restricted' | 'timeout' | 'backend' | 'unknown';
 
 // Lives in chrome.storage.session, so it survives service worker restarts but
 // recording stops when the browser closes.
 export type RecordingState = {
   recording: boolean;
   sent: number;
-  shared: number; // captures the backend kept: new work, not repeats or pages with no work on them
   lastSentAt: number | null;
   lastError: ErrorCode | null;
+  captureWindowId: number | null; // the window where the user picks what to share
+  allowedTabIds: number[]; // Chrome tabs the user ticked
 };
 
 export type BgRequest =
-  | { type: 'start' }
+  | { type: 'start' } // open the capture window
+  | { type: 'sources-start' } // the user picked sources and pressed start
   | { type: 'stop' }
   | { type: 'screenshot'; windowId: number }
   | {

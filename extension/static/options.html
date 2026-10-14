@@ -2,55 +2,41 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Orion settings</title>
+  <title>Constellation settings</title>
   <link rel="stylesheet" href="styles.css" />
   <style>
-    body { min-height: 100vh; padding: 56px 16px; }
-    main { max-width: 460px; margin: 0 auto; }
-    header { margin-bottom: 24px; }
-    .logo { width: 56px; height: 56px; }
-    .wordmark { font-size: 26px; }
-    .card + .card { margin-top: 12px; }
-    h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
-    .actions { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
-    .actions .primary { width: auto; padding: 11px 22px; }
-    #status { color: var(--muted); font-size: 13px; }
-    #status[data-tone="ok"] { color: var(--ok); }
-    #status[data-tone="error"] { color: var(--alert); }
+    body { padding: 32px 16px; }
+    main { max-width: 480px; margin: 0 auto; }
+    h1 { font-size: 24px; }
+    .brand { margin-bottom: 32px; }
+    #status { margin-left: 16px; color: var(--muted); font-size: 16px; }
   </style>
 </head>
 <body>
   <main>
-    <header class="brand">
-      <div id="logo" class="logo" aria-hidden="true"></div>
-      <div class="brand-text">
-        <h1 class="wordmark reveal">Orion</h1>
-        <div id="who" class="subtle reveal">Settings</div>
-      </div>
-    </header>
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
+        <line x1="6" y1="29" x2="15" y2="14" />
+        <line x1="15" y1="14" x2="26" y2="19" />
+        <line x1="26" y1="19" x2="34" y2="7" />
+        <line x1="26" y1="19" x2="31" y2="33" />
+        <circle cx="6" cy="29" r="2.5" fill="#E3C26B" />
+        <circle cx="15" cy="14" r="3" fill="#6EA8FF" />
+        <circle cx="26" cy="19" r="3.5" fill="#F2F4F8" />
+        <circle cx="34" cy="7" r="2.5" fill="#5EEAD4" />
+        <circle cx="31" cy="33" r="2.5" fill="#FF9F6E" />
+      </svg>
+      <h1>Constellation settings</h1>
+    </div>
+    <form id="form">
+      <label for="userId">Your user id</label>
+      <input id="userId" required autocomplete="off" placeholder="for example, priya-pm" />
 
-    <form id="form" novalidate>
-      <section class="card reveal">
-        <h2>You</h2>
-        <label for="orgId">Org id</label>
-        <input id="orgId" required autocomplete="off" spellcheck="false" placeholder="demo" />
-        <div id="org-hint" class="hint"></div>
-        <label for="name">Your name</label>
-        <input id="name" required autocomplete="name" placeholder="Priya Shah" />
-        <label for="role">What you do, in one sentence</label>
-        <textarea id="role" required maxlength="400" placeholder="I run paid ads and own the launch budget."></textarea>
-      </section>
+      <label for="backendUrl">Backend URL</label>
+      <input id="backendUrl" type="url" required placeholder="http://localhost:3000" />
 
-      <section class="card reveal">
-        <h2>Server</h2>
-        <label for="backendUrl">Orion URL</label>
-        <input id="backendUrl" type="url" required spellcheck="false" placeholder="http://localhost:3001" />
-      </section>
-
-      <div class="actions reveal">
-        <button id="save" type="submit" class="primary">Save</button>
-        <span id="status" role="status"></span>
-      </div>
+      <button type="submit" class="secondary">Save</button>
+      <span id="status" role="status"></span>
     </form>
   </main>
   <script src="options.js"></script>

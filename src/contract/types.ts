@@ -115,6 +115,68 @@ export type ViewCommand = {
   caption: string; // one plain sentence shown on screen
 };
 
+// ---- Dynamic dashboard ----
+// One per person: composed from their free-text role at first, then rewritten by Orion when they ask.
+
+export const WIDGET_KINDS = [
+  "kpi", // one big number: `metric`
+  "status_breakdown", // node statuses (respects filter)
+  "domain_breakdown", // nodes per domain
+  "node_list", // filtered list of nodes
+  "activity", // live stream of captures and commits, newest first
+  "constellation", // 3D projection of node and source embeddings
+  "map", // the star map
+  "gaps", // ownership gaps and risks
+  "people", // who is active, by recent sources
+  "note", // free text from Orion (`text`)
+] as const;
+export type WidgetKind = (typeof WIDGET_KINDS)[number];
+
+export const WIDGET_METRICS = [
+  "total_nodes",
+  "blocked",
+  "at_risk",
+  "on_track",
+  "done",
+  "sellable",
+  "sources_total",
+  "sources_last_hour",
+  "active_people",
+  "gaps",
+] as const;
+export type WidgetMetric = (typeof WIDGET_METRICS)[number];
+
+export const WIDGET_SIZES = ["sm", "md", "lg", "full"] as const;
+export type WidgetSize = (typeof WIDGET_SIZES)[number];
+
+export type WidgetFilter = {
+  domains: Domain[] | null;
+  statuses: Status[] | null;
+  nodeIds: string[] | null;
+  owner: string | null;
+  query: string | null; // case-insensitive substring over label + summary
+};
+
+export type Widget = {
+  id: string;
+  kind: WidgetKind;
+  title: string;
+  size: WidgetSize; // sm = 1 col, md = 2, lg = 3, full = 4 (of a 4-col grid)
+  metric: WidgetMetric | null;
+  filter: WidgetFilter | null;
+  text: string | null;
+};
+
+export type DashboardOrigin = "role" | "chat" | "default";
+
+export type DashboardSpec = {
+  title: string;
+  subtitle: string;
+  widgets: Widget[]; // at most 12
+  origin: DashboardOrigin;
+  updatedAt: string;
+};
+
 export type Rect = { x: number; y: number; w: number; h: number };
 
 // Every request is scoped to one org: `orgId` in the JSON body for POSTs, `?orgId=` for GETs.
@@ -183,9 +245,52 @@ export type SourceResponse = { source: Source; text: string; ocrText: string; im
 export type ClustersResponse = { clusters: Cluster[] };
 
 // POST /api/chat
-export type ChatRequest = { orgId?: string; userId: string; message: string; currentView: ViewCommand | null };
+// `history` is the last turns (at most 6, 600 chars each), oldest first.
+export type ChatTurn = { role: "user" | "assistant"; text: string };
+export type ChatRequest = { orgId?: string; userId: string; message: string; currentView: ViewCommand | null; skipDashboard?: boolean; history?: ChatTurn[] };
+// A suggested next step under the reply: open a document or node, ask a follow-up, or show a dashboard.
+// For "open", `target` says whether `value` is a source id or a node id.
+export type ChatAction = { kind: "open" | "ask" | "show"; label: string; value: string; target?: "source" | "node" };
 // `sources` are the documents the answer drew on, so the UI can show where it came from.
-export type ChatResponse = { reply: string; viewCommand: ViewCommand | null; sources: Source[] };
+// `dashboard` is the person's rebuilt dashboard when Orion changed it (already saved), else null.
+// `actions` are up to 3 suggested next steps.
+export type ChatResponse = { reply: string; viewCommand: ViewCommand | null; dashboard: DashboardSpec | null; sources: Source[]; actions: ChatAction[] };
+
+// GET /api/brief?orgId=...&userId=...   a one or two sentence briefing of what moved for this person lately.
+// `text` cites `sources` as [1], [2]. Cached per person for 60s.
+export type BriefResponse = { text: string; sources: Source[] };
+
+// GET /api/dashboard?orgId=...&userId=...   the saved one, else composed from the person's role.
+// POST /api/dashboard { orgId, userId, dashboard } saves an edit; { orgId, userId, reset: true } recomposes from role.
+export type DashboardRequest = { orgId?: string; userId: string; dashboard?: DashboardSpec; reset?: boolean };
+export type DashboardResponse = { dashboard: DashboardSpec };
+// POST /api/dashboard/ask: one fast model call; dashboard is null when the message did not change it.
+export type DashboardAskRequest = { orgId?: string; userId: string; message: string };
+export type DashboardAskResponse = { dashboard: DashboardSpec | null };
+
+// GET /api/activity?orgId=...&limit=40   live captures and commits.
+export type ActivityPerson = { authorId: string | null; name: string; count: number; lastAt: string };
+export type ActivityResponse = {
+  sources: Source[]; // newest first
+  people: ActivityPerson[]; // by sources in the last 24h, most active first
+  counts: { nodes: number; edges: number; sources: number; lastHour: number; people: number };
+};
+
+// GET /api/embeddings?orgId=...   node and source embeddings projected to 3D (PCA), each axis in [-1, 1].
+export type EmbeddingPoint = {
+  id: string; // node id or source id
+  kind: "node" | "source";
+  label: string;
+  domain: Domain | null;
+  status: Status | null;
+  clusterId: string | null;
+  author: string | null;
+  createdAt: string;
+  x: number;
+  y: number;
+  z: number;
+};
+export type EmbeddingsResponse = { points: EmbeddingPoint[]; clusters: Cluster[] };
 
 // GET /api/users?orgId=...
 export type UsersResponse = { users: User[] };

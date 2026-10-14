@@ -5,7 +5,7 @@
 import { createServer } from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
 
-const PORT = Number(process.env.PORT ?? 3001);
+const PORT = Number(process.env.PORT ?? 3000);
 const OUT = new URL('./out/', import.meta.url);
 const MAX_BODY_BYTES = 10_000_000;
 
@@ -39,14 +39,6 @@ createServer(async (req, res) => {
     return res.end();
   }
 
-  // Joining: any org id exists, and anyone can join it.
-  const org = req.method === 'GET' && req.url?.match(/^\/api\/orgs\/([a-z0-9-]+)$/);
-  if (org) return json(res, 200, { org: { id: org[1], name: `${org[1]} (mock)` }, users: [] });
-  if (req.method === 'POST' && req.url === '/api/users') {
-    const { id, name = '', role = '' } = JSON.parse(await readBody(req));
-    return json(res, 200, { user: { id: id || slug(name), name, role } });
-  }
-
   if (req.method !== 'POST' || req.url !== '/api/ingest/capture') {
     return json(res, 404, { error: 'not found' });
   }
@@ -58,7 +50,7 @@ createServer(async (req, res) => {
     return json(res, 400, { error: String(err) });
   }
 
-  const { orgId = 'demo', userId, url, title, html, screenshotB64, redactions = [] } = body;
+  const { userId, url, title, html, screenshotB64, redactions = [], source = 'tab' } = body;
   const problems = [];
   if (typeof userId !== 'string' || !userId) problems.push('userId missing');
   if (typeof url !== 'string' || !url) problems.push('url missing');
@@ -80,11 +72,11 @@ createServer(async (req, res) => {
   );
 
   console.log(
-    `${new Date().toLocaleTimeString()}  ${orgId}/${userId}  ${url}\n` +
+    `${new Date().toLocaleTimeString()}  ${userId}  [${source}]  ${url}\n` +
       `  title: ${title}\n  html: ${html.length} chars  screenshot: ${Math.round(screenshotB64.length / 1024)} KB b64  redactions: ${redactions.length}`,
   );
 
-  return json(res, 200, { nodesTouched: [slug(title ?? url)], sourceId: `src-mock-${Date.now()}`, imageStatus: 'kept' });
+  return json(res, 200, { nodesTouched: [slug(title ?? url)] });
 }).listen(PORT, () => {
   console.log(`Mock backend on http://localhost:${PORT}  (captures saved to mock/out/)`);
 });

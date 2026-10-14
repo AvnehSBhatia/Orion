@@ -1,149 +1,143 @@
+/* Shared theme for the popup, chooser window, and settings page: deep space,
+   a faint nebula, and a slow twinkling starfield. Domain colors from the spec
+   are used for the constellation mark. */
+
 :root {
-  color-scheme: dark;
-  --bg: #080a16;
-  --panel: rgba(255, 255, 255, 0.035);
-  --panel-edge: rgba(255, 255, 255, 0.08);
-  --field: rgba(255, 255, 255, 0.05);
-  --text: #eef0ff;
-  --muted: #8d93b8;
-  --faint: #5c6188;
-  --violet: #8b7bff;
-  --blue: #7fb2ff;
-  --live: #ff5c7a;
-  --alert: #ff8a8a;
-  --ok: #8be2b5;
-  --radius: 14px;
-  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1.45;
+  --bg: #0b1020;
+  --panel: rgba(23, 32, 58, 0.78);
+  --panel-solid: #17203a;
+  --border: rgba(242, 244, 248, 0.08);
+  --text: #f2f4f8;
+  --muted: #a8b0c4;
+  --accent: #6ea8ff;
+  --teal: #5eead4;
+  --orange: #ff9f6e;
+  --gold: #e3c26b;
+  --alert: #ff5c7a;
 }
 
 * { box-sizing: border-box; }
 
-html { background: var(--bg); }
-
 body {
   margin: 0;
   color: var(--text);
-  background:
-    radial-gradient(120% 70% at 50% -10%, rgba(124, 108, 255, 0.22), transparent 60%),
-    radial-gradient(1px 1px at 18% 22%, rgba(255, 255, 255, 0.5), transparent 60%),
-    radial-gradient(1px 1px at 72% 12%, rgba(255, 255, 255, 0.35), transparent 60%),
-    radial-gradient(1px 1px at 86% 48%, rgba(255, 255, 255, 0.3), transparent 60%),
-    radial-gradient(1px 1px at 30% 78%, rgba(255, 255, 255, 0.25), transparent 60%),
-    var(--bg);
-  -webkit-font-smoothing: antialiased;
+  font: 18px/1.5 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 70% 50% at 10% 0%, rgba(110, 168, 255, 0.16), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(94, 234, 212, 0.1), transparent 70%),
+    radial-gradient(ellipse 40% 30% at 85% 15%, rgba(255, 159, 110, 0.07), transparent 70%);
+  background-attachment: fixed;
+  min-height: 100vh;
 }
 
-/* Hidden until motion.ts brings it in. Only applies when the script runs with motion allowed. */
-body.motion .reveal { opacity: 0; }
+/* Two star layers. The small one sits still; the brighter one twinkles. */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+body::before {
+  background-image:
+    radial-gradient(1px 1px at 23px 41px, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 97px 13px, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1px 1px at 151px 87px, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1px 1px at 61px 139px, rgba(255, 255, 255, 0.45), transparent),
+    radial-gradient(1px 1px at 183px 171px, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(1px 1px at 131px 199px, rgba(255, 255, 255, 0.4), transparent),
+    radial-gradient(1px 1px at 11px 187px, rgba(255, 255, 255, 0.5), transparent);
+  background-size: 210px 210px;
+}
+body::after {
+  background-image:
+    radial-gradient(1.5px 1.5px at 47px 77px, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 213px 29px, rgba(110, 168, 255, 0.9), transparent),
+    radial-gradient(1.5px 1.5px at 271px 223px, #fff, transparent),
+    radial-gradient(2px 2px at 139px 263px, rgba(94, 234, 212, 0.8), transparent),
+    radial-gradient(1.5px 1.5px at 307px 131px, rgba(255, 255, 255, 0.8), transparent);
+  background-size: 330px 330px;
+  animation: twinkle 7s ease-in-out infinite alternate;
+}
+@keyframes twinkle {
+  from { opacity: 0.35; }
+  to { opacity: 1; }
+}
 
-/* Brand */
+/* Content sits above the stars. */
+body > * { position: relative; z-index: 1; }
 
+h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: 0.01em; }
+
+/* Brand row: constellation mark, name, and a one line tagline. */
 .brand { display: flex; align-items: center; gap: 12px; }
-.brand-text { display: flex; flex-direction: column; min-width: 0; }
-
-.logo { width: 44px; height: 44px; flex: none; filter: drop-shadow(0 6px 18px rgba(124, 108, 255, 0.35)); }
-.logo svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.logo .star { transform-box: fill-box; transform-origin: center; }
-.logo .halo-stop { transition: stop-color 0.4s ease; }
-.logo.live { filter: drop-shadow(0 6px 18px rgba(255, 92, 122, 0.4)); }
-.logo.live .halo-stop { stop-color: var(--live); }
-
-.wordmark {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  background: linear-gradient(100deg, #ffffff 10%, #c3baff 55%, #8fc0ff 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.subtle { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* Pill showing Live or Paused */
-
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 10px 5px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--panel-edge);
-  background: var(--panel);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 550;
-  white-space: nowrap;
-}
-.dot { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
-.dot .ring { position: absolute; inset: 0; border-radius: 50%; background: var(--live); opacity: 0; }
-body.recording .pill { color: var(--text); border-color: rgba(255, 92, 122, 0.35); }
-body.recording .dot { background: var(--live); }
-
-/* Cards and fields */
-
-.card {
-  padding: 14px;
-  border-radius: var(--radius);
-  border: 1px solid var(--panel-edge);
-  background: var(--panel);
-  backdrop-filter: blur(6px);
-}
-
-label { display: block; margin: 12px 0 6px; color: var(--muted); font-size: 12px; font-weight: 550; letter-spacing: 0.01em; }
-label:first-child { margin-top: 0; }
-.hint { margin-top: 6px; min-height: 16px; font-size: 12px; color: var(--faint); }
-.hint[data-tone="ok"] { color: var(--ok); }
-.hint[data-tone="error"] { color: var(--alert); }
-
-input, textarea {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--panel-edge);
-  background: var(--field);
-  color: var(--text);
-  font: inherit;
-  outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-textarea { resize: none; min-height: 64px; }
-input::placeholder, textarea::placeholder { color: var(--faint); }
-input:focus, textarea:focus { border-color: rgba(139, 123, 255, 0.7); box-shadow: 0 0 0 3px rgba(139, 123, 255, 0.18); }
-
-/* Buttons */
+.brand .logo { width: 40px; height: 40px; flex: none; }
+.brand .tagline { color: var(--muted); font-size: 14px; margin: 0; }
+.brand .logo line { stroke: rgba(242, 244, 248, 0.35); stroke-width: 1; }
 
 button {
   font: inherit;
-  cursor: pointer;
-  border: none;
+  border: 0;
   border-radius: 12px;
-  transition: opacity 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+  transition: transform 120ms ease, filter 120ms ease, background-color 120ms ease;
 }
-button:disabled { opacity: 0.45; cursor: default; }
-button:focus-visible, a:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+button:hover:not(:disabled) { filter: brightness(1.08); }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:disabled { cursor: default; opacity: 0.5; }
+button:focus-visible, a:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 .primary {
   width: 100%;
-  padding: 12px 16px;
-  color: #fff;
+  height: 56px;
+  background: linear-gradient(135deg, #7fb3ff 0%, var(--accent) 45%, #58c9d6 100%);
+  color: #0b1020;
   font-weight: 600;
-  background: linear-gradient(100deg, #7c6cff, #5d8bff);
-  box-shadow: 0 8px 24px -8px rgba(124, 108, 255, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 24px -12px rgba(110, 168, 255, 0.7);
 }
 
 .secondary {
-  padding: 9px 14px;
+  height: 40px;
+  padding: 0 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
   color: var(--text);
-  background: var(--field);
-  border: 1px solid var(--panel-edge);
+  font-size: 16px;
 }
-.secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.09); }
 
-.link { color: var(--muted); font-size: 13px; text-decoration: none; transition: color 0.15s ease; }
-.link:hover { color: var(--text); }
+.link {
+  color: var(--muted);
+  font-size: 14px;
+  text-decoration: none;
+}
+.link:hover { color: var(--text); text-decoration: underline; }
 
-.row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  margin: 8px 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+input::placeholder { color: rgba(168, 176, 196, 0.6); }
+
+label { color: var(--muted); font-size: 16px; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

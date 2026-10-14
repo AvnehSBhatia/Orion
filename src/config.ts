@@ -36,6 +36,10 @@ export const config = {
   get dataDir(): string {
     return process.env.DATA_DIR || "data";
   },
+  /** light (default): keep a shrunk screenshot, skip OCR and pruning, which ate the server's CPU. full: OCR and prune every capture. */
+  get ingestImages(): "light" | "full" {
+    return process.env.INGEST_IMAGES === "full" ? "full" : "light";
+  },
   get uiOrigins(): string[] {
     return (process.env.UI_ORIGIN || "http://localhost:3000")
       .split(",")

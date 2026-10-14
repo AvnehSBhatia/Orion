@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { config } from "@/config";
-import { DOMAINS, NODE_TYPES, RELATIONS, STATUSES, type FeatureCard, type NodeType, type Org } from "@/contract/types";
+import { DOMAINS, NODE_TYPES, RELATIONS, STATUSES, type Domain, type FeatureCard, type NodeType, type Org } from "@/contract/types";
 import type { ExtractedNode, GraphUpdate, StoredNode } from "@/db/store";
 import { HttpError } from "@/server/http";
 import { completeJson, nullable, OpenRouterClient, type LlmClient } from "./openrouter";
@@ -26,6 +26,24 @@ const hostIn = (url: string, sites: string[]) => {
   }
 };
 
+const ROLE_WORDS: [Domain, RegExp][] = [
+  ["sales", /\b(sales|sell|account executive|renewals?|deals?|pipeline|pricing|quotes?|partnerships?|customer success|prospects?|quota)\b/i],
+  ["marketing", /\b(marketing|marketer|launch|ads|campaigns?|press|communications|content|brand|seo|webinar|social media)\b/i],
+  ["ops", /\b(operations|ops|support|finance|recruiting|hiring|vendors?|incidents?|data|legal|people team|hr)\b/i],
+  ["engineering", /\b(engineer(ing)?|developer|infrastructure|security|mobile|backend|frontend|devops|research(er)?|design(er)?)\b/i],
+];
+
+/** The domain a role's own words point to, by whichever keyword appears first (the job title leads). Null if none. */
+export function domainForRole(role: string | null | undefined): Domain | null {
+  if (!role) return null;
+  let best: { domain: Domain; at: number } | null = null;
+  for (const [domain, re] of ROLE_WORDS) {
+    const m = re.exec(role);
+    if (m && (!best || m.index < best.at)) best = { domain, at: m.index };
+  }
+  return best?.domain ?? null;
+}
+
 /** The org profile and author, as the first lines of the model's input. Empty when nothing is known. */
 export function aboutLines(about: ExtractContext | undefined, url?: string): string {
   const lines: string[] = [];
@@ -38,7 +56,11 @@ export function aboutLines(about: ExtractContext | undefined, url?: string): str
       lines.push(hostIn(url, org.websites) ? "This page is on one of those websites." : "This page is not on one of those websites.");
     }
   }
-  if (about?.author) lines.push(`Sent by: ${about.author.name}. Their role, in their words: ${about.author.role}`);
+  if (about?.author) {
+    lines.push(`Sent by: ${about.author.name}. Their role, in their words: ${about.author.role}`);
+    const domain = domainForRole(about.author.role);
+    if (domain) lines.push(`Their domain: ${domain}. Use it for domain unless the item clearly belongs to another team.`);
+  }
   return lines.length ? `${lines.join("\n")}\n\n` : "";
 }
 
@@ -142,12 +164,12 @@ export function cardLines(cards: FeatureCard[] | undefined): string {
 }
 
 /** The author's cards as graph nodes, for when the model is unavailable. */
-export function cardsToUpdate(cards: FeatureCard[]): GraphUpdate {
+export function cardsToUpdate(cards: FeatureCard[], domain: Domain = "engineering"): GraphUpdate {
   return {
     nodes: cards.map((c) => ({
       label: c.label,
       type: "feature",
-      domain: "engineering",
+      domain,
       summary: c.summary,
       todo: null,
       readLinks: [],
@@ -228,9 +250,10 @@ export class LlmExtractor implements Extractor {
         `\nChanged files:\n\n${files || "(only cards were sent)"}`,
     });
     const out = parseModelOutput(codeOut, raw);
+    const domain = domainForRole(about?.author?.role) ?? "engineering";
     const nodes: ExtractedNode[] = out.nodes.slice(0, MAX_CODE_NODES).map(({ release, sellable, ...n }) => ({
       ...n,
-      domain: "engineering",
+      domain,
       status: n.status === "unknown" && release === "shipped" ? "done" : n.status,
       sellable: sellable && release !== "in_progress",
     }));

@@ -40,6 +40,7 @@
     "extension",
     "codebase-agent",
     "demo",
-    "stress"
+    "stress",
+    "web"
   ]
 }

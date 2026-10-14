@@ -22,10 +22,19 @@ export function orgDbPath(orgId: string): string {
   return path.join(config.dataDir, "orgs", `${orgId}.db`);
 }
 
-export const orgExists = (orgId: string) => orgId === DEFAULT_ORG || cache.stores.has(orgId) || fs.existsSync(orgDbPath(orgId));
+/** The file is the truth: an org whose .db was deleted is gone, even if a handle to it is still cached. */
+export const orgExists = (orgId: string) => orgId === DEFAULT_ORG || fs.existsSync(orgDbPath(orgId));
 
 function openStore(orgId: string): Store {
   let store = cache.stores.get(orgId);
+  // The file was deleted under us (a fresh demo start): drop the stale handle and open a new file.
+  if (store && orgId !== DEFAULT_ORG && !fs.existsSync(orgDbPath(orgId))) {
+    try {
+      (store as { db: { close(): void } }).db.close();
+    } catch {}
+    cache.stores.delete(orgId);
+    store = undefined;
+  }
   // After a dev hot reload a cached handle is an instance of the old Store class and lacks new methods.
   if (store && !(store instanceof Store)) {
     (store as { db: { close(): void } }).db.close();

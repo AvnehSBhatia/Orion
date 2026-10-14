@@ -5,9 +5,10 @@ const KEY = 'recordingState';
 export const DEFAULT_RECORDING: RecordingState = {
   recording: false,
   sent: 0,
-  shared: 0,
   lastSentAt: null,
   lastError: null,
+  captureWindowId: null,
+  allowedTabIds: [],
 };
 
 export async function getRecording(): Promise<RecordingState> {

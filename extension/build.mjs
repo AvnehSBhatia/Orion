@@ -11,7 +11,7 @@ const copyStatic = {
 };
 
 const options = {
-  entryPoints: ['src/background.ts', 'src/popup.ts', 'src/options.ts'],
+  entryPoints: ['src/background.ts', 'src/popup.ts', 'src/options.ts', 'src/capture.ts'],
   outdir: 'dist',
   bundle: true,
   format: 'iife',

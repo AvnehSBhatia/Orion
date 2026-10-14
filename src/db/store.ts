@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import type {
+  DashboardSpec,
   Domain,
   Edge,
   NodeType,
@@ -266,6 +267,13 @@ CREATE TABLE IF NOT EXISTS digests (
   created_at TEXT NOT NULL,
   embedding BLOB,
   embed_model TEXT
+);
+
+CREATE TABLE IF NOT EXISTS dashboards (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  spec TEXT NOT NULL,
+  origin TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS summaries (
@@ -736,11 +744,40 @@ export class Store {
   }
 
   /** Newest first. `since` is an ISO timestamp. */
-  listSources(since?: string): StoredSource[] {
+  listSources(since?: string, limit = -1): StoredSource[] {
     const rows = since
-      ? this.db.prepare(`SELECT ${SOURCE_COLS} FROM sources WHERE created_at >= ? ORDER BY created_at DESC`).all(since)
-      : this.db.prepare(`SELECT ${SOURCE_COLS} FROM sources ORDER BY created_at DESC`).all();
+      ? this.db.prepare(`SELECT ${SOURCE_COLS} FROM sources WHERE created_at >= ? ORDER BY created_at DESC LIMIT ?`).all(since, limit)
+      : this.db.prepare(`SELECT ${SOURCE_COLS} FROM sources ORDER BY created_at DESC LIMIT ?`).all(limit);
     return (rows as SourceRow[]).map(rowToSource);
+  }
+
+  /** Who wrote what since `since`, without loading documents: one row per source. */
+  sourceAuthorsSince(since: string): { authorId: string | null; createdAt: string }[] {
+    return (
+      this.db.prepare("SELECT author_id, created_at FROM sources WHERE created_at >= ? ORDER BY created_at DESC").all(since) as {
+        author_id: string | null;
+        created_at: string;
+      }[]
+    ).map((r) => ({ authorId: r.author_id, createdAt: r.created_at }));
+  }
+
+  counts(): { nodes: number; edges: number; sources: number } {
+    return this.db
+      .prepare("SELECT (SELECT COUNT(*) FROM nodes) AS nodes, (SELECT COUNT(*) FROM edges) AS edges, (SELECT COUNT(*) FROM sources) AS sources")
+      .get() as { nodes: number; edges: number; sources: number };
+  }
+
+  /** Changes whenever an item, its embedding, its cluster, or the edges change. Cheap cache key for projections. */
+  embeddingStamp(): string {
+    const r = this.db
+      .prepare(
+        `SELECT (SELECT COUNT(*) || ':' || COUNT(embedding) || ':' || COUNT(z) || ':' || COUNT(cluster_id) || ':' || IFNULL(MAX(updated_at), '') FROM nodes) AS n,
+                (SELECT COUNT(*) || ':' || COUNT(embedding) || ':' || COUNT(z) || ':' || COUNT(cluster_id) || ':' || IFNULL(MAX(created_at), '') FROM sources) AS s,
+                (SELECT COUNT(*) FROM edges) AS e,
+                (SELECT COUNT(*) || ':' || IFNULL(MAX(version), '') FROM clusters) AS c`,
+      )
+      .get() as { n: string; s: string; e: number; c: string };
+    return `${r.n}|${r.s}|${r.e}|${r.c}`;
   }
 
   sourceImage(id: string): Buffer | null {
@@ -1029,9 +1066,29 @@ export class Store {
     );
   }
 
+  // Dashboards: one per person, stored as the spec JSON.
+
+  getDashboard(userId: string): DashboardSpec | null {
+    const row = this.db.prepare("SELECT spec FROM dashboards WHERE user_id = ?").get(userId) as { spec: string } | undefined;
+    return row ? (JSON.parse(row.spec) as DashboardSpec) : null;
+  }
+
+  saveDashboard(userId: string, spec: DashboardSpec): void {
+    this.db
+      .prepare(
+        `INSERT INTO dashboards (user_id, spec, origin, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET spec = excluded.spec, origin = excluded.origin, updated_at = excluded.updated_at`,
+      )
+      .run(userId, JSON.stringify(spec), spec.origin, spec.updatedAt);
+  }
+
+  deleteDashboard(userId: string): void {
+    this.db.prepare("DELETE FROM dashboards WHERE user_id = ?").run(userId);
+  }
+
   reset(): void {
     this.db.exec(
-      `DELETE FROM summaries; DELETE FROM digests; DELETE FROM clusters; DELETE FROM facets; DELETE FROM source_changes;
+      `DELETE FROM dashboards; DELETE FROM summaries; DELETE FROM digests; DELETE FROM clusters; DELETE FROM facets; DELETE FROM source_changes;
        DELETE FROM sources; DELETE FROM touches; DELETE FROM edges; DELETE FROM nodes; DELETE FROM users; DELETE FROM compressors;`,
     );
   }

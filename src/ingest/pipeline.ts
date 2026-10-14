@@ -1,13 +1,14 @@
 import type { CaptureResponse, CodeIngestResponse, ImageStatus, SourceKind } from "@/contract/types";
 import { SOURCE_TEXT_MAX, sourceId, type GraphUpdate, type Store } from "@/db/store";
 import type { Embedder } from "@/llm/embed";
-import { cardLines, cardsToUpdate, type CaptureInput, type CodeInput, type ExtractContext, type Extractor, type KnownNode } from "@/llm/extract";
+import { cardLines, cardsToUpdate, domainForRole, type CaptureInput, type CodeInput, type ExtractContext, type Extractor, type KnownNode } from "@/llm/extract";
 import type { LlmClient } from "@/llm/openrouter";
 import { htmlToText, slugify } from "@/lib/text";
 import { HttpError } from "@/server/http";
 import { maintainInBackground } from "@/pseudo/maintain";
 import { recomputeUserVectors } from "@/steer/users";
-import { prepareScreenshot, pruneImage, type OcrFn } from "./image";
+import { config } from "@/config";
+import { prepareScreenshot, pruneImage, shrinkImage, type OcrFn } from "./image";
 
 export type IngestDeps = {
   store: Store;
@@ -171,7 +172,13 @@ export async function ingestCapture(
   const text = htmlToText(body.html).slice(0, MAX_PAGE_TEXT);
   const title = body.title || body.url;
   const raw = body.screenshotB64 ? Buffer.from(body.screenshotB64, "base64") : null;
-  const shot = raw?.length ? await prepareScreenshot(deps.embedder, { title, pageText: text, image: raw }, deps.ocr) : null;
+  // Light mode (no OCR, no prune) unless a test injects its own OCR or INGEST_IMAGES=full.
+  const light = !deps.ocr && config.ingestImages === "light";
+  const shot = !raw?.length
+    ? null
+    : light
+      ? { image: await shrinkImage(raw).catch(() => null), ocrText: "", status: "kept" as const, ocrSim: null }
+      : await prepareScreenshot(deps.embedder, { title, pageText: text, image: raw }, deps.ocr);
   const prev = repeatOf(deps, body, text, { ocrText: shot?.ocrText ?? "", status: shot?.status ?? "none" }, now);
   if (prev) return { nodesTouched: [], sourceId: prev.id, imageStatus: prev.imageStatus, duplicateOf: prev.id };
   const seen = shot?.status === "kept" && shot.ocrText ? `${text}\n\nText in the screenshot:\n${shot.ocrText}` : text;
@@ -198,7 +205,7 @@ export async function ingestCapture(
     body.userId,
     new Date(now).toISOString(),
   );
-  if (shot?.image && deps.background) pruneInBackground(deps, res.sourceId, shot.image);
+  if (shot?.image && deps.background && !light) pruneInBackground(deps, res.sourceId, shot.image);
   return { ...res, imageStatus };
 }
 
@@ -225,8 +232,9 @@ export async function ingestCode(
   if (!files.length && !cards.length) return { nodesTouched: [], sourceId: null };
 
   const userId = commitAuthor(deps.store, body.userId, body.author);
+  const about = aboutFor(deps.store, userId);
   const update = await extractOrNull(() =>
-    deps.extractor.fromCode({ repo: body.repo, commitSha: body.commitSha, files, cards }, known(deps.store), aboutFor(deps.store, userId)),
+    deps.extractor.fromCode({ repo: body.repo, commitSha: body.commitSha, files, cards }, known(deps.store), about),
   );
   const short = body.commitSha.slice(0, 7);
   const names = files.length ? files.map((f) => f.path) : cards.map((c) => c.label);
@@ -234,7 +242,7 @@ export async function ingestCode(
     cards.length ? `Feature cards:\n${cardLines(cards)}` : "",
     ...files.map((f) => `--- ${f.path}\n${f.diff}`),
   ].filter(Boolean);
-  const fromCards = cards.length && (!update || isEmpty(update)) ? cardsToUpdate(cards) : null;
+  const fromCards = cards.length && (!update || isEmpty(update)) ? cardsToUpdate(cards, domainForRole(about.author?.role) ?? "engineering") : null;
   return applyUpdate(
     deps,
     fromCards ?? update ?? NOTHING,
