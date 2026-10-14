@@ -37,22 +37,30 @@ public struct OutboxItem: Identifiable, Sendable {
 
 /// Items grouped into 30 minute slots, so people approve a stretch of time, not every window.
 public struct OutboxBatch: Identifiable, Sendable {
-    public let start: Date
+    /// Never empty.
     public let items: [OutboxItem]
 
-    public var id: Date { start }
-    public var end: Date { start.addingTimeInterval(Limits.outboxBatchSeconds) }
+    public var id: UUID { items[0].id }
+    /// When capturing started and stopped in this stretch: the first and last thing captured.
+    public var start: Date { items[0].record.startedAt }
+    public var end: Date { items.map(\.record.endedAt).max() ?? start }
     public var redactions: Int { items.reduce(0) { $0 + $1.record.redactionCount } }
 
-    /// Newest batch first; items oldest first within a batch.
+    /// One batch per stretch of capturing: items stay together until nothing was
+    /// captured for more than `Limits.batchGapSeconds`. Newest batch first; items
+    /// oldest first within a batch.
     public static func group(_ items: [OutboxItem]) -> [OutboxBatch] {
-        let slot = Limits.outboxBatchSeconds
-        let grouped = Dictionary(grouping: items) { item in
-            Date(timeIntervalSince1970: (item.record.endedAt.timeIntervalSince1970 / slot).rounded(.down) * slot)
+        var batches: [[OutboxItem]] = []
+        var lastEnd = Date.distantPast
+        for item in items.sorted(by: { $0.record.startedAt < $1.record.startedAt }) {
+            if batches.isEmpty || item.record.startedAt.timeIntervalSince(lastEnd) > Limits.batchGapSeconds {
+                batches.append([item])
+            } else {
+                batches[batches.count - 1].append(item)
+            }
+            lastEnd = max(lastEnd, item.record.endedAt)
         }
-        return grouped
-            .map { OutboxBatch(start: $0.key, items: $0.value.sorted { $0.record.startedAt < $1.record.startedAt }) }
-            .sorted { $0.start > $1.start }
+        return batches.reversed().map { OutboxBatch(items: $0) }
     }
 }
 

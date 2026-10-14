@@ -98,20 +98,25 @@ struct OutboxTests {
         #expect(try store.load().map(\.id) == [a.id]) // gone from the store, not just hidden
     }
 
-    @Test("Batches are 30 minute slots, newest first")
+    @Test("A batch is one stretch of capturing, from the first capture to the last; newest first")
     func batches() {
-        let slot = Limits.outboxBatchSeconds
-        let base = Date(timeIntervalSince1970: 1_800_000_000 - 1_800_000_000.truncatingRemainder(dividingBy: slot))
-        func item(_ offsetMinutes: Double) -> OutboxItem {
+        let base = Date(timeIntervalSince1970: 1_800_000_000)
+        func item(from: Double, to: Double) -> OutboxItem {
             var r = record()
-            r.endedAt = base.addingTimeInterval(offsetMinutes * 60)
-            r.startedAt = r.endedAt.addingTimeInterval(-60)
+            r.startedAt = base.addingTimeInterval(from * 60)
+            r.endedAt = base.addingTimeInterval(to * 60)
             return OutboxItem(record: r)
         }
-        let groups = OutboxBatch.group([item(5), item(25), item(31), item(59), item(61)])
-        #expect(groups.map(\.items.count) == [1, 2, 2])
-        #expect(groups.first?.start == base.addingTimeInterval(2 * slot))
+        // 0–3 and 4–9 run together (1 minute apart); 20–22 comes after an 11 minute gap.
+        let groups = OutboxBatch.group([item(from: 20, to: 22), item(from: 0, to: 3), item(from: 4, to: 9)])
+        #expect(groups.map(\.items.count) == [1, 2])
         #expect(groups.last?.start == base)
+        #expect(groups.last?.end == base.addingTimeInterval(9 * 60)) // the real end, not a 30 minute slot
+        #expect(groups.first?.start == base.addingTimeInterval(20 * 60))
+        // Exactly the gap limit still counts as the same stretch.
+        let gap = Limits.batchGapSeconds / 60
+        #expect(OutboxBatch.group([item(from: 0, to: 1), item(from: 1 + gap, to: 2 + gap)]).count == 1)
+        #expect(OutboxBatch.group([]).isEmpty)
     }
 
     @Test("The payload holds exactly these fields")

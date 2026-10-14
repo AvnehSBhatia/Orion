@@ -1,7 +1,7 @@
 import CaptureCore
 import SwiftUI
 
-/// The Outbox (spec 9): exactly what would leave this Mac, in 30 minute batches.
+/// The Outbox (spec 9): exactly what would leave this Mac, batched by stretches of capturing.
 /// People can read, edit, delete, or approve. Names are highlighted so they are noticed.
 struct OutboxView: View {
     @ObservedObject var model: OutboxModel

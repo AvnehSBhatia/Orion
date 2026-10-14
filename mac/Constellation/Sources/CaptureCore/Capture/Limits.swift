@@ -43,7 +43,9 @@ public enum Limits {
     public static let retentionCheckSeconds: TimeInterval = 3600
 
     // Outbox (spec 9).
-    public static let outboxBatchSeconds: TimeInterval = 1800 // batches are 30 minute slots
+    /// A batch is one stretch of capturing; a longer gap with nothing captured
+    /// (capture off or paused, or only apps that aren't read) starts the next one.
+    public static let batchGapSeconds: TimeInterval = 300
     public static let autoApproveMinutes = 30 // Review first: approve automatically after this, if on
     public static let outboxCheckSeconds: TimeInterval = 30 // close idle records, auto approve
 
