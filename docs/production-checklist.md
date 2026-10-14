@@ -68,7 +68,7 @@ Baseline that already works:
    - Keyboard-accessible nav.
    - Remove the swarm, demo and auto-switch code.
 9. **Extension:**
-   - Rename it from "Constellation" to Orion.
+   - ~~Rename it from "Constellation" to Orion.~~ Done.
    - Icons.
    - Web Store policy package.
    - Production backend default, HTTPS only.
@@ -330,7 +330,7 @@ All routes go through `route()` in `server/src/server/http.ts`. Cross-org access
 - [ ] **Org creation:** a self-serve or sales-assisted signup UI. `POST /api/auth/signup` exists behind `ALLOW_SIGNUP` but has no web form, so orgs are created with `scripts/account.ts` today. **Size** M. **P1** (CLI is fine for customer #1 if an operator runs it)
 - [ ] **Invite teammates from the web:** an admin page that sends invites and shows pending and accepted ones. Today it's admin `POST /api/auth/accounts` with no UI. **Size** M. **P0**
 - [ ] **A "Connect Claude Code" page:** issue a scoped token in the UI and show a copyable `claude mcp add --transport http orion https://<host>/api/mcp --header "Authorization: Bearer …"`, plus Cursor and Codex variants and a test-connection button. Today tokens come from the CLI or a hand-written curl. **Where:** `server/app/api/auth/tokens/route.ts`, new web page, `docs/mcp.md`. **Size** M. **P0**
-- [ ] **Extension install flow:** a Web Store link in onboarding, the production backend URL as the default (or `chrome.storage.managed` for enterprise force-install with org and URL pinned), and sign-in that confirms the org. **Where:** `extension/src/settings.ts` (default `http://localhost:3000`), `extension/src/options.ts`. **Size** M. **P0**
+- [ ] **Extension install flow:** a Web Store link in onboarding, the production backend URL as the default (or `chrome.storage.managed` for enterprise force-install with org and URL pinned), and sign-in that confirms the org. **Where:** `extension/src/settings.ts` (default is now `http://localhost:3001`; production URL still needed), `extension/src/options.ts`. **Size** M. **P0**
 - [ ] **Admin console:** members, roles, deactivate, tokens, capture settings (exclusions, retention, screenshot on or off, notice text), org profile (`PATCH /api/orgs/[id]` exists with no UI), and usage and spend. **Size** L. **P1**
 - [ ] **Personal settings:** what's captured, pause, my exclusions, my data (view, delete, export), and password. **Size** M. **P1**
 - [ ] **Billing and plans:** seat counting, Stripe, and plan limits tied to the LLM caps. Manual invoicing is fine for the first customer. **Size** L. **P1**
@@ -340,7 +340,7 @@ All routes go through `route()` in `server/src/server/http.ts`. Cross-org access
 
 ### Chrome extension and Web Store
 
-- [ ] **Rename to Orion.** The manifest says "Constellation" and logs say `[constellation]`. **Where:** `extension/static/manifest.json`, `extension/src/background.ts`. **Size** S. **P0**
+- [x] **Rename to Orion.** Done in the extension cleanup (5af64f7). The manifest said "Constellation" and logs said `[constellation]`. **Where:** `extension/static/manifest.json`, `extension/src/background.ts`. **Size** S. **P0**
 - [ ] **Add icons and store assets:** 16, 48 and 128px `icons` in the manifest (none today), store screenshots and a promo tile. **Size** S. **P0**
 - [ ] **Web Store policy package:**
   - Privacy policy URL.
