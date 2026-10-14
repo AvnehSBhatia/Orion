@@ -1,6 +1,7 @@
-// Stand-in for Team C's backend. Accepts POST /api/ingest/code with the shape
-// from spec section 1.3 (plus the optional `cards` field), checks it, and
-// saves the last payload to mock/out/ so you can see exactly what was sent.
+// A local stand-in for POST /api/ingest/code, for checking what the sync sends
+// without running the Orion server. It validates the body against the same
+// limits as the server, saves the last payload to mock/out/last-code.json, and
+// answers with made-up node ids. It ignores auth and stores nothing else.
 
 import { createServer } from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
