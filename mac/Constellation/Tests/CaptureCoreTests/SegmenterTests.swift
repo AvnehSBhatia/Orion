@@ -28,6 +28,21 @@ struct SegmenterTests {
         #expect(segmenter.records.count == 2)
     }
 
+    @Test("Leaving an app finishes its record; coming back starts a new one")
+    func finishOnLeave() {
+        var segmenter = Segmenter()
+        segmenter.ingest(snapshot(lines: ["a"]))
+        #expect(segmenter.open != nil)
+        let finished = segmenter.finishCurrent()
+        #expect(finished)
+        #expect(segmenter.open == nil)
+        let again = segmenter.finishCurrent()
+        #expect(!again) // nothing left open
+        #expect(segmenter.ingest(snapshot(lines: ["a"], at: 5)) == .newRecord) // same window, but a new visit
+        #expect(segmenter.records.count == 2)
+        #expect(segmenter.open?.id == segmenter.records.last?.id)
+    }
+
     @Test("Same window appends only new lines")
     func appendsNewLines() {
         var segmenter = Segmenter()

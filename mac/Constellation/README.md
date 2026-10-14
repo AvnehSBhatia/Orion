@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 94 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 95 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -57,7 +57,8 @@ The debug view adds a **Redactions** count per app. Text is still never shown th
 
 Nothing leaves the Mac unless it appears in the Outbox first (spec 2.5, 9). Open it from the menu: "Outbox (N to review)…".
 
-- A record goes to the Outbox when it **closes**: the app, window, or page changes, or 2 minutes pass with no new capture. The record still being written never appears. Records left open when the app quit are closed at the next launch.
+- A record goes to the Outbox when it **closes**: you open another email, window, or page, you **leave the app** (even for an app that isn't captured, such as Terminal or this Outbox), or 2 minutes pass with no new capture. Records left open when the app quit are closed at the next launch.
+- The card at the top says whether anything new can arrive: **Capture is off** or **Paused** (with Turn on / Resume), or **Capturing now** with the title of the record still being written (title only; its text appears once it closes).
 - **Review first** (default): items wait under "Waiting for review". **Approve automatically after 30 minutes** is on by default and can be turned off. **Log only**: items are approved as soon as they close. The mode is chosen in the welcome screens and can be changed in the Outbox.
 - Items are grouped into **30 minute batches**. A batch can be approved or deleted as a whole; each item can be edited or deleted on its own.
 - A collapsed batch lists its first few items ("Email: Re: Acme renewal · Web page: Pricing – Initech · +3 more"), so it can be scanned without opening it.
@@ -80,7 +81,7 @@ Sends **approved** Outbox items to the backend. Request and response shapes are 
 
 ## Look (space theme)
 
-All screens share one dark "space" theme: `Sources/Constellation/UI/Theme/` holds the tokens (`Theme.swift`: colors, spacing, type), the star field background (`SpaceBackground.swift`, a fixed-seed Canvas with no animation, so it costs nothing when idle), and the components every screen uses (`Components.swift`: GlassCard, StarBadge, StatusPill, GlowDot, Chip, Primary/Ghost/Icon buttons, SectionHeader, InfoButton, ConstellationDivider, EmptyState). Windows have a transparent title bar with content running under it, are always dark, and have default and minimum sizes in `MenuBarController.sizes`. The menu bar eye opens a popover (status, Pause, the windows, Delete all, Quit).
+All screens share one dark "space" theme: `Sources/Constellation/UI/Theme/` holds the tokens (`Theme.swift`: colors, spacing, type), the star field background (`SpaceBackground.swift`, a fixed-seed Canvas with no animation, so it costs nothing when idle), and the components every screen uses (`Components.swift`: GlassCard, StarBadge, StatusPill, GlowDot, Chip, Primary/Ghost/Icon buttons, SectionHeader, InfoButton, ConstellationDivider, EmptyState). Windows have a transparent title bar with content running under it, are always dark, and have default and minimum sizes in `MenuBarController.sizes`. The menu bar eye opens a popover (status, Pause, the windows, Delete all, **Quit Constellation**). Command-Q also quits while a Constellation window is in front.
 
 Text contrast is at least 4.5:1 on every surface (tertiary text is 56% opacity rather than 50% for that reason). Reduce Transparency swaps translucent cards for solid ones.
 

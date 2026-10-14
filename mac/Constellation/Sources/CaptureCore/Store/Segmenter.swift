@@ -15,16 +15,29 @@ public struct Segmenter: Sendable {
 
     public private(set) var records: [ActivityRecord] = []
     private var seenLines = Set<String>() // lines already in the current record
+    private var finished = false // the current record was ended early; the next snapshot starts a new one
 
     public init() {}
 
     public var current: ActivityRecord? { records.last }
 
+    /// The record still being written, if any.
+    public var open: ActivityRecord? { finished ? nil : current }
+
+    /// End the current record now, e.g. when the user leaves its app, instead of
+    /// waiting for the idle gap. Returns false if nothing was open.
+    @discardableResult
+    public mutating func finishCurrent() -> Bool {
+        guard current != nil, !finished else { return false }
+        finished = true
+        return true
+    }
+
     @discardableResult
     public mutating func ingest(_ snapshot: Snapshot) -> Outcome {
         guard snapshot.skip == nil, snapshot.foundWindow else { return .unchanged }
 
-        if let current, continues(current, with: snapshot) {
+        if let current, !finished, continues(current, with: snapshot) {
             let added = append(snapshot.lines)
             records[records.count - 1].endedAt = snapshot.capturedAt
             records[records.count - 1].snapshotCount += 1
@@ -38,6 +51,7 @@ public struct Segmenter: Sendable {
             status: .local, snapshotCount: 1
         ))
         seenLines = []
+        finished = false
         append(snapshot.lines)
         updateRedactionCount()
         if records.count > Limits.maxRecordsInMemory { records.removeFirst(records.count - Limits.maxRecordsInMemory) }
@@ -48,6 +62,7 @@ public struct Segmenter: Sendable {
     public mutating func clear() {
         records = []
         seenLines = []
+        finished = false
     }
 
     private func continues(_ record: ActivityRecord, with snapshot: Snapshot) -> Bool {

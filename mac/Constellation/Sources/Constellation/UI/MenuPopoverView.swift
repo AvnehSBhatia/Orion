@@ -65,12 +65,19 @@ struct MenuPopoverView: View {
 
             HStack {
                 Button(role: .destructive, action: actions.deleteAll) {
-                    Label("Delete all captured data", systemImage: "trash")
+                    Label("Delete all data", systemImage: "trash")
                 }
                 .buttonStyle(LinkButtonStyle(color: Theme.danger))
+                .fixedSize()
                 .help("Deletes every record, the Outbox, and the encryption key, in one click")
-                Spacer()
-                Button("Quit", action: actions.quit).buttonStyle(LinkButtonStyle(color: Theme.textSecondary))
+                Spacer(minLength: Theme.Space.s)
+                Button(action: actions.quit) {
+                    Label("Quit Constellation", systemImage: "power")
+                }
+                .buttonStyle(GhostButtonStyle(small: true))
+                .fixedSize()
+                .keyboardShortcut("q")
+                .help("Stop capturing and quit (Command-Q)")
             }
         }
         .padding(Theme.Space.l + 2)

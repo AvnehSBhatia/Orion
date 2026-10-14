@@ -16,6 +16,7 @@ struct OutboxView: View {
         SpaceScreen {
             WindowHeader(title: "Outbox", subtitle: "Nothing leaves this Mac until it's here first.")
         } content: {
+            NowCard(model: model, settings: settings)
             modeRow
             ConnectionCard(sender: sender, settings: settings, directory: sender.directory)
             if !model.available {
@@ -68,6 +69,64 @@ struct OutboxView: View {
                  : "Batches are approved as soon as they close, and listed here as a log.")
                 .font(Theme.Typo.caption)
                 .foregroundStyle(Theme.textSecondary)
+        }
+    }
+}
+
+// MARK: Now
+
+/// Whether anything new can arrive, and what's being captured right now. Without
+/// it the Outbox looks frozen while capture is off or a record is still open.
+private struct NowCard: View {
+    @ObservedObject var model: OutboxModel
+    @ObservedObject var settings: Settings
+
+    var body: some View {
+        GlassCard(emphasis: settings.state == .on ? .normal : .warning) {
+            HStack(alignment: .top, spacing: Theme.Space.m) {
+                GlowDot(color: dotColor).padding(.top, 6)
+                VStack(alignment: .leading, spacing: 4) {
+                    switch settings.state {
+                    case .off:
+                        Text("Capture is off, so nothing new arrives here.")
+                    case .paused(let until):
+                        Text("Paused until \(until.formatted(date: .omitted, time: .shortened)), so nothing new arrives here.")
+                    case .on:
+                        if let record = model.now {
+                            let summary = ItemSummary(record)
+                            HStack(spacing: Theme.Space.s) {
+                                Text("Capturing now").foregroundStyle(Theme.textSecondary)
+                                Image(systemName: summary.symbol).foregroundStyle(Theme.textSecondary)
+                                Text(summary.headline).lineLimit(1).truncationMode(.tail)
+                                if let detail = summary.detail {
+                                    Text(detail).foregroundStyle(Theme.textSecondary).lineLimit(1)
+                                }
+                            }
+                            Text("It moves to Waiting for review when you open another email, window or app, or after \(Int(Limits.idleGapSeconds / 60)) minutes idle.")
+                                .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text("Capture is on. Open one of your chosen apps and it shows up here.")
+                            Text("Reading: \(settings.allowed.isEmpty ? "no apps chosen yet" : "\(settings.allowed.count) \(settings.allowed.count == 1 ? "app" : "apps")")")
+                                .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
+                        }
+                    }
+                }
+                Spacer(minLength: Theme.Space.s)
+                switch settings.state {
+                case .off: Button("Turn on") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle(small: true))
+                case .paused: Button("Resume") { settings.resume() }.buttonStyle(PrimaryButtonStyle(small: true))
+                case .on: EmptyView()
+                }
+            }
+        }
+    }
+
+    private var dotColor: Color {
+        switch settings.state {
+        case .on: model.now == nil ? Theme.textSecondary : Theme.success
+        case .paused: Theme.warning
+        case .off: Theme.danger
         }
     }
 }

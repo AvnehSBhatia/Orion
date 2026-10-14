@@ -6,6 +6,8 @@ import Foundation
     @Published private(set) var toReview: [OutboxBatch] = []
     @Published private(set) var approved: [OutboxBatch] = []
     @Published private(set) var sent: [OutboxBatch] = []
+    /// The record still being written; it joins "Waiting for review" when it closes.
+    @Published var now: ActivityRecord?
     var sender: Sender?
     var directory: ClientDirectory?
     static let sentShown = 100
@@ -62,6 +64,7 @@ import Foundation
             Thanks,
             """, status: .queued)
         sampleOpen = renewal.id
+        now = item(0, mail, "Mail", "Q4 roadmap review — Priya Shah", "", status: .local).record
         toReview = OutboxBatch.group([
             renewal,
             item(8, mail, "Mail", "Pricing questions — Globex", "Thanks Tom, here are the GLX-12 numbers we discussed on Monday.", status: .queued),

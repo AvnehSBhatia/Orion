@@ -37,10 +37,31 @@ import CaptureCore
         }
     }
 
+    /// A menu bar app has no menu of its own; this one only makes Command-Q (quit),
+    /// Command-W (close) and the edit shortcuts work while a Constellation window is in front.
+    private func installMainMenu() {
+        let menu = NSMenu()
+        let appItem = NSMenuItem()
+        appItem.submenu = NSMenu()
+        appItem.submenu?.addItem(withTitle: "Quit Constellation", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(appItem)
+        let editItem = NSMenuItem()
+        let edit = NSMenu(title: "Edit")
+        edit.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = edit
+        menu.addItem(editItem)
+        NSApp.mainMenu = menu
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // No permission prompt here: the welcome screens explain what is read first,
         // and ask for the permission themselves (spec 5.1).
         menuBar = MenuBarController(settings: settings, engine: engine, stats: stats, outbox: outbox, sender: sender, drafts: drafts)
+        installMainMenu()
 
         if smokeTest {
             // Build everything, start nothing, and quit: no app is read.
@@ -60,7 +81,7 @@ import CaptureCore
         print("""
         Constellation is running. Look for the eye icon at the top right of your menu bar.
         If your menu bar is full, macOS may hide it behind the camera notch; the Apps window has the same controls.
-        Press Ctrl+C here, or choose Quit in the menu, to stop.
+        Press Ctrl+C here, or choose Quit Constellation in the menu bar popover, to stop.
         """)
         // First run, or no permission yet: the welcome screens. Otherwise the apps
         // window, since a menu bar app has no window of its own.

@@ -78,8 +78,12 @@ struct CaptureStatus: Equatable {
     /// and refresh the Outbox window.
     private func checkOutbox() {
         guard let store else { return }
+        if let open = segmenter.open, Date().timeIntervalSince(open.endedAt) > Limits.idleGapSeconds {
+            segmenter.finishCurrent() // the store closes it just below
+            outbox?.now = nil
+        }
         store.closeOpen(
-            except: segmenter.current?.id, endedBefore: Date().addingTimeInterval(-Limits.idleGapSeconds),
+            except: segmenter.open?.id, endedBefore: Date().addingTimeInterval(-Limits.idleGapSeconds),
             approve: settings.outboxMode == .logOnly
         )
         if settings.outboxMode == .reviewFirst, settings.autoApprove {
@@ -89,9 +93,18 @@ struct CaptureStatus: Equatable {
         // The sender checks for approved items on its own timer.
     }
 
+    /// Finish the record being written and move it to the Outbox.
+    private func closeCurrent() {
+        segmenter.finishCurrent()
+        store?.closeOpen(except: nil, endedBefore: nil, approve: settings.outboxMode == .logOnly)
+        outbox?.now = nil
+        outbox?.refresh()
+    }
+
     /// Delete all (spec 2.7): every record in memory and on disk, the store's key, and every counter.
     func deleteAll() {
         segmenter.clear()
+        outbox?.now = nil
         names.reset()
         Redactor.clearCache()
         directory?.reset()
@@ -116,13 +129,18 @@ struct CaptureStatus: Equatable {
     }
 
     private func frontAppChanged(_ app: NSRunningApplication?) {
+        // Leaving an app finishes its record right away, so it shows in the Outbox
+        // now rather than after the idle gap (switching to Terminal or this app's
+        // own windows used to leave it open for 2 minutes).
+        if let open = segmenter.open, open.appBundleId != app?.bundleIdentifier || gate(app) != nil {
+            closeCurrent()
+        }
         scheduler.cancelAll()
         observer?.stop()
         observer = nil
         front = app
         refreshStatus()
         guard let app, gate(app) == nil else { return }
-
         let observer = AppObserver(pid: app.processIdentifier) { [weak self] event in self?.handle(event) }
         observer.start()
         self.observer = observer
@@ -168,8 +186,9 @@ struct CaptureStatus: Equatable {
 
     // MARK: Capture
 
-    private func gate(_ app: NSRunningApplication) -> SkipReason? {
-        CaptureGate.check(
+    private func gate(_ app: NSRunningApplication?) -> SkipReason? {
+        guard let app else { return .notAllowed }
+        return CaptureGate.check(
             captureOn: settings.captureOn, paused: settings.isPaused, systemAvailable: system.isAvailable,
             trusted: AXIsProcessTrusted(), bundleId: app.bundleIdentifier ?? "", allowed: settings.allowed
         )
@@ -213,6 +232,7 @@ struct CaptureStatus: Equatable {
                     store?.closeOpen(except: segmenter.current?.id, endedBefore: nil, approve: settings.outboxMode == .logOnly)
                     outbox?.refresh()
                 }
+                outbox?.now = segmenter.open
                 stats.updateStore(store?.totals(), storeAvailable: store != nil, inMemory: segmenter)
             }
         }
