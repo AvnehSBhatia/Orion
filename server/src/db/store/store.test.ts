@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readGraph } from "@/graph/view";
 import { extracted, memoryStore } from "@/test/helpers";
-import { nodeKey, toPublicNode } from "./store";
+import { nodeKey, toPublicNode } from ".";
 
 const prov = { sourceKind: "extension" as const, sourceRef: "https://example.com/a" };
 
