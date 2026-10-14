@@ -141,6 +141,12 @@ struct CaptureStatus: Equatable {
             scheduler.schedule("title", after: Limits.debounce(Limits.titleDebounceSeconds)) { [weak self] in
                 self?.capture(.titleChange)
             }
+        case .selectionChanged:
+            // A new email or item: read once things settle, then re-read like after a switch.
+            scheduler.schedule("selection", after: Limits.debounce(Limits.selectionDebounceSeconds)) { [weak self] in
+                self?.capture(.selectionChange)
+                self?.scheduleReread()
+            }
         case .contentChanged:
             scheduler.throttle(contentKey(pid), every: Limits.debounce(Limits.contentDebounceSeconds)) { [weak self] in
                 self?.capture(.contentChange)

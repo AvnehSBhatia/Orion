@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 78 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 82 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -74,6 +74,18 @@ Sends **approved** Outbox items to the backend. Request and response shapes are 
 - Approved items are sent within a minute, up to 50 per `POST /v1/work-blocks`, oldest first, and right away after you approve a batch ("Send now" forces it). Only ids the backend accepts are marked sent; they move to the Outbox's **Sent** log with the time and destination (spec 9). Sent items can no longer be edited.
 - If the backend can't be reached, it tries again after 30 s, then 1, 2, 4 ... minutes, up to 15 minutes. If the backend rejects the token (401 or 403), the app disconnects and asks to connect again. Approved items keep waiting either way.
 - Log only mode now means: items close, are approved, and are sent within a minute.
+
+## App profiles (Mail)
+
+Some apps keep everything in one window. Mail shows the mailbox list, the list of emails (each with a preview of up to 1,000 characters), and the open email side by side, and its window title stays "Inbox – Primary · 26 messages" whichever email is open. Read whole, a Mail block was a mix of many emails, never split per email, and couldn't be matched to a client.
+
+A profile (`Sources/CaptureCore/Capture/AppProfiles.swift`) names views to skip and where the real title is, by the developer identifiers the app gives its views, found with `ax-probe layout` (counts only, no text). For Mail:
+
+- Skipped: `MailboxesOutlineView` (sidebar) and `Mail.messageList` (the list of emails and their previews).
+- Title: the selected email's subject and sender, e.g. "Your Apple ID was used to sign in — Apple". So each email is its own block, and the sender counts as a strong client signal.
+- Text: what's left, which is the open email.
+
+Clicking another email changes the selection but not the window title, so selection changes (`AXSelectedRowsChanged`, `AXSelectedChildrenChanged`) now trigger a read about 1 second later, plus the usual re-read. Apps without a profile are read whole, as before.
 
 ## Client matching
 

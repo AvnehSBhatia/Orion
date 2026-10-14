@@ -70,7 +70,9 @@ public enum WindowCapture {
             snapshot.skip = .privateWindow
             return finish(snapshot)
         }
-        snapshot.windowTitle = title
+        // Apps like Mail keep one window title for every email; the profile finds the real one.
+        let profile = AppProfile.forApp(request.bundleId)
+        snapshot.windowTitle = profile?.readTitle(in: window, start: start) ?? title
 
         if request.isBrowser {
             // Browsers: title plus domain and path only. Page text is never read.
@@ -79,7 +81,7 @@ public enum WindowCapture {
                 return finish(skipped(snapshot, .skippedDomain))
             }
         } else {
-            let walk = AXReader.walkText(window, start: start)
+            let walk = AXReader.walkText(window, start: start, skip: profile?.skipIdentifiers ?? [])
             snapshot.lines = walk.lines
             snapshot.chars = walk.chars
             snapshot.nodes = walk.nodes

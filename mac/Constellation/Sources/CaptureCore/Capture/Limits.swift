@@ -30,6 +30,7 @@ public enum Limits {
     // Triggers (spec 5.2).
     public static let contentDebounceSeconds: TimeInterval = 10 // per window
     public static let titleDebounceSeconds: TimeInterval = 1 // coalesces rapid title changes
+    public static let selectionDebounceSeconds: TimeInterval = 1 // e.g. clicking through emails
     public static let rereadAfterSwitchSeconds: TimeInterval = 1.5 // M0: the first read after a switch is unreliable
     public static let idleThresholdSeconds: TimeInterval = 120
     public static let idleCheckSeconds: TimeInterval = 5

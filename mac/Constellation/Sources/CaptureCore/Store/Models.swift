@@ -6,6 +6,7 @@ public enum Trigger: String, Sendable {
     case reread = "re-read"
     case windowChange = "window change"
     case titleChange = "title change"
+    case selectionChange = "selection change"
     case contentChange = "content change"
     case idleReturn = "back from idle"
 }

@@ -23,7 +23,8 @@ public enum AXReader {
 
     // Two steps per node, so a node's role is checked before any of its text is
     // read. That is how secure fields are skipped without touching their value.
-    static let shapeAttributes = [kAXRoleAttribute, kAXSubroleAttribute, kAXChildrenAttribute]
+    // Index 3, the developer identifier, lets app profiles skip views (AppProfiles.swift).
+    static let shapeAttributes = [kAXRoleAttribute, kAXSubroleAttribute, kAXChildrenAttribute, kAXIdentifierAttribute]
     static let textAttributes = [kAXValueAttribute, kAXTitleAttribute, kAXDescriptionAttribute, kAXSelectedTextAttribute]
 
     public static func focusedWindow(of app: AXUIElement) -> AXUIElement? {
@@ -38,7 +39,7 @@ public enum AXReader {
     }
 
     /// `start` is when the whole read began; the time budget covers all of it.
-    public static func walkText(_ window: AXUIElement, start: DispatchTime) -> TextWalk {
+    public static func walkText(_ window: AXUIElement, start: DispatchTime, skip: Set<String> = []) -> TextWalk {
         var walk = TextWalk()
         var seen = Set<String>()
         var stack: [(AXUIElement, Int)] = [(window, 0)]
@@ -53,6 +54,7 @@ public enum AXReader {
             let subrole = shape[1] as? String ?? ""
             if role == "AXSecureTextField" || subrole == "AXSecureTextField" { walk.secureSkipped += 1; continue }
             if skipRoles.contains(role) || skipSubroles.contains(subrole) { continue }
+            if !skip.isEmpty, let identifier = shape[3] as? String, skip.contains(identifier) { continue }
 
             for value in copyMultiple(node, textAttributes) {
                 guard let text = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),

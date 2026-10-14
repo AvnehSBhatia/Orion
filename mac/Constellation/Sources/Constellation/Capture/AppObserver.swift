@@ -9,6 +9,7 @@ import Foundation
     enum Event {
         case focusedWindowChanged
         case titleChanged
+        case selectionChanged // another email or item picked: the window title may not change
         case contentChanged
     }
 
@@ -16,6 +17,8 @@ import Foundation
         (kAXFocusedWindowChangedNotification, .focusedWindowChanged),
         (kAXMainWindowChangedNotification, .focusedWindowChanged),
         (kAXTitleChangedNotification, .titleChanged),
+        (kAXSelectedRowsChangedNotification, .selectionChanged),
+        (kAXSelectedChildrenChangedNotification, .selectionChanged),
         (kAXValueChangedNotification, .contentChanged),
         (kAXSelectedTextChangedNotification, .contentChanged),
         (kAXLayoutChangedNotification, .contentChanged),
