@@ -6,10 +6,10 @@ The intended flow: someone changes a campaign in Google Ads, the Orion extension
 
 ## Connect Claude Code
 
-Authentication is a bearer token. Put yours in the environment:
+Authentication is an Orion API token, sent as a bearer. The token decides the org and the person, so results are ranked for you. Create one in `server/` with `npx tsx scripts/account.ts token --username <you> --label "claude code"` (or `POST /api/auth/tokens`), then put it in the environment:
 
 ```sh
-export ORION_TOKEN=...   # your Orion token
+export ORION_TOKEN=...   # your Orion API token
 ```
 
 Add the server (user scope, available in every repo):
@@ -19,10 +19,10 @@ claude mcp add --transport http orion https://<your-orion-host>/api/mcp \
   --header "Authorization: Bearer $ORION_TOKEN"
 ```
 
-For local development against `npm run dev` (in `server/`):
+For local development against `npm run dev` in `server/` (port 3001):
 
 ```sh
-claude mcp add --transport http orion http://localhost:3000/api/mcp \
+claude mcp add --transport http orion http://localhost:3001/api/mcp \
   --header "Authorization: Bearer $ORION_TOKEN"
 ```
 
@@ -44,7 +44,7 @@ Or share it with the team by checking in `.mcp.json` at the repo root. Claude Co
 
 Check it with `claude mcp list` or `/mcp` inside Claude Code.
 
-Until token auth ships, the org and person come from the query string (`/api/mcp?orgId=demo&userId=devon`) or the `x-orion-org` and `x-orion-user` headers.
+Without a token the server answers 401. Only when it runs with `AUTH_DISABLED=true` (local demos) do the org and person come from the query string (`/api/mcp?orgId=demo&userId=devon`) or the `x-orion-org` and `x-orion-user` headers instead.
 
 ## Tools
 
@@ -75,7 +75,7 @@ If the file would pass 12k chars, the middle sections are trimmed and a note say
 ## Try it with curl
 
 ```sh
-URL='http://localhost:3000/api/mcp?orgId=demo&userId=devon'
+URL='http://localhost:3001/api/mcp'   # add ?orgId=demo&userId=devon if the server runs with AUTH_DISABLED=true
 H=(-H 'content-type: application/json' -H 'accept: application/json, text/event-stream' -H "Authorization: Bearer $ORION_TOKEN")
 
 curl -s "${H[@]}" "$URL" -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
