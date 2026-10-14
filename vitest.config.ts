@@ -8,5 +8,7 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     environment: "node",
+    // maintainOrg trains a small model; it runs about 5s on a laptop, right at the default timeout.
+    testTimeout: 30_000,
   },
 });

@@ -43,3 +43,6 @@ codebase-agent/mock/out/
 # agent private (git treats these as harmless patterns that match nothing; the codebase agent never sends them)
 +./demo/src/features/secret-pricing-engine/
 +./demo/src/features/unreleased-voice-mode/
+
+# Context files written by coding agents from the Orion MCP server
+.orion/
