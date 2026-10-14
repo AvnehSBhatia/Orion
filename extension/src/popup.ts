@@ -9,7 +9,7 @@ const ERROR_COPY: Record<ErrorCode, string> = {
   no_user: 'Add your user id in settings first.',
   restricted: 'This page cannot be captured.',
   timeout: 'That took too long. Try again.',
-  backend: 'Could not reach the backend. Try again.',
+  backend: 'Could not reach Orion. Try again.',
   unknown: 'Could not capture. Try again.',
 };
 
@@ -17,8 +17,8 @@ const ERROR_COPY: Record<ErrorCode, string> = {
 const RECORDING_ERROR_COPY: Record<ErrorCode, string> = {
   no_user: 'Add your user id in settings.',
   restricted: 'Skipping this page. It cannot be captured.',
-  timeout: 'The backend is slow. Still trying.',
-  backend: 'Could not reach the backend. Still trying.',
+  timeout: 'Orion is slow to answer. Still trying.',
+  backend: 'Could not reach Orion. Still trying.',
   unknown: 'Last capture failed. Still trying.',
 };
 

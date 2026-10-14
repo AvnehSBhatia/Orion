@@ -1,6 +1,5 @@
 /* Shared theme for the popup, chooser window, and settings page: deep space,
-   a faint nebula, and a slow twinkling starfield. Domain colors from the spec
-   are used for the constellation mark. */
+   a faint nebula, and a slow twinkling starfield. */
 
 :root {
   --bg: #0b1020;
@@ -71,7 +70,7 @@ body > * { position: relative; z-index: 1; }
 
 h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: 0.01em; }
 
-/* Brand row: constellation mark, name, and a one line tagline. */
+/* Brand row: star mark, name, and a one line tagline. */
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand .logo { width: 40px; height: 40px; flex: none; }
 .brand .tagline { color: var(--muted); font-size: 14px; margin: 0; }

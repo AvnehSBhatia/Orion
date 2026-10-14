@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "Constellation",
-  "description": "Shares your screen with your company context map every few seconds.",
+  "name": "Orion",
+  "description": "Captures the windows, screens, and tabs you choose into your team's Orion context map.",
   "version": "0.6.1",
-  "action": { "default_popup": "popup.html", "default_title": "Constellation" },
+  "action": { "default_popup": "popup.html", "default_title": "Orion" },
   "options_page": "options.html",
   "permissions": ["activeTab", "scripting", "storage", "alarms", "desktopCapture"],
   "host_permissions": ["<all_urls>"],

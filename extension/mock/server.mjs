@@ -1,6 +1,7 @@
-// Stand-in for Team C's backend. Accepts POST /api/ingest/capture with the
-// shape from spec section 1.3, checks the limits, and saves the last capture
-// to mock/out/ so you can look at exactly what the extension sent.
+// A local stand-in for POST /api/ingest/capture, for seeing exactly what the
+// extension sends without running the Orion server. It checks the same size
+// limits as the server and saves the last capture to mock/out/ (screenshot,
+// HTML, and the JSON body). It ignores auth and answers with a made-up node id.
 
 import { createServer } from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
