@@ -44,6 +44,28 @@ describe("LlmExtractor", () => {
     expect(req.messages[1].content).toContain("Daily budget 650");
   });
 
+  it("puts what changed ahead of the page and tells the model to record the change", async () => {
+    const { llm, requests } = fakeLlm([jsonTurn({ nodes: [], edges: [] }), jsonTurn({ nodes: [], edges: [] })]);
+    const ex = new LlmExtractor(llm, "deepseek/test");
+    const diff = 'Changed: "Daily budget $900" -> "Daily budget $1,200" ($900 -> $1,200)';
+    await ex.fromCapture(
+      { url: "https://ads.google.com", title: "Ads", text: "Daily budget $1,200", changes: { since: "2026-10-10T12:00:00.000Z", diff } },
+      [{ id: "q4", label: "Q4 search campaign", type: "campaign", domain: "marketing" }],
+      { org: null, author: { name: "Mina Rao", role: "Growth marketer" } },
+    );
+    const [system, user] = requests[0].messages.map((m) => m.content as string);
+    expect(system).toContain("That change is the news: record it.");
+    expect(user).toContain(`What changed since the last capture (at 2026-10-10T12:00:00.000Z):\n${diff}\n\nPage text now (for context, may be shortened):\nDaily budget $1,200`);
+    expect(user.indexOf("What changed")).toBeLessThan(user.indexOf("Page text now"));
+    expect(user).toContain("Sent by: Mina Rao");
+
+    await ex.fromCapture({ url: "https://ads.google.com", title: "Ads", text: "Daily budget $900" }, []);
+    const [system2, user2] = requests[1].messages.map((m) => m.content as string);
+    expect(system2).not.toContain("That change is the news");
+    expect(user2).not.toContain("What changed");
+    expect(user2).toContain("Page text:\nDaily budget $900");
+  });
+
   it("captures never decide sellable and are capped at 8 nodes", async () => {
     const node = { label: "x", type: "campaign", domain: "marketing", summary: "s", todo: null, readLinks: [], owner: null, status: "on_track" };
     const { llm } = fakeLlm([jsonTurn({ nodes: Array.from({ length: 12 }, (_, i) => ({ ...node, label: `n${i}` })), edges: [] })]);

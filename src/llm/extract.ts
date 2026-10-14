@@ -5,8 +5,11 @@ import type { ExtractedNode, GraphUpdate, StoredNode } from "@/db/store";
 import { HttpError } from "@/server/http";
 import { completeJson, nullable, OpenRouterClient, type LlmClient } from "./openrouter";
 
-/** The page as visible text; the screenshot goes to the embedder, not the extractor. */
-export type CaptureInput = { url: string; title: string; text: string };
+/**
+ * The page as visible text; the screenshot goes to the embedder, not the extractor.
+ * `changes`: what changed since the sender's previous capture of the same URL (`since` is that capture's time).
+ */
+export type CaptureInput = { url: string; title: string; text: string; changes?: { since: string; diff: string } };
 export type CodeInput = { repo: string; commitSha: string; files: { path: string; diff: string }[]; cards?: FeatureCard[] };
 export type KnownNode = Pick<StoredNode, "id" | "label" | "type" | "domain">;
 /** Who the org is and who sent the document, so the model can tell this org's work from everything else. */
@@ -149,6 +152,12 @@ When something on the page is already in the known nodes list, reuse that label 
 Write in plain sentences. Never use em dashes or exclamation marks.
 Answer with JSON matching the schema. If nothing useful is on the page, return empty lists.`;
 
+const CHANGE_PROMPT = `
+The input starts with what changed on this page since the same person's previous capture of it. That change is the news: record it.
+State the change itself with its old and new values and who made it, for example a summary like "Daily budget raised from $900 to $1,200 by Mina Rao." Use the person in "Sent by" unless the page names someone else.
+Put the change on the node it belongs to, reusing a known label exactly when the page is about that thing. Set status when the change implies one (for example paused or over budget is at_risk, launched or approved is done, resumed is on_track).
+Use the page text only for context: do not restate unchanged things from it. If the change is only cosmetic (counters, timestamps, layout) and the page has no other work on it, return empty lists.`;
+
 const CODE_PROMPT = `You read a code change and write feature cards that anyone on the team, including sales, can understand and repeat.
 For each meaningful change: a label, a plain-language summary of what a customer or teammate gets (not how the code works), status, release, and sellable.
 release is shipped, in_beta, or in_progress. sellable is true only when release is shipped or in_beta. Skip refactors, tests, and tooling unless they change what users get. At most ${MAX_CODE_NODES} cards.
@@ -217,6 +226,13 @@ function knownList(known: KnownNode[]): string {
   return `Known nodes:\n${lines.join("\n")}`;
 }
 
+/** The capture as the model reads it: who and what is known, then what changed (when known), then the page. */
+export function captureUser(input: CaptureInput, known: KnownNode[], about?: ExtractContext): string {
+  const change = input.changes ? `What changed since the last capture (at ${input.changes.since}):\n${input.changes.diff}\n\n` : "";
+  const page = input.changes ? "Page text now (for context, may be shortened):" : "Page text:";
+  return `${aboutLines(about, input.url)}${knownList(known)}\n\nURL: ${input.url}\nTitle: ${input.title}\n${change}${page}\n${input.text}`;
+}
+
 /** Graph extraction through an OpenAI-compatible model (DeepSeek on OpenRouter by default). */
 export class LlmExtractor implements Extractor {
   constructor(
@@ -229,8 +245,8 @@ export class LlmExtractor implements Extractor {
       model: this.model,
       name: "build_update",
       schema: BUILD_UPDATE_SCHEMA,
-      system: EXTRACT_PROMPT,
-      user: `${aboutLines(about, input.url)}${knownList(known)}\n\nURL: ${input.url}\nTitle: ${input.title}\nPage text:\n${input.text}`,
+      system: input.changes ? `${EXTRACT_PROMPT}\n${CHANGE_PROMPT}` : EXTRACT_PROMPT,
+      user: captureUser(input, known, about),
     });
     const out = parseModelOutput(captureOut, raw);
     const nodes: ExtractedNode[] = out.nodes.slice(0, MAX_CAPTURE_NODES).map((n) => ({ ...n, sellable: null }));
