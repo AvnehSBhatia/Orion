@@ -319,7 +319,6 @@ private struct BatchRow: View {
 
                 Chip(text: "\(batch.items.count) \(batch.items.count == 1 ? "item" : "items")")
                 Chip(text: "\(batch.redactions) \(batch.redactions == 1 ? "redaction" : "redactions")")
-                if kind == .sent { StarBadge(kind: .sent, label: "") }
                 Spacer(minLength: Theme.Space.s)
                 if kind == .review {
                     Button("Approve") { model.approve(batch) }.buttonStyle(PrimaryButtonStyle(small: true))
@@ -336,8 +335,8 @@ private struct BatchRow: View {
                 VStack(spacing: 0) {
                     ForEach(Array(batch.items.enumerated()), id: \.element.id) { index, item in
                         if index > 0 { Divider().overlay(Color.white.opacity(0.05)) }
-                        ItemRow(item: item, match: model.match(item), preview: model.preview(item), sent: kind == .sent,
-                                hasClients: model.hasClients, startOpen: isSampleOpen(item), onEdit: { editing = item }, onDelete: { model.delete([item.id]) })
+                        ItemRow(item: item, match: model.match(item), sent: kind == .sent,
+                                startOpen: isSampleOpen(item), onEdit: { editing = item }, onDelete: { model.delete([item.id]) })
                     }
                 }
                 .padding(.leading, 18)
@@ -354,31 +353,28 @@ private struct BatchRow: View {
     }
 }
 
-/// One item as a single readable line ("Email · subject · from sender"); click to
-/// read a short excerpt, the full text, or the exact data that is sent.
+/// One item as a single readable line ("subject  from sender"); click to read it.
+/// Details lists exactly what is sent, in words rather than code.
 private struct ItemRow: View {
     let item: OutboxItem
     let match: ClientMatch?
-    let preview: String
     let sent: Bool
-    var hasClients = true
     let onEdit: () -> Void
     let onDelete: () -> Void
     @State private var open: Bool
     @State private var showFull = false
-    @State private var showData = false
+    @State private var showDetails = false
     @State private var confirmDelete = false
 
-    init(item: OutboxItem, match: ClientMatch?, preview: String, sent: Bool, hasClients: Bool, startOpen: Bool = false,
+    init(item: OutboxItem, match: ClientMatch?, sent: Bool, startOpen: Bool = false,
          onEdit: @escaping () -> Void, onDelete: @escaping () -> Void) {
-        self.hasClients = hasClients
         self.item = item
         self.match = match
-        self.preview = preview
         self.sent = sent
         self.onEdit = onEdit
         self.onDelete = onDelete
         _open = State(initialValue: startOpen)
+        _showDetails = State(initialValue: startOpen) // debug renders only
     }
 
     private var summary: ItemSummary { ItemSummary(item.record) }
@@ -399,18 +395,6 @@ private struct ItemRow: View {
                 .buttonStyle(.plain)
                 .help(summary.headline + (summary.detail.map { " (\($0))" } ?? ""))
                 Spacer(minLength: Theme.Space.s)
-                if let match {
-                    Label(match.client.name, systemImage: "star.fill")
-                        .font(Theme.Typo.caption.weight(.medium))
-                        .foregroundStyle(Theme.success)
-                        .lineLimit(1)
-                        .help("Matched by \(match.reason)")
-                } else if hasClients {
-                    StarBadge(kind: .noClient, label: "No client")
-                } else {
-                    StarBadge(kind: .noClient, label: "Clients not synced")
-                        .help("Connect to the backend to sync the client list. Items are matched once it arrives.")
-                }
                 Text(item.record.startedAt.formatted(date: .omitted, time: .shortened))
                     .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary).monospacedDigit()
                 if !sent { IconButton(symbol: "pencil", help: "Edit the text", action: onEdit) } // what was sent can't change
@@ -420,22 +404,9 @@ private struct ItemRow: View {
 
             if open {
                 VStack(alignment: .leading, spacing: Theme.Space.s) {
-                    HStack(spacing: Theme.Space.s) {
-                        Chip(text: summary.kind)
-                        Text("\(item.record.appName) · \(timeRange(item.record.startedAt, item.record.endedAt))")
-                            .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
-                        if item.record.redactionCount > 0 {
-                            Chip(text: "\(item.record.redactionCount) \(item.record.redactionCount == 1 ? "redaction" : "redactions")")
-                        }
-                        if item.edited { Chip(text: "Edited") }
-                        if let sentAt = item.sentAt {
-                            Text("Sent at \(sentAt.formatted(date: .omitted, time: .shortened)) to \(item.sentTo ?? "the backend")")
-                                .font(Theme.Typo.caption).foregroundStyle(Theme.line)
-                        }
-                    }
                     let lines = ItemSummary.excerpt(item.record)
                     if item.record.text.isEmpty {
-                        Text("No text: browsers send the title and address only.")
+                        Text("Only the page title and address are captured for web pages.")
                             .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
                     } else if lines.isEmpty {
                         Text("Only short labels were captured. Choose Show Full Text to see them.")
@@ -452,31 +423,26 @@ private struct ItemRow: View {
                             Button(showFull ? "Hide Full Text" : "Show Full Text") { showFull.toggle() }
                                 .buttonStyle(LinkButtonStyle())
                         }
-                        Button(showData ? "Hide Exact Data" : "Show Exact Data") { showData.toggle() }
+                        Button(showDetails ? "Hide Details" : "Show Details") { showDetails.toggle() }
                             .buttonStyle(LinkButtonStyle(color: Theme.textSecondary))
                     }
                     if showFull {
                         InsetPanel {
                             ScrollView {
-                                Text(Highlight.apply(item.record.text))
-                                    .font(Theme.Typo.body)
-                                    .foregroundStyle(Theme.textPrimary)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                VStack(alignment: .leading, spacing: 6) {
+                                    ForEach(Array(ItemSummary.lines(item.record).enumerated()), id: \.offset) { _, line in
+                                        Text(Highlight.apply(line)).fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+                                .font(Theme.Typo.body)
+                                .foregroundStyle(Theme.textPrimary)
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             }
                             .frame(maxHeight: 260)
                         }
                     }
-                    if showData {
-                        InsetPanel {
-                            ScrollView {
-                                Text(Highlight.apply(preview))
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .frame(maxHeight: 220)
-                        }
-                    }
+                    if showDetails { details }
                 }
                 .padding(.leading, 24)
                 .padding(.bottom, Theme.Space.s)
@@ -485,6 +451,45 @@ private struct ItemRow: View {
         .confirmationDialog("Delete this item permanently?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive, action: onDelete)
         }
+    }
+
+    /// Every field the backend receives, as plain labelled rows.
+    private var details: some View {
+        let record = item.record
+        let rows: [(String, String)] = [
+            ("Status", status),
+            ("Title", record.windowTitle.isEmpty ? "None" : record.windowTitle),
+            record.domainPath.map { ("Address", $0) },
+            ("App", record.appName),
+            ("Time", timeRange(record.startedAt, record.endedAt)),
+            ("Client", match?.client.name ?? "None"),
+            ("Hidden details", record.redactionCount == 0 ? "None" : "\(record.redactionCount) replaced with markers like [EMAIL]"),
+            ("Text", record.text.isEmpty ? "None" : "\(record.text.count) characters (Show Full Text)"),
+        ].compactMap { $0 }
+        return InsetPanel {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("What the backend receives").font(Theme.Typo.caption.weight(.semibold)).foregroundStyle(Theme.textSecondary)
+                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: Theme.Space.m, verticalSpacing: 6) {
+                    ForEach(rows, id: \.0) { label, value in
+                        GridRow {
+                            Text(label).foregroundStyle(Theme.textTertiary)
+                            Text(Highlight.apply(value)).foregroundStyle(Theme.textPrimary)
+                                .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+            .font(Theme.Typo.caption)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var status: String {
+        if let sentAt = item.sentAt {
+            return "Sent at \(sentAt.formatted(date: .omitted, time: .shortened)) to \(item.sentTo ?? "the backend")"
+        }
+        if item.record.status == .approved { return "Approved, waiting to send" }
+        return item.edited ? "Waiting for review (edited)" : "Waiting for review"
     }
 }
 
@@ -560,5 +565,6 @@ enum Highlight {
 
 private func timeRange(_ start: Date, _ end: Date) -> String {
     let day = Calendar.current.isDateInToday(start) ? "Today" : start.formatted(.dateTime.weekday(.abbreviated).month().day())
-    return "\(day) \(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))"
+    let from = start.formatted(date: .omitted, time: .shortened), to = end.formatted(date: .omitted, time: .shortened)
+    return from == to ? "\(day) \(from)" : "\(day) \(from)–\(to)"
 }

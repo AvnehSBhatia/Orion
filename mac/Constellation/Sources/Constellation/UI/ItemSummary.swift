@@ -27,7 +27,8 @@ struct ItemSummary {
         } else if let domainPath = record.domainPath {
             kind = "Web page"
             symbol = "globe"
-            headline = title.isEmpty ? domainPath : title
+            let page = TextCleanup.browserTitle(title, appName: record.appName) // older records kept the browser's name
+            headline = page.isEmpty ? domainPath : page
             detail = domainPath.split(separator: "/").first.map(String.init)
         } else {
             kind = record.appName
@@ -42,14 +43,18 @@ struct ItemSummary {
     static func excerpt(_ record: ActivityRecord, lines limit: Int = 4) -> [String] {
         let summary = ItemSummary(record)
         let skip = Set([record.windowTitle, summary.headline, summary.detail ?? ""].map { $0.lowercased() })
-        return record.text
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
+        return lines(record)
             .filter { line in
                 !line.isEmpty && !skip.contains(line.lowercased())
                     && line.split(whereSeparator: \.isWhitespace).count >= 4 // UI labels are short
             }
             .prefix(limit)
             .map { $0 }
+    }
+
+    /// The text as readable lines; also tidies records captured before the cleanup existed.
+    static func lines(_ record: ActivityRecord) -> [String] {
+        let title = record.domainPath == nil ? record.windowTitle : ""
+        return TextCleanup.joinFragments(TextCleanup.dropTitleLines(record.text.components(separatedBy: .newlines), title: title))
     }
 }

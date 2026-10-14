@@ -26,6 +26,14 @@ public enum AXReader {
     // Index 3, the developer identifier, lets app profiles skip views (AppProfiles.swift).
     static let shapeAttributes = [kAXRoleAttribute, kAXSubroleAttribute, kAXChildrenAttribute, kAXIdentifierAttribute]
     static let textAttributes = [kAXValueAttribute, kAXTitleAttribute, kAXDescriptionAttribute, kAXSelectedTextAttribute]
+    static let textAttributesNoDescription = [kAXValueAttribute, kAXTitleAttribute, kAXSelectedTextAttribute]
+    /// Interface labels, not work: "Summarize", "Load Content Directly", an avatar's initial.
+    /// What's inside them is still read.
+    static let labelRoles: Set<String> = ["AXButton", "AXMenuButton", "AXPopUpButton", "AXImage", "AXDisclosureTriangle"]
+    /// Containers whose description only names the area ("message content", "message headers").
+    static let containerRoles: Set<String> = [
+        "AXGroup", "AXScrollArea", "AXSplitGroup", "AXLayoutArea", "AXList", "AXOutline", "AXTable", "AXRow", "AXTabGroup",
+    ]
 
     public static func focusedWindow(of app: AXUIElement) -> AXUIElement? {
         for attribute in [kAXFocusedWindowAttribute, kAXMainWindowAttribute] {
@@ -39,7 +47,9 @@ public enum AXReader {
     }
 
     /// `start` is when the whole read began; the time budget covers all of it.
-    public static func walkText(_ window: AXUIElement, start: DispatchTime, skip: Set<String> = []) -> TextWalk {
+    /// `dropAreaLabels`: leave out container descriptions, for apps (Mail) that label every area.
+    public static func walkText(_ window: AXUIElement, start: DispatchTime, skip: Set<String> = [],
+                                dropAreaLabels: Bool = false) -> TextWalk {
         var walk = TextWalk()
         var seen = Set<String>()
         var stack: [(AXUIElement, Int)] = [(window, 0)]
@@ -58,7 +68,9 @@ public enum AXReader {
 
             // The window's own title is already the record's title; reading it again
             // only adds a line like "Inbox — 26 messages" to the text.
-            for value in depth == 0 ? [] : copyMultiple(node, textAttributes) {
+            let attributes = depth == 0 || labelRoles.contains(role) ? []
+                : dropAreaLabels && containerRoles.contains(role) ? textAttributesNoDescription : textAttributes
+            for value in attributes.isEmpty ? [] : copyMultiple(node, attributes) {
                 guard let text = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
                       !text.isEmpty, seen.insert(text).inserted else { continue }
                 let room = Limits.maxSnapshotChars - walk.chars

@@ -19,6 +19,8 @@ public struct AppProfile: Sendable {
     /// identifier that starts with it ("Mail.categoryBucket." covers each category tab).
     public var skipIdentifiers: Set<String>
     public var title: SelectedRowTitle?
+    /// Leave out container descriptions ("message content", "message headers").
+    public var dropAreaLabels = false
 
     public static func forApp(_ bundleId: String) -> AppProfile? {
         profiles[bundleId]
@@ -31,7 +33,8 @@ public struct AppProfile: Sendable {
             title: SelectedRowTitle(
                 list: "Mail.messageList",
                 fields: ["Mail.messageList.cell.view.subjectLabel", "Mail.messageList.cell.view.addressLabel"]
-            )
+            ),
+            dropAreaLabels: true
         ),
     ]
 

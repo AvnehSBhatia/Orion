@@ -10,7 +10,7 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 cd ~/Documents/constellation-mac/mac/Constellation
 swift build -c release
 .build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 95 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
+swift test                          # 98 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
 ```
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
@@ -62,7 +62,7 @@ Nothing leaves the Mac unless it appears in the Outbox first (spec 2.5, 9). Open
 - **Review first** (default): items wait under "Waiting for Review". **Auto-approve after 30 minutes** is on by default and can be turned off. **Log only**: items are approved as soon as they close. The mode is chosen in the welcome screens and can be changed in the Outbox.
 - Items are grouped into **30 minute batches**. A batch can be approved or deleted as a whole; each item can be edited or deleted on its own.
 - A collapsed batch lists its first few items ("Email: Re: Acme renewal · Web page: Pricing – Initech · +3 more"), so it can be scanned without opening it.
-- Each item is **one readable line**: what it was (an envelope for an email, a globe for a web page), the subject or title, who it's from or which site, the matched client, and the time. Click it to read a short excerpt: the first few sentence-like lines, leaving out the title, the sender, and short interface labels ("Summarize", "message headers"). **Show Full Text** shows everything captured; **Show Exact Data** shows the JSON the sender posts, produced by the same code. **People's names are highlighted** in yellow (spec 8) and redaction markers like `[EMAIL]` are greyed. The excerpt is a reading aid only; what is sent doesn't change.
+- Each item is **one readable line**: an envelope for an email or a globe for a web page, the subject or page title, who it's from or which site, and the time. Click it to read the message: the first few sentence-like lines, leaving out the title, the sender, and short interface labels. **Show Full Text** shows everything captured; **Show Details** lists every field the backend receives in plain words (status, title, address, app, time, client, how many details were replaced, text length). **People's names are highlighted** in yellow (spec 8) and markers like `[EMAIL]` are greyed.
 - **Edits are redacted again** before they are saved, so nothing typed into an edit skips redaction. Edited items are marked.
 - **Delete is permanent**: the row is removed and, with `secure_delete`, overwritten.
 - Approved items wait under "Approved, waiting to send" until the sender delivers them (see Sender). Nothing is sent while not connected.
@@ -102,6 +102,8 @@ A profile (`Sources/CaptureCore/Capture/AppProfiles.swift`) names views to skip 
 - Skipped: `MailboxesOutlineView` (sidebar), `Mail.messageList` (the list of emails and their previews), and `Mail.categoryBucket.` (the All Mail / Primary / Promotions tabs; an entry ending in a dot skips every identifier starting with it).
 - Title: the selected email's subject and sender, e.g. "Your Apple ID was used to sign in — Apple". So each email is its own block, and the sender counts as a strong client signal.
 - Text: what's left, which is the open email.
+
+Captured text is tidied before it is redacted and stored (`TextCleanup.swift`): button and image labels ("Summarize", "Load Content Directly", an avatar's initial) are not read in any app; Mail's area labels ("message content", "message headers") are left out; lines that only repeat the title, subject, or sender are dropped; and sentences broken around a link ("Your Apple ID (" / ") was used…") are joined again. Browser titles lose the browser's name and the Chrome profile name ("Pricing - Google Chrome - Veer" becomes "Pricing").
 
 The window's own title is never read into the text of any app, since it is already the record's title ("Inbox – Primary · 26 messages" no longer shows up in Mail text).
 
