@@ -5,7 +5,7 @@ import { toPublicUser, type Store } from "@/db/store";
 import { readGraph } from "@/graph/view";
 import { LlmChat, MAX_ITEMS, type ChatModel, type OnDelta } from "@/llm/chat";
 import { getChat, getEmbedder, getLlm, getStore, requireUser } from "@/server/deps";
-import { HttpError, preflight, route } from "@/server/http";
+import { HttpError, actingAs, preflight, route, scopedBody } from "@/server/http";
 import { buildContext } from "@/steer/context";
 import { askAndSaveDashboard } from "@/steer/dashboard";
 
@@ -49,7 +49,8 @@ const chatModel = (): ChatModel => {
 };
 
 export const POST = route(async (req: NextRequest): Promise<ChatResponse | Response> => {
-  const body = chatRequest.parse(await req.json());
+  const body = chatRequest.parse(await scopedBody(req, { user: true }));
+  actingAs(req, body.userId);
   const store = getStore(body.orgId);
   const embedder = getEmbedder();
   const user = toPublicUser(requireUser(store, body.userId));

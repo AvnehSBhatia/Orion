@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { orgQuery } from "@/contract/schemas";
 import { getStore } from "@/server/deps";
-import { HttpError, preflight, route } from "@/server/http";
+import { HttpError, preflight, route, scopedQuery } from "@/server/http";
 
 export const runtime = "nodejs";
 
@@ -12,7 +12,7 @@ function contentType(buf: Buffer): string {
 }
 
 export const GET = route(async (req: NextRequest, ctx: RouteContext<"/api/sources/[id]/image">) => {
-  const { orgId } = orgQuery.parse(Object.fromEntries(req.nextUrl.searchParams));
+  const { orgId } = orgQuery.parse(scopedQuery(req));
   const { id } = await ctx.params;
   const image = getStore(orgId).sourceImage(id);
   if (!image) throw new HttpError(404, `no image for source "${id}"`);

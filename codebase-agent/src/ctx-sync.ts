@@ -19,7 +19,7 @@ const LAST_SHA_FILE = '.ctx-last-sha';
 const CARDS_FILE = '.ctx-cards.json';
 
 type IngestBody = {
-  orgId: string;
+  orgId?: string;
   repo: string;
   commitSha: string;
   files: { path: string; diff: string }[];
@@ -62,7 +62,9 @@ function readCards(root: string, filter: ReturnType<typeof loadPathFilter>): Fea
 async function main() {
   const dryRun = process.argv.includes('--dry-run');
   const backend = (process.env.BACKEND_URL || 'http://localhost:3001').replace(/\/+$/, '');
-  const orgId = process.env.ORION_ORG_ID?.trim() || 'demo';
+  // ORION_TOKEN (an API token from POST /api/auth/tokens) is sent as a bearer; the org then comes from it.
+  const token = process.env.ORION_TOKEN?.trim() || undefined;
+  const orgId = process.env.ORION_ORG_ID?.trim() || (token ? undefined : 'demo');
   const userId = process.env.ORION_USER_ID?.trim() || undefined;
 
   const root = g.repoRoot();
@@ -99,7 +101,7 @@ async function main() {
 
   if (dryRun) {
     console.log('\nDry run. Would POST to ' + `${backend}/api/ingest/code:`);
-    console.log(`  org: ${orgId}  repo: ${body.repo}  commitSha: ${body.commitSha.slice(0, 7)}  author: ${userId ?? body.author.name}`);
+    console.log(`  org: ${orgId ?? '(from token)'}  repo: ${body.repo}  commitSha: ${body.commitSha.slice(0, 7)}  author: ${userId ?? body.author.name}`);
     for (const f of body.files) console.log(`  file  ${f.path}  (${f.diff.length} chars of diff)`);
     for (const c of cards) console.log(`  card  ${c.label}  [${c.status}]`);
     return;
@@ -109,7 +111,7 @@ async function main() {
   try {
     res = await fetch(`${backend}/api/ingest/code`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });

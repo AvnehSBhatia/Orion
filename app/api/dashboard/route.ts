@@ -3,7 +3,7 @@ import { dashboardQuery, dashboardRequest } from "@/contract/schemas";
 import type { DashboardResponse } from "@/contract/types";
 import { toPublicUser } from "@/db/store";
 import { getLlm, getStore, requireUser } from "@/server/deps";
-import { HttpError, preflight, route } from "@/server/http";
+import { HttpError, actingAs, preflight, route, scopedBody, scopedQuery } from "@/server/http";
 import { resolveDashboard, sanitizeDashboard } from "@/steer/dashboard";
 
 export const runtime = "nodejs";
@@ -12,7 +12,7 @@ export const maxDuration = 60;
 
 /** The person's dashboard: the saved one, else composed from their role and saved. */
 export const GET = route(async (req: NextRequest): Promise<DashboardResponse> => {
-  const { orgId, userId } = dashboardQuery.parse(Object.fromEntries(req.nextUrl.searchParams));
+  const { orgId, userId } = dashboardQuery.parse(scopedQuery(req, { user: true }));
   const store = getStore(orgId);
   const user = toPublicUser(requireUser(store, userId));
   return { dashboard: await resolveDashboard(store, user, { llm: getLlm() }) };
@@ -20,7 +20,8 @@ export const GET = route(async (req: NextRequest): Promise<DashboardResponse> =>
 
 /** Save an edited dashboard, or `reset: true` to recompose it from the person's role. */
 export const POST = route(async (req: NextRequest): Promise<DashboardResponse> => {
-  const body = dashboardRequest.parse(await req.json());
+  const body = dashboardRequest.parse(await scopedBody(req, { user: true }));
+  actingAs(req, body.userId);
   const store = getStore(body.orgId);
   const user = toPublicUser(requireUser(store, body.userId));
   if (body.reset) {

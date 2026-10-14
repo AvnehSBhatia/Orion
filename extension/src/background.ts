@@ -7,7 +7,7 @@
 
 import { readPage, type PageData } from './content';
 import { getRecording, patchRecording } from './recording';
-import { getSettings } from './settings';
+import { authHeaders, getSettings } from './settings';
 import type {
   BgRequest,
   BgResult,
@@ -296,13 +296,14 @@ async function buildPayload(
 }
 
 async function post(payload: CapturePayload): Promise<CaptureResponse> {
-  const { backendUrl, orgId } = await getSettings();
+  const settings = await getSettings();
+  const { backendUrl, orgId } = settings;
   const endpoint = backendUrl.replace(/\/+$/, '') + '/api/ingest/capture';
   let res: Response;
   try {
     res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(settings),
       body: JSON.stringify(orgId.trim() ? { ...payload, orgId: orgId.trim() } : payload),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });

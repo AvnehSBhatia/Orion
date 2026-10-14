@@ -152,7 +152,7 @@ function loadSource(orgId: string, id: string): Promise<SourceDetail> {
   const key = `${orgId}:${id}`;
   let p = sourceCache.get(key);
   if (!p) {
-    p = fetch(`${API}/api/sources/${encodeURIComponent(id)}?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store" }).then(async (r) => {
+    p = fetch(`${API}/api/sources/${encodeURIComponent(id)}?orgId=${encodeURIComponent(orgId)}`, { cache: "no-store", credentials: "include" }).then(async (r) => {
       if (!r.ok) throw new Error(`source ${r.status}`);
       return (await r.json()) as SourceDetail;
     });

@@ -159,16 +159,39 @@ export type EmbeddingsResponse = { points: EmbeddingPoint[]; clusters: { id: str
 
 // ---- Fetchers ----------------------------------------------------------------------
 
+/** Fired on window when the backend answers 401, so the app can show the sign-in screen again. */
+export const SIGNED_OUT_EVENT = "orion:signed-out";
+
+function checkSignedIn(res: Response) {
+  if (res.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
+}
+
+/** Every call carries the session cookie (`credentials: "include"`); the backend sets it at sign-in. */
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     ...init,
     headers: init?.body ? { "content-type": "application/json", ...(init?.headers ?? {}) } : init?.headers,
     cache: "no-store",
+    credentials: "include",
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((body as { error?: string }).error || `${path} returned ${res.status}`);
+  if (!res.ok) {
+    if (!path.startsWith("/api/auth/")) checkSignedIn(res);
+    throw Object.assign(new Error((body as { error?: string }).error || `${path} returned ${res.status}`), { status: res.status });
+  }
   return body as T;
 }
+
+export type Me = { username?: string; orgId?: string; userId?: string; admin?: boolean; authDisabled?: boolean };
+export type LoginResponse = { token: string; orgId: string; userId: string; admin: boolean; username: string };
+
+export const auth = {
+  /** Who is signed in; rejects with `status: 401` when nobody is. */
+  me: () => j<Me>("/api/auth/me"),
+  login: (username: string, password: string) =>
+    j<LoginResponse>("/api/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+  logout: () => j<{ ok: true }>("/api/auth/logout", { method: "POST" }),
+};
 
 const q = (o: Record<string, string | number | undefined>) =>
   "?" + Object.entries(o).filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join("&");
@@ -202,7 +225,9 @@ export const orion = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ orgId, userId, message, currentView, skipDashboard: true, history: toHistory(history) }),
       cache: "no-store",
+      credentials: "include",
     });
+    checkSignedIn(res);
     if (!res.ok || !res.body) {
       const body = await res.json().catch(() => ({}));
       throw new Error((body as { error?: string }).error || `/api/chat returned ${res.status}`);

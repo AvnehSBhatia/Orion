@@ -64,14 +64,18 @@ export function createOrgStore(org: Org): Store {
   return store;
 }
 
-export function listOrgs(): OrgSummary[] {
+function summarize(id: string): OrgSummary {
+  const store = openStore(id);
+  const org = store.getOrg();
+  return { id, name: org?.name ?? id, description: org?.description ?? "", members: store.listUsers().length };
+}
+
+/** Every org on disk, or with `only`, just that one (a signed-in caller sees only their own org). */
+export function listOrgs(only?: string): OrgSummary[] {
+  if (only !== undefined) return orgExists(only) ? [summarize(only)] : [];
   const dir = path.join(config.dataDir, "orgs");
   const onDisk = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".db")).map((f) => f.slice(0, -3)) : [];
-  return [...new Set([DEFAULT_ORG, ...onDisk])].sort().map((id) => {
-    const store = openStore(id);
-    const org = store.getOrg();
-    return { id, name: org?.name ?? id, description: org?.description ?? "", members: store.listUsers().length };
-  });
+  return [...new Set([DEFAULT_ORG, ...onDisk])].sort().map(summarize);
 }
 
 export function getEmbedder(): Embedder {

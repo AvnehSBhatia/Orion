@@ -3,7 +3,7 @@ import { orgId as orgIdSchema, updateOrgRequest } from "@/contract/schemas";
 import type { OrgResponse } from "@/contract/types";
 import { toPublicUser, type Store } from "@/db/store";
 import { getStore } from "@/server/deps";
-import { HttpError, preflight, route } from "@/server/http";
+import { HttpError, adminOnly, preflight, route, sameOrg } from "@/server/http";
 
 export const runtime = "nodejs";
 
@@ -13,8 +13,9 @@ function orgOf(store: Store, id: string) {
   return org;
 }
 
-export const GET = route(async (_req: NextRequest, ctx: RouteContext<"/api/orgs/[orgId]">): Promise<OrgResponse> => {
+export const GET = route(async (req: NextRequest, ctx: RouteContext<"/api/orgs/[orgId]">): Promise<OrgResponse> => {
   const id = orgIdSchema.parse((await ctx.params).orgId);
+  sameOrg(req, id);
   const store = getStore(id);
   return { org: orgOf(store, id), users: store.listUsers().map(toPublicUser) };
 });
@@ -22,6 +23,8 @@ export const GET = route(async (_req: NextRequest, ctx: RouteContext<"/api/orgs/
 /** Change the profile. The model reads it on the next capture; existing documents are not re-read. */
 export const PATCH = route(async (req: NextRequest, ctx: RouteContext<"/api/orgs/[orgId]">): Promise<OrgResponse> => {
   const id = orgIdSchema.parse((await ctx.params).orgId);
+  sameOrg(req, id);
+  adminOnly(req);
   const store = getStore(id);
   const patch = updateOrgRequest.parse(await req.json());
   const current = store.getOrg();

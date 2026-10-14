@@ -4,15 +4,18 @@ import type { OrgResponse, OrgsResponse } from "@/contract/types";
 import { toPublicUser } from "@/db/store";
 import { slugify } from "@/lib/text";
 import { createOrgStore, getEmbedder, listOrgs } from "@/server/deps";
-import { HttpError, preflight, route } from "@/server/http";
+import { HttpError, preflight, principalOf, route } from "@/server/http";
 import { recomputeUserVectors } from "@/steer/users";
 
 export const runtime = "nodejs";
 
-export const GET = route(async (): Promise<OrgsResponse> => ({ orgs: listOrgs() }));
+/** Signed in, only the caller's org. */
+export const GET = route(async (req: NextRequest): Promise<OrgsResponse> => ({ orgs: listOrgs(principalOf(req)?.orgId) }));
 
 /** Create an org with its profile (what it does, the websites it works on) and, optionally, its first members. */
 export const POST = route(async (req: NextRequest): Promise<OrgResponse> => {
+  // An org made here would have no account that can reach it.
+  if (principalOf(req)) throw new HttpError(403, "create orgs with POST /api/auth/signup or scripts/account.ts");
   const { members, id, ...profile } = createOrgRequest.parse(await req.json());
   const orgId = id ?? slugify(profile.name).slice(0, 40);
   if (!/^[a-z0-9][a-z0-9-]{0,39}$/.test(orgId)) throw new HttpError(400, "name needs letters or digits, or pass an id");
