@@ -44,15 +44,13 @@ export async function feedFor(
     }
   }
 
+  const changes = store.changesBySource();
   const scored = rankSources(
     store,
     lens,
     Number.MAX_SAFE_INTEGER,
     (s) => others(s.authorId) && Date.parse(s.createdAt) >= since,
-  ).flatMap((r) => {
-    const s = store.getSource(r.id);
-    if (!s) return [];
-    const pub = store.toPublicSource(s);
+  ).map((r) => {
     let impact = 0;
     let why = "";
     const bump = (value: number, reason: string) => {
@@ -61,7 +59,7 @@ export async function feedFor(
         why = reason;
       }
     };
-    for (const c of pub.changes) {
+    for (const c of changes.get(r.id) ?? []) {
       const note = statusNote(c);
       if (mine.has(c.nodeId)) bump(IMPACT.owned, `changed ${c.label}, which you own${note}`);
       else if (touched.has(c.nodeId)) bump(IMPACT.touched, `changed ${c.label}, which you worked on${note}`);
@@ -71,11 +69,15 @@ export async function feedFor(
         if (!why) why = `${c.label} is ${c.statusTo.replace("_", " ")}`;
       }
     }
-    return [{ ...pub, why: why || "close to your work", score: r.score + impact }];
+    return { id: r.id, why: why || "close to your work", score: r.score + impact };
   });
 
+  // Only the top `limit` become full documents; scoring needs just each source's changes.
   return scored
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
-    .map(({ score: _score, ...item }) => item);
+    .flatMap(({ id, why }) => {
+      const s = store.getSource(id);
+      return s ? [{ ...store.toPublicSource(s), why }] : [];
+    });
 }

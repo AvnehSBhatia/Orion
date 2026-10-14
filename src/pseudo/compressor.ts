@@ -44,14 +44,11 @@ export function areaPurity(c: Compressor, xs: Float32Array[], labels: Labels, an
   const probes = anchors.filter((a) => labels.area[a] >= 0);
   if (!probes.length || labeled.length < 2) return null;
   const zs = xs.map((x) => compress(c, x));
+  const labeledZs = labeled.map((j) => zs[j]);
   let total = 0;
   for (const a of probes) {
-    const near = labeled
-      .filter((j) => j !== a)
-      .map((j) => [dotN(zs[a], zs[j]), j] as const)
-      .sort((p, q) => q[0] - p[0])
-      .slice(0, k);
-    total += near.filter(([, j]) => labels.area[j] === labels.area[a]).length / near.length;
+    const near = [...topKOf(zs[a], labeledZs, Math.min(k, labeled.length - 1), labeled.indexOf(a))].map((i) => labeled[i]);
+    total += near.filter((j) => labels.area[j] === labels.area[a]).length / near.length;
   }
   return total / probes.length;
 }
@@ -78,32 +75,47 @@ function dotN(a: Float32Array, b: Float32Array): number {
   return s;
 }
 
-function topK(scores: number[], k: number, skip: number): Set<number> {
-  return new Set(
-    scores
-      .map((s, j) => [s, j] as const)
-      .filter(([, j]) => j !== skip)
-      .sort((a, b) => b[0] - a[0])
-      .slice(0, k)
-      .map(([, j]) => j),
-  );
+/**
+ * Indices of the k highest scores of `a` against every vector, excluding `skip`. Same set as a full sort
+ * (ties go to the lower index), but a bounded insertion list instead of sorting every score.
+ */
+function topKOf(a: Float32Array, vs: Float32Array[], k: number, skip: number): Set<number> {
+  const best: { s: number; j: number }[] = [];
+  for (let j = 0; j < vs.length; j++) {
+    if (j === skip) continue;
+    const s = dotN(a, vs[j]);
+    if (best.length === k && s <= best[k - 1].s) continue;
+    let at = best.length;
+    while (at > 0 && best[at - 1].s < s) at--;
+    best.splice(at, 0, { s, j });
+    if (best.length > k) best.pop();
+  }
+  return new Set(best.map((b) => b.j));
+}
+
+/** Each anchor's top-k neighbors in 768d. Shared by every compressor evaluated on the same anchors. */
+export function fullNeighbors(xs: Float32Array[], anchors: number[], k: number): Set<number>[] {
+  const kk = Math.min(k, xs.length - 1);
+  return anchors.map((a) => topKOf(xs[a], xs, kk, a));
 }
 
 /** Mean overlap of top-k neighbors in 768d vs the compressed space, for each anchor in `anchors`. */
-export function neighborRecall(c: Compressor, xs: Float32Array[], anchors: number[], k: number): number {
+export function neighborRecall(c: Compressor, xs: Float32Array[], anchors: number[], k: number, full?: Set<number>[]): number {
   if (!anchors.length || xs.length < 2) return 1;
   const zs = xs.map((x) => compress(c, x));
   const kk = Math.min(k, xs.length - 1);
+  const truth = full ?? fullNeighbors(xs, anchors, k);
   let total = 0;
-  for (const a of anchors) {
-    const full = topK(xs.map((x) => dotN(xs[a], x)), kk, a);
-    const small = topK(zs.map((z) => dotN(zs[a], z)), kk, a);
+  anchors.forEach((a, i) => {
     let hit = 0;
-    for (const j of small) if (full.has(j)) hit++;
+    for (const j of topKOf(zs[a], zs, kk, a)) if (truth[i].has(j)) hit++;
     total += hit / kk;
-  }
+  });
   return total / anchors.length;
 }
+
+/** Held-out anchors scored after training. Recall and purity are means, so a fixed sample estimates them closely. */
+export const MAX_EVAL_ANCHORS = 256;
 
 export type TrainOptions = {
   steps?: number;
@@ -229,13 +241,18 @@ export async function trainCompressor(xs: Float32Array[], opts: TrainOptions = {
     // G[i][j]: d loss / d s_ij from anchor i's row.
     const G: Float64Array[] = [];
     let loss = 0;
+    // Similarities are symmetric: compute each pair once.
+    const T = Array.from({ length: B }, () => new Float64Array(B));
+    const S = Array.from({ length: B }, () => new Float64Array(B));
     for (let i = 0; i < B; i++) {
-      const teacher = new Float64Array(B);
-      const student = new Float64Array(B);
-      for (let j = 0; j < B; j++) {
-        teacher[j] = dotN(X[i], X[j]);
-        student[j] = dotN(U[i], U[j]);
+      for (let j = i; j < B; j++) {
+        T[i][j] = T[j][i] = dotN(X[i], X[j]);
+        S[i][j] = S[j][i] = dotN(U[i], U[j]);
       }
+    }
+    for (let i = 0; i < B; i++) {
+      const teacher = T[i];
+      const student = S[i];
       const P = softmaxRow(teacher, tauTeacher, i);
       const L = labels ? labelRow(labels, idx, i, useWeight) : null;
       if (L) for (let j = 0; j < B; j++) P[j] = (1 - labelWeight) * P[j] + labelWeight * L[j];
@@ -282,11 +299,15 @@ export async function trainCompressor(xs: Float32Array[], opts: TrainOptions = {
   }
 
   const trained: Compressor = { id: `trained-${Date.now().toString(36)}`, kind: "trained", weights: W, metrics: null };
+  const probe = val.slice(0, MAX_EVAL_ANCHORS);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const full = fullNeighbors(xs, probe, k);
+  await new Promise<void>((resolve) => setImmediate(resolve));
   trained.metrics = {
-    recallAtK: neighborRecall(trained, xs, val, k),
-    baselineRecallAtK: neighborRecall(base, xs, val, k),
-    areaPurity: labels ? areaPurity(trained, xs, labels, val) : null,
-    baselineAreaPurity: labels ? areaPurity(base, xs, labels, val) : null,
+    recallAtK: neighborRecall(trained, xs, probe, k, full),
+    baselineRecallAtK: neighborRecall(base, xs, probe, k, full),
+    areaPurity: labels ? areaPurity(trained, xs, labels, probe) : null,
+    baselineAreaPurity: labels ? areaPurity(base, xs, labels, probe) : null,
     labeledItems: labels ? labels.area.filter((a) => a >= 0).length : 0,
     k,
     trainItems: train.length,

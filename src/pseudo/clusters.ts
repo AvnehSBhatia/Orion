@@ -62,7 +62,7 @@ function kmeans(members: Member[], k: number): Member[][] {
 export function buildClusters(store: Store, c: Compressor): StoredCluster[] {
   const members: Member[] = [
     ...store.listNodes().flatMap((n) => (n.z && n.zVersion === c.id ? [{ kind: "node" as const, id: n.id, z: n.z, name: n.label }] : [])),
-    ...store.listSources().flatMap((s) => (s.z && s.zVersion === c.id ? [{ kind: "source" as const, id: s.id, z: s.z, name: s.title }] : [])),
+    ...store.listSourceMeta().flatMap((s) => (s.z && s.zVersion === c.id ? [{ kind: "source" as const, id: s.id, z: s.z, name: s.title }] : [])),
   ];
   if (members.length < 2 * CLUSTER.minSize) {
     store.replaceClusters([], []);

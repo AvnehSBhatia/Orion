@@ -6,7 +6,7 @@ import type { LlmClient } from "@/llm/openrouter";
 import { htmlToText, slugify } from "@/lib/text";
 import { HttpError } from "@/server/http";
 import { maintainInBackground } from "@/pseudo/maintain";
-import { recomputeUserVectors } from "@/steer/users";
+import { recomputeUserVectors, refreshInBackground } from "@/steer/users";
 import { config } from "@/config";
 import { prepareScreenshot, pruneImage, shrinkImage, type OcrFn } from "./image";
 
@@ -117,8 +117,10 @@ export async function applyUpdate(
   const id = sourceId(source.kind, source.ref, now);
   store.saveSource({ id, ...source, authorId: author, createdAt: now }, changes);
   if (author && touched.length) store.addTouches(author, touched);
-  await recomputeUserVectors(store, deps.embedder);
-  if (deps.background) maintainInBackground(store, deps.embedder, deps.background.llm, deps.background.model);
+  // With background work on, embedding and steering are coalesced across a burst of ingests; without it (tests), inline.
+  const bg = deps.background;
+  if (bg) refreshInBackground(store, deps.embedder, () => maintainInBackground(store, deps.embedder, bg.llm, bg.model));
+  else await recomputeUserVectors(store, deps.embedder);
   return { nodesTouched: touched, sourceId: id };
 }
 
@@ -174,6 +176,14 @@ export async function ingestCapture(
   const raw = body.screenshotB64 ? Buffer.from(body.screenshotB64, "base64") : null;
   // Light mode (no OCR, no prune) unless a test injects its own OCR or INGEST_IMAGES=full.
   const light = !deps.ocr && config.ingestImages === "light";
+  // Light mode reads no text off the screenshot, so a repeat is known before the image is decoded.
+  if (light) {
+    const early = repeatOf(deps, body, text, { ocrText: "", status: raw?.length ? "kept" : "none" }, now);
+    if (early) return { nodesTouched: [], sourceId: early.id, imageStatus: early.imageStatus, duplicateOf: early.id };
+    if (seenAsNotWork(deps.store, `${body.userId}\n${body.url}`, wordSet(text), now)) {
+      return { nodesTouched: [], sourceId: null, imageStatus: raw?.length ? "kept" : "none", notWork: true };
+    }
+  }
   const shot = !raw?.length
     ? null
     : light

@@ -28,7 +28,7 @@ export type RetrainResult =
  */
 export async function trainingSet(store: Store, embedder: Embedder): Promise<{ xs: Float32Array[]; labels: Labels | null }> {
   const nodes = store.listNodes().filter((n) => n.embedding && n.embedModel === embedder.model);
-  const sources = store.listSources().filter((s) => s.embedding && s.embedModel === embedder.model);
+  const sources = store.listSourceMeta().filter((s) => s.embedding && s.embedModel === embedder.model);
   const users = store.listUsers().filter((u) => u.seedVec && u.seedModel === embedder.model);
   const labelQueries = await embedder.embed(nodes.map((n) => query(n.label)));
   const xs = [...nodes.map((n) => n.embedding!), ...sources.map((s) => s.embedding!), ...labelQueries, ...users.map((u) => u.seedVec!)];
@@ -90,5 +90,6 @@ export function lastTrainedSize(store: Store): number {
 
 /** Vectors the next training set would hold, without embedding anything. */
 export function estimatedTrainingSize(store: Store): number {
-  return store.listNodes().length * 2 + store.listSources().length + store.listUsers().length;
+  const { nodes, sources } = store.counts();
+  return nodes * 2 + sources + store.listUsers().length;
 }

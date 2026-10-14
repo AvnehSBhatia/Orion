@@ -59,6 +59,9 @@ export type StoredSource = Vectors & {
   hasImage: boolean;
 };
 
+/** A source without its text: what ranking, projection, and maintenance need. Cheap to load for a whole org. */
+export type SourceMeta = Omit<StoredSource, "text" | "ocrText">;
+
 export type NewSource = Omit<StoredSource, keyof Vectors | "hasImage" | "ocrText" | "imageStatus"> & {
   image: Buffer | null;
   ocrText?: string;
@@ -322,6 +325,24 @@ type SourceRow = VectorRow & {
 const SOURCE_COLS = `id, kind, ref, title, text, ocr_text, image_status, author_id, image IS NOT NULL AS has_image, created_at,
   embedding, embed_model, embed_ctx, z, z_version, cluster_id`;
 
+const SOURCE_META_COLS = `id, kind, ref, title, image_status, author_id, image IS NOT NULL AS has_image, created_at,
+  embedding, embed_model, embed_ctx, z, z_version, cluster_id`;
+
+function rowToSourceMeta(r: Omit<SourceRow, "text" | "ocr_text">): SourceMeta {
+  const hasImage = r.has_image === 1;
+  return {
+    id: r.id,
+    kind: r.kind as SourceKind,
+    ref: r.ref,
+    title: r.title,
+    imageStatus: (r.image_status as ImageStatus | null) ?? (hasImage ? "kept" : "none"),
+    authorId: r.author_id,
+    createdAt: r.created_at,
+    hasImage,
+    ...rowVectors(r),
+  };
+}
+
 function rowToSource(r: SourceRow): StoredSource {
   const hasImage = r.has_image === 1;
   return {
@@ -466,13 +487,47 @@ function cleanNode(n: ExtractedNode): ExtractedNode {
 }
 
 export class Store {
+  /** Whole-org reads, reused until this connection writes anything (SQLite's total_changes() moves on every write). */
+  private memo = new Map<string, { at: number; value: unknown }>();
+
+  private memoized<T>(key: string, load: () => T[]): T[] {
+    const at = (this.db.prepare("SELECT total_changes() AS n").get() as { n: number }).n;
+    const hit = this.memo.get(key);
+    if (hit && hit.at === at) return [...(hit.value as T[])];
+    const value = load();
+    this.memo.set(key, { at, value });
+    return [...value];
+  }
+
+  /**
+   * Runs writes that cannot change the given memoized reads (for example per-user steering never touches nodes or
+   * sources), and keeps those reads valid across them.
+   */
+  preserving<T>(keys: string[], fn: () => T): T {
+    const now = () => (this.db.prepare("SELECT total_changes() AS n").get() as { n: number }).n;
+    const before = now();
+    const fresh = keys.filter((k) => this.memo.get(k)?.at === before);
+    const out = fn();
+    const after = now();
+    for (const k of fresh) this.memo.get(k)!.at = after;
+    return out;
+  }
+
   constructor(readonly db: Database.Database) {
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
     db.exec(SCHEMA);
     this.addColumns("nodes", { z: "BLOB", z_version: "TEXT", embed_ctx: "TEXT", cluster_id: "TEXT" });
     this.addColumns("users", { gravity: "BLOB", gravity_version: "TEXT" });
-    this.addColumns("sources", { embed_ctx: "TEXT", cluster_id: "TEXT", ocr_text: "TEXT", image_status: "TEXT" });
+    this.addColumns("sources", {
+      embed_ctx: "TEXT",
+      cluster_id: "TEXT",
+      ocr_text: "TEXT",
+      image_status: "TEXT",
+      plain_vec: "BLOB",
+      plain_model: "TEXT",
+      plain_hash: "TEXT",
+    });
   }
 
   private addColumns(table: string, cols: Record<string, string>): void {
@@ -494,7 +549,7 @@ export class Store {
   // Nodes
 
   listNodes(): StoredNode[] {
-    return (this.db.prepare("SELECT * FROM nodes ORDER BY updated_at DESC").all() as NodeRow[]).map(rowToNode);
+    return this.memoized("nodes", () => (this.db.prepare("SELECT * FROM nodes ORDER BY updated_at DESC").all() as NodeRow[]).map(rowToNode));
   }
 
   getNode(id: string): StoredNode | null {
@@ -751,6 +806,40 @@ export class Store {
     return (rows as SourceRow[]).map(rowToSource);
   }
 
+  /** Every source without its text, newest first. */
+  listSourceMeta(): SourceMeta[] {
+    return this.memoized("sourceMeta", () =>
+      (this.db.prepare(`SELECT ${SOURCE_META_COLS} FROM sources ORDER BY created_at DESC`).all() as SourceRow[]).map(rowToSourceMeta),
+    );
+  }
+
+  /** Full sources by id, in the order given; missing ids are skipped. */
+  getSources(ids: string[]): StoredSource[] {
+    const out: StoredSource[] = [];
+    const stmt = this.db.prepare(`SELECT ${SOURCE_COLS} FROM sources WHERE id = ?`);
+    for (const id of ids) {
+      const row = stmt.get(id) as SourceRow | undefined;
+      if (row) out.push(rowToSource(row));
+    }
+    return out;
+  }
+
+  /** Cached plain-text vectors (title + body, no screenshot, no role) used to group similar sources into digests. */
+  plainVectors(): Map<string, { vec: Float32Array; model: string; hash: string }> {
+    const rows = this.db.prepare("SELECT id, plain_vec, plain_model, plain_hash FROM sources WHERE plain_vec IS NOT NULL").all() as {
+      id: string;
+      plain_vec: Buffer;
+      plain_model: string;
+      plain_hash: string;
+    }[];
+    return new Map(rows.map((r) => [r.id, { vec: fromBlob(r.plain_vec)!, model: r.plain_model, hash: r.plain_hash }]));
+  }
+
+  setPlainVectors(items: { id: string; vec: Float32Array; model: string; hash: string }[]): void {
+    const stmt = this.db.prepare("UPDATE sources SET plain_vec = ?, plain_model = ?, plain_hash = ? WHERE id = ?");
+    this.transaction(() => items.forEach((it) => stmt.run(toBlob(it.vec), it.model, it.hash, it.id)));
+  }
+
   /** Who wrote what since `since`, without loading documents: one row per source. */
   sourceAuthorsSince(since: string): { authorId: string | null; createdAt: string }[] {
     return (
@@ -800,6 +889,29 @@ export class Store {
       statusFrom: r.status_from as Status | null,
       statusTo: r.status_to as Status,
     }));
+  }
+
+  /** Every source's changes in one query, keyed by source id. */
+  changesBySource(): Map<string, SourceChange[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT c.source_id, c.node_id, n.label, c.change, c.status_from, c.status_to FROM source_changes c
+         JOIN nodes n ON n.id = c.node_id`,
+      )
+      .all() as { source_id: string; node_id: string; label: string; change: string; status_from: string | null; status_to: string }[];
+    const out = new Map<string, SourceChange[]>();
+    for (const r of rows) {
+      const list = out.get(r.source_id) ?? [];
+      list.push({
+        nodeId: r.node_id,
+        label: r.label,
+        change: r.change as SourceChange["change"],
+        statusFrom: r.status_from as Status | null,
+        statusTo: r.status_to as Status,
+      });
+      out.set(r.source_id, list);
+    }
+    return out;
   }
 
   /** Source ids behind a node, newest first. */

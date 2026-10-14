@@ -40,6 +40,20 @@ export const config = {
   get ingestImages(): "light" | "full" {
     return process.env.INGEST_IMAGES === "full" ? "full" : "light";
   },
+  /**
+   * When a source's screenshot goes into its embedding. An image embed costs about 14x a text embed (about 1.9s
+   * of CPU and 2GB of peak memory with Gemma). auto (default): only when the capture has little text, like a
+   * desktop window or a screen; tabs embed their page text and keep the screenshot for viewing. always: every
+   * kept screenshot. never: text only.
+   */
+  get embedScreenshots(): "auto" | "always" | "never" {
+    const v = process.env.EMBED_SCREENSHOTS;
+    return v === "always" || v === "never" ? v : "auto";
+  },
+  /** In auto, a capture with less visible text than this embeds its screenshot. */
+  get screenshotTextMin(): number {
+    return Number(process.env.SCREENSHOT_TEXT_MIN) || 400;
+  },
   get uiOrigins(): string[] {
     return (process.env.UI_ORIGIN || "http://localhost:3000")
       .split(",")

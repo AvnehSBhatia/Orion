@@ -3,7 +3,7 @@ import { normalize } from "@/llm/embed";
 import { OUT_DIM, mrlCompressor } from "@/pseudo/compressor";
 import { unpackGravity } from "@/pseudo/gravity";
 import { deps, extracted, memoryStore } from "@/test/helpers";
-import { FRESHNESS, blend, dot, freshness, getContextIds, getContextScored, mean, ownerMatches, recomputeUserVectors } from "./users";
+import { FRESHNESS, blend, dot, embedsScreenshot, freshness, getContextIds, getContextScored, mean, ownerMatches, recomputeUserVectors } from "./users";
 
 const v = (...xs: number[]) => Float32Array.from(xs);
 const HOUR = 3_600_000;
@@ -157,5 +157,24 @@ describe("steering on the seed graph", () => {
   it("unknown users get nothing", async () => {
     const store = memoryStore({ seed: true });
     expect(await getContextIds(store, deps(store).embedder, { userId: "ghost", k: 3 })).toEqual([]);
+  });
+});
+
+describe("embedsScreenshot", () => {
+  it("embeds screenshots only for captures with little text, unless told otherwise", () => {
+    const before = process.env.EMBED_SCREENSHOTS;
+    try {
+      delete process.env.EMBED_SCREENSHOTS;
+      expect(embedsScreenshot("")).toBe(true);
+      expect(embedsScreenshot("a few words")).toBe(true);
+      expect(embedsScreenshot("word ".repeat(200))).toBe(false);
+      process.env.EMBED_SCREENSHOTS = "always";
+      expect(embedsScreenshot("word ".repeat(200))).toBe(true);
+      process.env.EMBED_SCREENSHOTS = "never";
+      expect(embedsScreenshot("")).toBe(false);
+    } finally {
+      if (before === undefined) delete process.env.EMBED_SCREENSHOTS;
+      else process.env.EMBED_SCREENSHOTS = before;
+    }
   });
 });

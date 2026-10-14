@@ -11,6 +11,11 @@ import { MIN_TRAIN_VECTORS, RETRAIN_GROWTH, estimatedTrainingSize, lastTrainedSi
 /** Newly labeled items, as a share of all items, that justify retraining even without corpus growth. */
 const RELABEL_SHARE = 0.2;
 const DEBOUNCE_MS = 3_000;
+/**
+ * At least this long between the end of one run and the start of the next. Areas, the map, and digests change
+ * slowly, while a busy org ingests every few seconds; without a floor maintenance would run back to back.
+ */
+export const MAINTAIN_INTERVAL_MS = Number(process.env.MAINTAIN_INTERVAL_MS) || 60_000;
 
 type Skipped = { skipped: string };
 
@@ -49,7 +54,8 @@ export async function maintainOrg(
 
   const facets = await optional(() => labelFacets(store, llm, model));
   const relabeled = "labeled" in facets ? facets.labeled : 0;
-  const total = store.listNodes().length + store.listSources().length;
+  const counts = store.counts();
+  const total = counts.nodes + counts.sources;
 
   const size = estimatedTrainingSize(store);
   const last = lastTrainedSize(store);
@@ -74,16 +80,19 @@ export async function maintainOrg(
   };
 }
 
-const state = new WeakMap<Store, { timer: NodeJS.Timeout | null; running: boolean; again: boolean }>();
+const state = new WeakMap<Store, { timer: NodeJS.Timeout | null; running: boolean; again: boolean; lastEnd: number }>();
 
 /** After an ingest: debounced per org, one run at a time, a burst of ingests coalesces into one rerun. Never throws. */
 export function maintainInBackground(store: Store, embedder: Embedder, llm: LlmClient, model: string): void {
-  const s = state.get(store) ?? { timer: null, running: false, again: false };
+  const s = state.get(store) ?? { timer: null, running: false, again: false, lastEnd: 0 };
   state.set(store, s);
   if (s.running) {
     s.again = true;
     return;
   }
+  const floor = s.lastEnd + MAINTAIN_INTERVAL_MS - Date.now();
+  // Inside the floor a run is already scheduled for when it ends; more ingests ride along.
+  if (s.timer && floor > DEBOUNCE_MS) return;
   if (s.timer) clearTimeout(s.timer);
   s.timer = setTimeout(async () => {
     s.timer = null;
@@ -98,11 +107,12 @@ export function maintainInBackground(store: Store, embedder: Embedder, llm: LlmC
       console.error("org maintenance failed", err);
     } finally {
       s.running = false;
+      s.lastEnd = Date.now();
       if (s.again) {
         s.again = false;
         maintainInBackground(store, embedder, llm, model);
       }
     }
-  }, DEBOUNCE_MS);
+  }, Math.max(DEBOUNCE_MS, floor));
   s.timer.unref?.();
 }

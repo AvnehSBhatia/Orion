@@ -140,7 +140,7 @@ export function projectEmbeddings(store: Store, orgId: string): EmbeddingsRespon
         ? [{ id: n.id, kind: "node", label: n.label, domain: n.domain, status: effective.get(n.id) ?? n.status, clusterId: cluster(n.clusterId), author: n.owner, createdAt: n.updatedAt, vec }]
         : [];
     }),
-    ...store.listSources().flatMap((s): Item[] => {
+    ...store.listSourceMeta().flatMap((s): Item[] => {
       const vec = s.embedding ?? s.z;
       return vec
         ? [{ id: s.id, kind: "source", label: s.title || s.ref, domain: null, status: null, clusterId: cluster(s.clusterId), author: s.authorId ? (names.get(s.authorId) ?? s.authorId) : null, createdAt: s.createdAt, vec }]

@@ -1,4 +1,5 @@
-import { textHash, type StoredCluster, type StoredCompressor, type StoredNode, type StoredSource, type StoredUser, type Store } from "@/db/store";
+import { config } from "@/config";
+import { textHash, type SourceMeta, type StoredCluster, type StoredCompressor, type StoredNode, type StoredSource, type StoredUser, type Store } from "@/db/store";
 import { doc, normalize, query, type Embedder } from "@/llm/embed";
 import { nearestCluster } from "@/pseudo/clusters";
 import { IN_DIM, OUT_DIM, compress, mrlCompressor, type Compressor } from "@/pseudo/compressor";
@@ -95,11 +96,17 @@ export function activeCompressor(store: Store): Compressor {
  * in it), and the screenshot itself when one was kept.
  */
 export function sourceInput(store: Store, s: StoredSource, ctx: string | null = null) {
-  const image = s.hasImage ? store.sourceImage(s.id)?.toString("base64") ?? null : null;
   const text = s.ocrText && !s.text.trim() ? s.ocrText : s.text;
+  const image = s.hasImage && embedsScreenshot(text) ? store.sourceImage(s.id)?.toString("base64") ?? null : null;
   return doc(s.title || s.ref, text.slice(0, SOURCE_EMBED_CHARS), image, ctx);
 }
 const SOURCE_EMBED_CHARS = 4_000;
+
+/** See config.embedScreenshots. */
+export function embedsScreenshot(text: string): boolean {
+  const mode = config.embedScreenshots;
+  return mode === "always" || (mode === "auto" && text.trim().length < config.screenshotTextMin);
+}
 
 /**
  * Embeds nodes, sources, and user seeds that are missing a 768d vector, were embedded with another model,
@@ -113,10 +120,14 @@ export async function ensureEmbeddings(store: Store, embedder: Embedder): Promis
     .listNodes()
     .map((n) => ({ n, ctx: nodeContext(n, users) }))
     .filter(({ n, ctx }) => stale(n, ctx));
-  const sources = store
-    .listSources()
-    .map((s) => ({ s, ctx: sourceContext(s, users) }))
-    .filter(({ s, ctx }) => stale(s, ctx));
+  const staleIds = new Map(
+    store
+      .listSourceMeta()
+      .map((s) => ({ s, ctx: sourceContext(s, users) }))
+      .filter(({ s, ctx }) => stale(s, ctx))
+      .map(({ s, ctx }) => [s.id, ctx]),
+  );
+  const sources = store.getSources([...staleIds.keys()]).map((s) => ({ s, ctx: staleIds.get(s.id) ?? null }));
   const seeds = users.filter((u) => !u.seedVec || u.seedModel !== embedder.model);
   if (!nodes.length && !sources.length && !seeds.length) return 0;
 
@@ -140,7 +151,7 @@ export async function ensureEmbeddings(store: Store, embedder: Embedder): Promis
  */
 export function ensurePseudo(store: Store, c: Compressor): void {
   const nodes = store.listNodes().filter((n) => n.embedding && n.zVersion !== c.id);
-  const sources = store.listSources().filter((s) => s.embedding && s.zVersion !== c.id);
+  const sources = store.listSourceMeta().filter((s) => s.embedding && s.zVersion !== c.id);
   if (!nodes.length && !sources.length) return;
   const clusters = store.listClusters(c.id);
   store.transaction(() => {
@@ -179,7 +190,7 @@ export async function recomputeUserVectors(store: Store, embedder: Embedder): Pr
   );
 
   const authored = store
-    .listSources()
+    .listSourceMeta()
     .filter((s) => s.authorId && s.embedding && s.z && s.embedModel === embedder.model);
 
   const updates = store.listUsers().map((user) => {
@@ -204,7 +215,45 @@ export async function recomputeUserVectors(store: Store, embedder: Embedder): Pr
     return { id: user.id, userVec, gravity: packGravity(grav), gravityVersion: c.id, ranked };
   });
 
-  store.transaction(() => updates.forEach(({ id, ...s }) => store.setUserSteering(id, s)));
+  store.preserving(["nodes", "sourceMeta"], () => store.transaction(() => updates.forEach(({ id, ...s }) => store.setUserSteering(id, s))));
+}
+
+/** After an ingest, how long to wait for more before refreshing. A burst of captures then embeds as one batch. */
+export const REFRESH_DEBOUNCE_MS = 1_000;
+
+const refreshing = new WeakMap<Store, { timer: NodeJS.Timeout | null; running: boolean; again: boolean; after: (() => void)[] }>();
+
+/**
+ * recomputeUserVectors, debounced per org and one run at a time; ingests during a run trigger one more.
+ * `after` runs once the refresh that covers this ingest is done. Never throws.
+ */
+export function refreshInBackground(store: Store, embedder: Embedder, after?: () => void): void {
+  const s = refreshing.get(store) ?? { timer: null, running: false, again: false, after: [] };
+  refreshing.set(store, s);
+  if (after) s.after.push(after);
+  if (s.running) {
+    s.again = true;
+    return;
+  }
+  if (s.timer) return;
+  s.timer = setTimeout(async () => {
+    s.timer = null;
+    s.running = true;
+    const done = s.after.splice(0);
+    try {
+      await recomputeUserVectors(store, embedder);
+    } catch (err) {
+      console.error("refresh after ingest failed", err);
+    } finally {
+      s.running = false;
+      for (const fn of done) fn();
+      if (s.again) {
+        s.again = false;
+        refreshInBackground(store, embedder);
+      }
+    }
+  }, REFRESH_DEBOUNCE_MS);
+  s.timer.unref?.();
 }
 
 export type Scored = {
@@ -365,10 +414,10 @@ export function rankSources(
   store: Store,
   lens: Lens,
   k: number,
-  filter?: (s: StoredSource) => boolean,
+  filter?: (s: SourceMeta) => boolean,
   opts?: { route?: boolean },
 ): Scored[] {
-  const sources = store.listSources().filter((s) => !filter || filter(s));
+  const sources = store.listSourceMeta().filter((s) => !filter || filter(s));
   return rank(lens, sources, (s) => s.createdAt, k, opts);
 }
 

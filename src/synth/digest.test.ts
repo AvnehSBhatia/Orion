@@ -4,7 +4,7 @@ import { normalize } from "@/llm/embed";
 import type { CompletionRequest, LlmClient } from "@/llm/openrouter";
 import { collapseDigests } from "@/steer/context";
 import { deps, memoryStore } from "@/test/helpers";
-import { SYNTH, groupSimilar, synthesizeDigests } from "./digest";
+import { SYNTH, groupCached, groupSimilar, synthesizeDigests } from "./digest";
 
 const NOW = "2026-10-10T12:00:00.000Z";
 
@@ -43,6 +43,36 @@ describe("groupSimilar", () => {
       ["d", v(0.9, 0, 0.2)],
     ]);
     expect(groupSimilar(["a", "b", "c", "d"], vec)).toEqual([["a", "b", "d"]]);
+  });
+});
+
+describe("groupCached", () => {
+  it("matches groupSimilar as sources arrive, change text, and leave", () => {
+    let seed = 11;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) - 0.5;
+    // A few tight topics so many pairs clear the merge threshold, with noise so some do not.
+    const topics = Array.from({ length: 4 }, () => normalize(Float32Array.from({ length: 16 }, rand)));
+    const make = (t: number, noise: number) => normalize(topics[t].map((x) => x + noise * rand()));
+    const store = memoryStore();
+    const vec = new Map<string, Float32Array>();
+    const hashes = new Map<string, string>();
+    let ids: string[] = [];
+    const add = (id: string) => {
+      vec.set(id, make(Math.floor((rand() + 0.5) * 4) % 4, 0.35));
+      hashes.set(id, `${id}-${vec.get(id)![0]}`);
+      ids = [id, ...ids];
+    };
+    for (let i = 0; i < 60; i++) add(`s${i}`);
+    for (let round = 0; round < 5; round++) {
+      const want = groupSimilar(ids, vec);
+      expect(want.length).toBeGreaterThan(3);
+      expect(groupCached(store, "cl", ids, vec, hashes)).toEqual(want);
+      for (let i = 0; i < 8; i++) add(`r${round}-${i}`);
+      const edited = ids[(round * 7) % ids.length];
+      vec.set(edited, make(round % 4, 0.2));
+      hashes.set(edited, `${edited}-edit-${round}`);
+      ids = ids.filter((_, i) => i % 13 !== round);
+    }
   });
 });
 

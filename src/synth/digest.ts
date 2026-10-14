@@ -55,7 +55,11 @@ export type DigestReport = {
   details: { title: string; members: number; fidelity: number; minMember: number; accepted: boolean }[];
 };
 
-const cos = (a: Float32Array, b: Float32Array) => a.reduce((s, x, i) => s + x * b[i], 0);
+function cos(a: Float32Array, b: Float32Array): number {
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
+  return s;
+}
 const body = (s: StoredSource) => (s.text.trim() ? s.text : s.ocrText);
 
 function mean(vs: Float32Array[]): Float32Array {
@@ -75,6 +79,62 @@ export function groupSimilar(ids: string[], vec: Map<string, Float32Array>): str
       .map((o) => [o, cos(vec.get(id)!, vec.get(o)!)] as const)
       .filter(([, s]) => s >= SYNTH.mergeSim)
       .sort((a, b) => b[1] - a[1])
+      .slice(0, SYNTH.maxMembers - 1)
+      .map(([o]) => o);
+    near.forEach((o) => left.delete(o));
+    if (near.length) groups.push([id, ...near]);
+  }
+  return groups;
+}
+
+/** Per source: the cluster and text its neighbors were computed for, and its neighbors at or above mergeSim. */
+type Near = { clusterId: string; hash: string; near: Map<string, number> };
+const neighborCache = new WeakMap<Store, Map<string, Near>>();
+
+/**
+ * groupSimilar with each source's above-threshold neighbors cached across runs, so a run compares only new or
+ * changed sources with the rest of their cluster instead of every pair. Same groups as groupSimilar.
+ */
+export function groupCached(
+  store: Store,
+  clusterId: string,
+  ids: string[],
+  vec: Map<string, Float32Array>,
+  hashes: Map<string, string>,
+): string[][] {
+  let cache = neighborCache.get(store);
+  if (!cache) neighborCache.set(store, (cache = new Map()));
+  const valid = (id: string) => {
+    const e = cache.get(id);
+    return !!e && e.clusterId === clusterId && e.hash === hashes.get(id);
+  };
+  const fresh = ids.filter((id) => !valid(id));
+  const freshSet = new Set(fresh);
+  for (const f of fresh) cache.set(f, { clusterId, hash: hashes.get(f)!, near: new Map() });
+  for (const f of fresh) {
+    const vf = vec.get(f)!;
+    const ef = cache.get(f)!;
+    for (const o of ids) {
+      if (o === f) continue;
+      const eo = cache.get(o)!;
+      if (!freshSet.has(o)) eo.near.delete(f); // drop what o remembered about f's old text
+      else if (o < f) continue; // a pair of fresh sources is computed once
+      const sim = cos(vf, vec.get(o)!);
+      if (sim < SYNTH.mergeSim) continue;
+      ef.near.set(o, sim);
+      eo.near.set(f, sim);
+    }
+  }
+
+  const pos = new Map(ids.map((id, i) => [id, i]));
+  const left = new Set(ids);
+  const groups: string[][] = [];
+  for (const id of ids) {
+    if (!left.has(id)) continue;
+    left.delete(id);
+    const near = [...cache.get(id)!.near]
+      .filter(([o]) => left.has(o))
+      .sort((a, b) => b[1] - a[1] || pos.get(a[0])! - pos.get(b[0])!)
       .slice(0, SYNTH.maxMembers - 1)
       .map(([o]) => o);
     near.forEach((o) => left.delete(o));
@@ -103,14 +163,15 @@ export async function synthesizeDigests(
   for (const s of sources) byCluster.set(s.clusterId!, [...(byCluster.get(s.clusterId!) ?? []), s]);
   const pool = [...byCluster.values()].filter((g) => g.length >= 2).flat();
 
-  const plain = await embedder.embed(pool.map((s) => doc(s.title, body(s).slice(0, 4_000))));
-  const vec = new Map(pool.map((s, i) => [s.id, plain[i]]));
+  const { vec, hashes } = await plainVectors(store, embedder, pool);
   const byId = new Map(sources.map((s) => [s.id, s]));
 
   const groups = [...byCluster.entries()].flatMap(([clusterId, ss]) =>
-    ss.length < 2 ? [] : groupSimilar(ss.map((s) => s.id), vec).map((ids) => ({ clusterId, members: ids.map((id) => byId.get(id)!) })),
+    ss.length < 2 ? [] : groupCached(store, clusterId, ss.map((s) => s.id), vec, hashes).map((ids) => ({ clusterId, members: ids.map((id) => byId.get(id)!) })),
   );
   report.groups = groups.length;
+  const cache = neighborCache.get(store);
+  if (cache) for (const id of cache.keys()) if (!vec.has(id)) cache.delete(id);
 
   const existing = new Map(store.listDigests().map((d) => [d.membersKey, d]));
   const wanted = new Set<string>();
@@ -172,6 +233,32 @@ export async function synthesizeDigests(
   store.deleteDigests(stale.map((d) => d.id));
   report.deleted = stale.length;
   return report;
+}
+
+/** Plain-text vectors for grouping, cached per source and re-embedded only when its text or the model changes. */
+async function plainVectors(
+  store: Store,
+  embedder: Embedder,
+  pool: StoredSource[],
+): Promise<{ vec: Map<string, Float32Array>; hashes: Map<string, string> }> {
+  const cached = store.plainVectors();
+  const vec = new Map<string, Float32Array>();
+  const hashes = new Map<string, string>();
+  const missing: { s: StoredSource; text: string; hash: string }[] = [];
+  for (const s of pool) {
+    const text = body(s).slice(0, 4_000);
+    const hash = textHash(s.title, text);
+    hashes.set(s.id, `${embedder.model}|${hash}`);
+    const hit = cached.get(s.id);
+    if (hit && hit.model === embedder.model && hit.hash === hash) vec.set(s.id, hit.vec);
+    else missing.push({ s, text, hash });
+  }
+  if (missing.length) {
+    const fresh = await embedder.embed(missing.map(({ s, text }) => doc(s.title, text)));
+    missing.forEach(({ s }, i) => vec.set(s.id, fresh[i]));
+    store.setPlainVectors(missing.map(({ s, hash }, i) => ({ id: s.id, vec: fresh[i], model: embedder.model, hash })));
+  }
+  return { vec, hashes };
 }
 
 /** A member's text for the digest prompt: a cached or fresh summary when it is long and faithful, else the text. */
