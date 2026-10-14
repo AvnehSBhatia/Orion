@@ -6,7 +6,7 @@
 import { createServer } from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
 
-const PORT = Number(process.env.PORT ?? 3000);
+const PORT = Number(process.env.PORT ?? 3001);
 const OUT = new URL('./out/', import.meta.url);
 const MAX_BODY_BYTES = 10_000_000;
 
