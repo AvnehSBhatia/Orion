@@ -1,5 +1,5 @@
-// Shapes shared with the backend (spec section 1.3) and between popup, capture
-// window, and service worker.
+// Shapes shared with the Orion server (see server/src/contract/types.ts) and
+// between the popup, the chooser window, and the service worker.
 
 export type Rect = { x: number; y: number; w: number; h: number };
 
@@ -44,12 +44,13 @@ export type RecordingState = {
   sent: number;
   lastSentAt: number | null;
   lastError: ErrorCode | null;
-  captureWindowId: number | null; // the window where the user picks what to share
+  captureWindowId: number | null; // the chooser window, where the user picks what to share
   allowedTabIds: number[]; // Chrome tabs the user ticked
 };
 
+// Messages to the service worker. Every one is answered with a BgResult.
 export type BgRequest =
-  | { type: 'start' } // open the capture window
+  | { type: 'start' } // open the chooser window, or focus it if open
   | { type: 'sources-start' } // the user picked sources and pressed start
   | { type: 'stop' }
   | { type: 'screenshot'; windowId: number }
@@ -62,3 +63,7 @@ export type BgRequest =
     };
 
 export type BgResult<T> = { ok: true; data: T } | { ok: false; code: ErrorCode };
+
+// The service worker asks the chooser window for one frame per shared window
+// or screen. Answered with ScreenFrame[].
+export type FrameRequest = { type: 'grab-frames' };
