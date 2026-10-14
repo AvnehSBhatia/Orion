@@ -1,0 +1,55 @@
+[package]
+name = "orion"
+version = "0.1.0"
+edition = "2024"
+description = "Rust port of the Orion backend"
+default-run = "orion"
+
+[lib]
+name = "orion"
+path = "src/lib.rs"
+
+[[bin]]
+name = "orion"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+async-trait = "0.1.92"
+axum = "0.8.9"
+base64 = "0.23.1"
+bytes = "1.12.1"
+chrono = "0.4.45"
+dotenvy = "0.15.7"
+futures = "0.3.34"
+hex = "0.4.3"
+http-body-util = "0.1.5"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp", "gif"] }
+once_cell = "1.21.4"
+parking_lot = "0.12.5"
+rand = "0.10.3"
+regex = "1.13.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json", "stream"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+scrypt = { version = "0.12.0", default-features = false }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha1 = "0.11.0"
+sha2 = "0.11.1"
+tempfile = { version = "3.27.0", optional = true }
+thiserror = "2.0.21"
+tokio = { version = "1.53.3", features = ["full"] }
+tower = { version = "0.5.3", features = ["util"] }
+tower-http = { version = "0.7.1", features = ["cors", "limit", "trace", "set-header", "catch-panic"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+unicode-normalization = "0.1.25"
+url = "2.5.8"
+webp = "0.3.1"
+
+[features]
+# Exposes `orion::testing` (fake LLM, temp app builder) to integration tests outside the crate.
+testing = ["dep:tempfile"]
+
+[dev-dependencies]
+tempfile = "3.27.0"
