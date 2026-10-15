@@ -1,6 +1,6 @@
 // Local stand-in for the Constellation backend, so the Mac app can be tested
 // before the real one exists. Plain Node, no packages. Shapes follow
-// mac/BACKEND_CONTRACT.md.
+// docs/mac-v1.md (see mac/BACKEND_CONTRACT.md). Auth code for register: K7QF-2M9D.
 //
 //   node mac/mock-backend/server.mjs          (port 8787, or PORT=...)
 //   ANTHROPIC_API_KEY=... node mac/mock-backend/server.mjs
@@ -10,7 +10,7 @@
 // you can look at exactly what arrived.
 
 import { createServer } from 'node:http';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
@@ -30,13 +30,22 @@ const AI_MODEL = process.env.CLAUDE_MODEL ?? 'claude-opus-5-5';
 const AI_URL = process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com';
 
 const BLOCK_FIELDS = {
-  id: 'string', started_at: 'string', ended_at: 'string', app_bundle_id: 'string', app_name: 'string',
-  window_title: 'string', text: 'string', redaction_count: 'number',
+  local_id: 'string', started_at: 'string', ended_at: 'string', app_bundle_id: 'string', app_name: 'string',
+  window_title: 'string', snippet: 'string', text_hash: 'string', redaction_count: 'number',
+  match_method: 'string', match_confidence: 'number',
 };
-const OPTIONAL_FIELDS = { domain_path: 'string', client_id: 'string' };
+const OPTIONAL_FIELDS = { domain_path: 'string', matched_client_id: 'string' };
+const AUTH_CODE = (process.env.MOCK_AUTH_CODE ?? 'K7QF-2M9D').replace('-', '').toUpperCase();
+const CONSENT_VERSION = 1;
+const POLICY = {
+  capture_enabled: true, excluded_hosts: [], capture_interval_sec: 5, browser_page_text: false,
+  consent: { required: true, version: CONSENT_VERSION, notice: 'Constellation reads window titles and visible text on this Mac and sends redacted snippets to your company\'s Orion. You review them first.' },
+};
+const consented = new Set(); // device ids
 
 // Things that should never arrive, because the app redacts them first.
 const LEAKS = [
+  ['card_number', /\b(?:\d[ -]?){13,16}\b/],
   ['email', /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/],
   ['phone', /\(?\b\d{3}\)?[ .-]\d{3}[ .-]\d{4}\b/],
   ['api key', /\b(?:sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})/],
@@ -76,7 +85,7 @@ function draftFor(device, tz) {
   const groups = new Map();
   for (const { device_id, block } of blocks.values()) {
     if (device_id !== device.device_id || localDay(block.started_at, tz) !== today) continue;
-    const key = block.client_id ?? 'none';
+    const key = block.matched_client_id ?? 'none';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(block);
   }
@@ -93,7 +102,7 @@ function draftFor(device, tz) {
       minutes: Math.max(1, Math.ceil(seconds / 60)),
       started_at: list[0].started_at,
       ended_at: list[list.length - 1].ended_at,
-      block_ids: list.map((b) => b.id),
+      block_ids: list.map((b) => b.local_id),
       status: 'pending',
       edited: false,
     };
@@ -166,7 +175,7 @@ function blocksForAI(list) {
     `Block ${index + 1}: ${time(block.started_at)}–${time(block.ended_at)}, ${block.app_name}`,
     `Title: ${block.window_title || '(none)'}`,
     block.domain_path ? `Address: ${block.domain_path}` : null,
-    block.text ? `Text:\n${clip(block.text, 1500)}` : null,
+    block.snippet ? `Text:\n${clip(block.snippet, 1500)}` : null,
   ].filter(Boolean).join('\n')).join('\n\n');
 }
 
@@ -220,48 +229,61 @@ async function handle(req, res) {
 
   if (route === 'POST /v1/devices/register') {
     const body = await readBody(req);
-    if (typeof body.install_id !== 'string' || !body.install_id) return send(res, 400, { error: 'install_id is required' });
+    if (String(body.auth_code ?? '').replace('-', '').toUpperCase() !== AUTH_CODE) {
+      return send(res, 401, { error: { code: 'invalid_code', message: 'invalid, used, or expired code' } });
+    }
     const device = {
       device_id: `dev_${randomUUID().slice(0, 8)}`,
       token: randomBytes(24).toString('hex'),
-      install_id: body.install_id,
-      platform: body.platform, os_version: body.os_version, app_version: body.app_version,
-      enrollment_code: body.enrollment_code ?? null,
+      name: String(body.name ?? 'Mac'),
       registered_at: new Date().toISOString(),
     };
     devices.set(device.token, device);
     await saveDevices();
-    console.log(`registered ${device.device_id} (${device.platform}, app ${device.app_version})`);
-    return send(res, 200, { device_id: device.device_id, token: device.token });
+    console.log(`registered ${device.device_id} (${device.name})`);
+    return send(res, 200, { device_id: device.device_id, device_token: device.token });
+  }
+
+  if (route === 'GET /v1/policy') {
+    if (!deviceFor(req)) return send(res, 401, { error: { code: 'unauthorized', message: 'unknown device token' } });
+    return send(res, 200, POLICY);
+  }
+
+  if (route === 'POST /v1/consent') {
+    const device = deviceFor(req);
+    if (!device) return send(res, 401, { error: { code: 'unauthorized', message: 'unknown device token' } });
+    const body = await readBody(req);
+    if (body.version !== CONSENT_VERSION) return send(res, 409, { error: { code: 'version_mismatch', message: 'not the current version' } });
+    consented.add(device.device_id);
+    return send(res, 200, { accepted_at: new Date().toISOString() });
   }
 
   if (route === 'POST /v1/work-blocks') {
     const device = deviceFor(req);
-    if (!device) return send(res, 401, { error: 'unknown or missing device token' });
+    if (!device) return send(res, 401, { error: { code: 'unauthorized', message: 'unknown or missing device token' } });
+    if (!consented.has(device.device_id)) return send(res, 403, { error: { code: 'consent_required', message: 'accept the notice first' } });
     const body = await readBody(req);
-    if (!Array.isArray(body.blocks)) return send(res, 400, { error: 'blocks must be an array' });
-    if (body.device_id !== device.device_id) return send(res, 400, { error: 'device_id does not match the token' });
+    if (!Array.isArray(body.blocks) || body.blocks.length > 500) return send(res, 400, { error: { code: 'invalid', message: 'blocks must be an array of at most 500' } });
+    const expected = createHash('sha256').update(body.blocks.map((b) => b?.local_id).sort().join('\n')).digest('hex');
+    if (body.batch_hash !== expected) return send(res, 400, { error: { code: 'invalid', message: 'batch_hash does not match' } });
 
-    const accepted = [];
+    let accepted = 0, duplicate = 0;
+    const accepted_ids = [];
     const rejected = [];
     for (const block of body.blocks) {
       const problem = checkBlock(block);
-      if (problem) { rejected.push({ id: String(block?.id ?? ''), reason: problem }); continue; }
-      const repeat = blocks.has(block.id);
-      blocks.set(block.id, { device_id: device.device_id, block }); // same id again replaces: safe to resend
-      if (!repeat) await appendFile(BLOCKS_FILE, JSON.stringify({ device_id: device.device_id, ...block }) + '\n');
-      accepted.push(block.id);
-      const leaks = LEAKS.filter(([, pattern]) => pattern.test(`${block.window_title} ${block.text}`)).map(([name]) => name);
-      console.log(
-        `  ${repeat ? '(again) ' : ''}${block.app_name} ${time(block.started_at)}-${time(block.ended_at)}: ` +
-        `${block.text.length} chars, ${block.redaction_count} redactions` +
-        (block.domain_path ? `, ${block.domain_path.split('/')[0]}` : '') +
-        (block.client_id ? `, client ${block.client_id}` : '') +
-        (leaks.length ? `  NOTE: contains what looks like a${leaks.length === 1 ? 'n' : ''} ${leaks.join(', ')} (expected only if that redaction was turned off; an api key should never appear)` : ''),
-      );
+      const id = String(block?.local_id ?? '');
+      if (problem) { rejected.push({ local_id: id, reason: 'invalid' }); continue; }
+      if (new Date(block.ended_at) < new Date(block.started_at)) { rejected.push({ local_id: id, reason: 'ended_before_started' }); continue; }
+      const leaks = LEAKS.filter(([name, pattern]) => (name === 'card_number' || name === 'api key') && pattern.test(`${block.window_title} ${block.snippet}`)).map(([name]) => name.replace(' ', '_'));
+      if (leaks.length) { rejected.push({ local_id: id, reason: leaks[0] }); continue; }
+      const repeat = blocks.has(id);
+      blocks.set(id, { device_id: device.device_id, block });
+      if (!repeat) { await appendFile(BLOCKS_FILE, JSON.stringify({ device_id: device.device_id, ...block }) + '\n'); accepted += 1; } else duplicate += 1;
+      accepted_ids.push(id);
     }
-    console.log(`work blocks from ${device.device_id}: ${accepted.length} accepted, ${rejected.length} rejected`);
-    return send(res, 200, { accepted, rejected });
+    console.log(`work blocks from ${device.device_id}: ${accepted} new, ${duplicate} duplicate, ${rejected.length} rejected`);
+    return send(res, 200, { accepted, duplicate, accepted_ids, rejected });
   }
 
   if (route === 'POST /v1/summaries') {
@@ -272,10 +294,9 @@ async function handle(req, res) {
     if (!device) return send(res, 401, { error: 'unknown or missing device token' });
     const body = await readBody(req);
     if (!Array.isArray(body.blocks) || body.blocks.length === 0) return send(res, 400, { error: 'blocks must be a non-empty array' });
-    if (body.device_id !== device.device_id) return send(res, 400, { error: 'device_id does not match the token' });
     for (const block of body.blocks) {
       const problem = checkBlock(block);
-      if (problem) return send(res, 400, { error: `block ${block?.id ?? ''}: ${problem}` });
+      if (problem) return send(res, 400, { error: `block ${block?.local_id ?? ''}: ${problem}` });
     }
     if (!AI_KEY) {
       console.log(`summary for ${device.device_id}: ${body.blocks.length} blocks, plain list (no ANTHROPIC_API_KEY), not stored`);
@@ -297,9 +318,12 @@ async function handle(req, res) {
     // Read fresh every time, so edits to clients.json show up on the next sync.
     // The mock ignores ?since= and returns the whole list; mark a client
     // "deleted": true to remove it from devices.
-    const clients = JSON.parse(await readFile(CLIENTS_FILE, 'utf8'));
-    console.log(`clients for ${device.device_id}: ${clients.length} (since ${url.searchParams.get('since') ?? 'the start'})`);
-    return send(res, 200, { clients, next_since: new Date().toISOString() });
+    const raw = JSON.parse(await readFile(CLIENTS_FILE, 'utf8'));
+    const clients = raw.map((c) => ({ ...c, active: c.active !== false && !c.deleted }));
+    const etag = createHash('sha256').update(JSON.stringify(clients)).digest('hex').slice(0, 12);
+    const since = url.searchParams.get('since');
+    console.log(`clients for ${device.device_id}: ${clients.length} (since ${since ?? 'the start'})`);
+    return send(res, 200, { clients: since === etag ? [] : clients, rules: [], etag });
   }
 
   if (route === 'GET /v1/drafts/today') {
@@ -343,8 +367,7 @@ async function handle(req, res) {
     let removed = 0;
     for (const [id, entry] of blocks) if (entry.device_id === device.device_id) { blocks.delete(id); removed += 1; }
     console.log(`deleted ${removed} blocks for ${device.device_id}`);
-    res.writeHead(204);
-    return res.end();
+    return send(res, 202, { request_id: randomUUID() });
   }
 
   if (route === 'POST /v1/baseline') return send(res, 501, { error: 'not in the mock yet' });
