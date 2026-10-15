@@ -2,12 +2,11 @@
 
 export const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** The zone if Intl knows it, else UTC. */
+/** The zone if Intl knows it, else UTC. Returns Intl's canonical spelling, so case variants cannot each fill the formatter cache. */
 export function validZone(tz: string | null | undefined): string {
   if (!tz) return "UTC";
   try {
-    new Intl.DateTimeFormat("en-US", { timeZone: tz });
-    return tz;
+    return new Intl.DateTimeFormat("en-US", { timeZone: tz }).resolvedOptions().timeZone;
   } catch {
     return "UTC";
   }
