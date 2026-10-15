@@ -71,6 +71,48 @@
     body.setup #toggle, body.setup #hide { display: none; }
     #setup .primary { margin-top: 0; }
 
+    /* Signed out: the only action is signing in again. */
+    #signin-panel { display: none; }
+    body.signed-out #signin-panel { display: block; }
+    body.signed-out #toggle { display: none; }
+
+    /* The monitoring notice, shown before the first capture. */
+    #consent-panel { display: none; }
+    body.consent #consent-panel { display: block; }
+    body.consent #toggle, body.consent footer, body.consent .controls { display: none; }
+    #consent-panel h2 { font-size: 18px; margin: 0 0 8px; }
+    .notice {
+      max-height: 260px;
+      overflow-y: auto;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+    #consent-panel .secondary { width: 100%; margin-top: 8px; }
+
+    /* Pause and per-site controls. */
+    .controls { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; color: var(--muted); }
+    .controls .row { flex-wrap: wrap; justify-content: flex-start; }
+    .chip {
+      height: 32px;
+      padding: 0 12px;
+      border-radius: 999px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 14px;
+    }
+    #pause-row, #paused-row, #site-row { display: none; }
+    body.recording:not(.paused) #pause-row { display: flex; }
+    body.paused #paused-row { display: flex; }
+    body.has-site #site-row { display: flex; }
+    body.hiding .controls, body.setup .controls { display: none; }
+    #site-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    body.paused .live { background: rgba(122, 131, 153, 0.15); border-color: rgba(122, 131, 153, 0.4); color: var(--muted); }
+    body.paused .live .dot, body.paused .live .dot::after { background: var(--muted); border-color: var(--muted); animation: none; }
+
     #shot {
       display: block;
       width: 100%;
@@ -107,6 +149,17 @@
 
   <button id="toggle" class="primary">Start capturing</button>
 
+  <div id="signin-panel">
+    <button id="sign-in-again" class="primary">Sign in again</button>
+  </div>
+
+  <section id="consent-panel" aria-labelledby="consent-title">
+    <h2 id="consent-title">Before you start capturing</h2>
+    <div id="notice-text" class="notice card" tabindex="0"></div>
+    <button id="accept" class="primary">I understand, start capturing</button>
+    <button id="decline" class="secondary">Not now</button>
+  </section>
+
   <form id="setup">
     <label for="user-id">Your user id</label>
     <input id="user-id" required autocomplete="off" placeholder="for example, priya-pm" />
@@ -125,6 +178,23 @@
   </div>
 
   <div id="status" role="status"></div>
+
+  <div class="controls">
+    <div id="pause-row" class="row">
+      <span>Pause for</span>
+      <button class="chip" data-pause="15">15 min</button>
+      <button class="chip" data-pause="60">1 hour</button>
+      <button class="chip" data-pause="0">Until I resume</button>
+    </div>
+    <div id="paused-row" class="row">
+      <span id="paused-text"></span>
+      <button id="resume" class="chip">Resume</button>
+    </div>
+    <div id="site-row" class="row">
+      <span id="site-text"></span>
+      <button id="site-toggle" class="chip">Never capture this site</button>
+    </div>
+  </div>
 
   <footer id="links" class="row">
     <a id="hide" class="link" href="#">Hide something</a>
