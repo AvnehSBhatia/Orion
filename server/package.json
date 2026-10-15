@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "seed": "tsx --env-file-if-exists=.env scripts/seed.ts",
-    "embed-models": "tsx scripts/embed-models.ts",
+    "embed-models": "tsx --env-file-if-exists=.env scripts/embed-models.ts",
+    "backup": "tsx --env-file-if-exists=.env scripts/backup.ts",
     "bench": "tsx scripts/bench.ts",
     "bench:embed": "tsx scripts/bench-embed.ts",
     "eval": "EMBED_PROVIDER=gemma tsx scripts/eval.ts"
