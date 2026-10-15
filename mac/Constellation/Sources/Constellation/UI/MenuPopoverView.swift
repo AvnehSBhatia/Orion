@@ -5,6 +5,7 @@ import SwiftUI
 struct MenuPopoverView: View {
     struct Actions {
         var openDraft: () -> Void
+        var openBaseline: () -> Void
         var openOutbox: () -> Void
         var openApps: () -> Void
         var openWelcome: () -> Void
@@ -55,6 +56,7 @@ struct MenuPopoverView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 row("Today's Draft", symbol: "list.bullet.rectangle", action: actions.openDraft)
+                row("Baseline", symbol: "calendar", action: actions.openBaseline)
                 row("Outbox", symbol: "tray.and.arrow.up", badge: outbox.toReviewCount, action: actions.openOutbox)
                 row("Apps and Privacy", symbol: "app.badge.checkmark", action: actions.openApps)
                 row("Welcome and Permission", symbol: "hand.wave", action: actions.openWelcome)

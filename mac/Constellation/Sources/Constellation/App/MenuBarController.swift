@@ -16,11 +16,13 @@ import SwiftUI
     private let sender: Sender
     private let drafts: DraftModel
     private var windows: [String: NSWindow] = [:]
+    private lazy var baseline = BaselineModel(sender: sender)
     private var sink: AnyCancellable?
 
     /// Default and minimum content sizes. Every screen is checked at its minimum.
     private static let sizes: [String: (initial: CGSize, minimum: CGSize)] = [
         "draft": (CGSize(width: 760, height: 680), CGSize(width: 560, height: 480)),
+        "baseline": (CGSize(width: 640, height: 600), CGSize(width: 520, height: 460)),
         "outbox": (CGSize(width: 780, height: 720), CGSize(width: 580, height: 520)),
         "apps": (CGSize(width: 680, height: 720), CGSize(width: 560, height: 520)),
         "welcome": (CGSize(width: 620, height: 560), CGSize(width: 560, height: 500)),
@@ -51,6 +53,7 @@ import SwiftUI
     private var popoverView: MenuPopoverView {
         MenuPopoverView(settings: settings, engine: engine, outbox: outbox, actions: MenuPopoverView.Actions(
             openDraft: { [weak self] in self?.open { $0.showDraft() } },
+            openBaseline: { [weak self] in self?.open { $0.showBaseline() } },
             openOutbox: { [weak self] in self?.open { $0.showOutbox() } },
             openApps: { [weak self] in self?.open { $0.showApps() } },
             openWelcome: { [weak self] in self?.open { $0.showWelcome() } },
@@ -118,6 +121,10 @@ import SwiftUI
         show("draft", title: "Constellation: Today's Draft", DraftView(model: drafts, directory: sender.directory))
     }
 
+    @objc func showBaseline() {
+        show("baseline", title: "Constellation: Baseline", BaselineView(model: baseline, directory: sender.directory))
+    }
+
     @objc func showWelcome() {
         show("welcome", title: "Welcome to Constellation", OnboardingView(
             settings: settings,
@@ -138,6 +145,7 @@ import SwiftUI
             NSHostingController(rootView: OnboardingView(settings: settings, openApps: {}, finish: {})).view,
             NSHostingController(rootView: OutboxView(model: outbox, settings: settings, sender: sender)).view,
             NSHostingController(rootView: DraftView(model: drafts, directory: sender.directory)).view,
+            NSHostingController(rootView: BaselineView(model: baseline, directory: sender.directory)).view,
             NSHostingController(rootView: popoverView).view,
         ]
         views.forEach {
@@ -153,6 +161,7 @@ import SwiftUI
     /// --smoke-test. Nothing appears on screen.
     func renderScreens(to folder: URL) {
         drafts.loadSample()
+        baseline.loadSample()
         outbox.loadSample()
         sender.directory.apply(ClientsResponse(clients: [
             Client(id: "c_acme", name: "Acme Corp"), Client(id: "c_globex", name: "Globex"), Client(id: "c_initech", name: "Initech"),
@@ -169,6 +178,7 @@ import SwiftUI
 
         var screens: [(String, AnyView)] = [
             ("draft", AnyView(DraftView(model: drafts, directory: sender.directory))),
+            ("baseline", AnyView(BaselineView(model: baseline, directory: sender.directory))),
             ("outbox", AnyView(OutboxView(model: outbox, settings: settings, sender: sender))),
             ("apps", AnyView(AppPickerView(settings: settings, engine: engine) {})),
             ("debug", AnyView(DebugView(stats: stats, engine: engine))),
