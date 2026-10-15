@@ -3,6 +3,7 @@ import { toPublicNode, type Store } from "@/db/store";
 import { ripple } from "@/graph/ripple";
 import { readGraph } from "@/graph/view";
 import type { Embedder } from "@/llm/embed";
+import { hiddenSourceIds, type Viewer } from "@/orgs/visibility";
 import { buildContext, type ContextItem } from "@/retrieval/context";
 import { ownerMatches } from "@/orgs/people";
 
@@ -58,11 +59,12 @@ function effect(c: SourceChange): { text: string; flip: boolean } {
 export async function buildTaskContext(
   store: Store,
   embedder: Embedder,
-  { userId, task, k = 10, sinceHours = 168, now = Date.now() }: { userId: string; task: string; k?: number; sinceHours?: number; now?: number },
+  { userId, task, k = 10, sinceHours = 168, viewer = null, now = Date.now() }: { userId: string; task: string; k?: number; sinceHours?: number; viewer?: Viewer; now?: number },
 ): Promise<TaskContext> {
   // Task first: at most one "for you" slot (none for a specific task, see SPECIFIC in steer/context), the rest on
   // the task, plus room for the blockers and feeders of the leaders.
-  const ctx = await buildContext(store, embedder, { userId, q: task, k: k + 3, forYou: 1, hits: Math.max(2, k - 4), now });
+  const ctx = await buildContext(store, embedder, { userId, q: task, k: k + 3, forYou: 1, hits: Math.max(2, k - 4), viewer, now });
+  const hidden = hiddenSourceIds(store, viewer);
   const user = store.getUser(userId);
   const graph = readGraph(store);
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -88,7 +90,7 @@ export async function buildTaskContext(
   for (const [sid, list] of store.changesBySource()) {
     const hits = list.filter((c) => ids.has(c.nodeId));
     if (!hits.length) continue;
-    const s = store.getSource(sid);
+    const s = hidden.has(sid) ? null : store.getSource(sid);
     if (!s || Date.parse(s.createdAt) < since) continue;
     const eff = hits.map(effect);
     changes.push({
@@ -108,7 +110,7 @@ export async function buildTaskContext(
   for (const c of changes) {
     if (docs.length >= 8) break;
     if (docs.some((d) => d.id === c.sourceId)) continue;
-    const s = store.getSource(c.sourceId);
+    const s = hidden.has(c.sourceId) ? null : store.getSource(c.sourceId);
     if (s) docs.push({ ...store.toPublicSource(s), why: `changed ${c.effects.map((e) => e.split(":")[0]).join(", ")}` });
   }
 

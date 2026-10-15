@@ -5,6 +5,7 @@ import type { Store } from "@/db/store";
 import { readGraph } from "@/graph/view";
 import { askAndSaveDashboard } from "@/dashboard/ask";
 import { getChat, getEmbedder, getLlm } from "@/http/deps";
+import { dropHidden, hiddenSourceIds, type Viewer } from "@/orgs/visibility";
 import { buildContext } from "@/retrieval/context";
 import { LlmChat, MAX_ITEMS, type ChatModel, type OnDelta } from "./model";
 
@@ -14,7 +15,8 @@ const CONTEXT_BUDGET_MS = 1_200;
 type Context = Awaited<ReturnType<typeof buildContext>>;
 
 /** Context without embeddings: nodes and recent sources ranked by word overlap, risk, and freshness. */
-export function quickContext(store: Store, q: string): Context {
+export function quickContext(store: Store, q: string, viewer: Viewer = null): Context {
+  const hidden = hiddenSourceIds(store, viewer);
   const words = new Set(q.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []);
   const overlap = (text: string) => (text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((w) => words.has(w)).length;
   const risk = { blocked: 2, at_risk: 1.5, on_track: 0, done: 0, unknown: 0.5 } as const;
@@ -25,6 +27,7 @@ export function quickContext(store: Store, q: string): Context {
     .map(({ n }) => ({ ...n, why: "matches the question" }));
   const sources = store
     .listSources(undefined, 60)
+    .filter((s) => !hidden.has(s.id))
     .map((s) => store.toPublicSource(s))
     .map((s, i) => ({ s, score: overlap(`${s.title} ${s.excerpt}`) - i / 100 }))
     .sort((a, b) => b.score - a.score)
@@ -51,6 +54,7 @@ export async function answerChat(
   body: z.infer<typeof chatRequest>,
   onDelta?: OnDelta,
   onTiming?: (t: Record<string, number>) => void,
+  viewer: Viewer = null,
 ): Promise<ChatResponse> {
   const dashboardP = body.skipDashboard ? Promise.resolve(null) : askAndSaveDashboard(store, user, body.message, { llm: getLlm() });
   const t0 = Date.now();
@@ -60,9 +64,9 @@ export async function answerChat(
   let timer: ReturnType<typeof setTimeout> | undefined;
   const context =
     (await Promise.race([
-      buildContext(store, getEmbedder(), { userId: user.id, q, k: MAX_ITEMS }),
+      buildContext(store, getEmbedder(), { userId: user.id, q, k: MAX_ITEMS, viewer }),
       new Promise<null>((resolve) => (timer = setTimeout(() => resolve(null), CONTEXT_BUDGET_MS))),
-    ]).finally(() => clearTimeout(timer))) ?? quickContext(store, q);
+    ]).finally(() => clearTimeout(timer))) ?? quickContext(store, q, viewer);
   onTiming?.({ contextMs: Date.now() - t0 });
   const [res, dashboard] = await Promise.all([
     chatModel().reply(

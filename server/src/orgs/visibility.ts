@@ -1,4 +1,5 @@
 import type { Principal } from "@/auth/db";
+import type { Source } from "@/contract/types";
 import type { Store } from "@/db/store";
 import { HttpError } from "@/http/error";
 import { getOrgSettings, type OrgSettings } from "./settings";
@@ -17,6 +18,55 @@ export function maskImages<T extends { authorId: string | null; hasImage: boolea
   if (!p || p.admin) return sources;
   const settings = getOrgSettings(store);
   return sources.map((s) => (s.hasImage && !canSeeImage(p, settings, s.authorId) ? { ...s, hasImage: false } : s));
+}
+
+/** Who is asking, for reads of source text. `null` (auth off) sees everything. */
+export type Viewer = { userId: string; admin: boolean } | null;
+
+export const viewerOf = (p: Principal | null): Viewer => (p ? { userId: p.userId, admin: p.admin } : null);
+
+/** Raw text of a Mac work block (`kind = "mac"`) is private to its author and org admins; everything else is org-wide. */
+export function canSeeText(v: Viewer, s: { kind: string; authorId: string | null }): boolean {
+  if (!v || v.admin || s.kind !== "mac") return true;
+  return s.authorId !== null && s.authorId === v.userId;
+}
+
+/** Ids of Mac sources whose text this viewer may not read. Empty for admins and when auth is off. */
+export function hiddenSourceIds(store: Store, v: Viewer): Set<string> {
+  if (!v || v.admin) return new Set();
+  return new Set(store.listSourceMeta().filter((s) => !canSeeText(v, s)).map((s) => s.id));
+}
+
+/** True when this document, or any member of this digest, is a Mac source the viewer may not read. */
+export function isHidden(store: Store, v: Viewer, id: string): boolean {
+  if (!v || v.admin) return false;
+  const s = store.getSource(id);
+  if (s) return !canSeeText(v, s);
+  const d = store.getDigest(id);
+  return !!d && d.members.some((m) => isHidden(store, v, m));
+}
+
+/**
+ * Drops sources the viewer may not read (Mac text of other people, and digests that merge it). For model context
+ * and search results, where even a title of someone's window is private.
+ */
+export function dropHidden<T extends { id: string }>(store: Store, v: Viewer, items: T[]): T[] {
+  if (!v || v.admin) return items;
+  return items.filter((s) => !isHidden(store, v, s.id));
+}
+
+/**
+ * For listings (activity): another person's Mac source stays as metadata, "Mac activity" plus the app name, with no
+ * excerpt, URL, or window title. Digests that merge such text are dropped.
+ */
+export function maskMacSources<T extends Source>(v: Viewer, store: Store, sources: T[]): T[] {
+  if (!v || v.admin) return sources;
+  return sources.flatMap((s) => {
+    if (s.kind === "digest") return isHidden(store, v, s.id) ? [] : [s];
+    if (canSeeText(v, s)) return [s];
+    const app = store.getSource(s.id)?.text.split(":")[0].trim();
+    return [{ ...s, title: app ? `Mac activity: ${app}` : "Mac activity", excerpt: "", ref: "mac://activity" }];
+  });
 }
 
 function contentType(buf: Buffer): string {

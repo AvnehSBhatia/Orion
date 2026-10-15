@@ -2,6 +2,7 @@ import type { FeedItem, Relation, SourceChange } from "@/contract/types";
 import type { Store } from "@/db/store";
 import type { Embedder } from "@/llm/embed";
 import { ownerMatches } from "@/orgs/people";
+import { hiddenSourceIds, type Viewer } from "@/orgs/visibility";
 import { lensFor, rankSources } from "./ranking";
 
 /** Added to the gravity score when a document changed something tied to the reader. */
@@ -22,7 +23,7 @@ function statusNote(c: SourceChange): string {
 export async function feedFor(
   store: Store,
   embedder: Embedder,
-  { userId, sinceHours, limit, now = Date.now() }: { userId: string; sinceHours: number; limit: number; now?: number },
+  { userId, sinceHours, limit, viewer = null, now = Date.now() }: { userId: string; sinceHours: number; limit: number; viewer?: Viewer; now?: number },
 ): Promise<FeedItem[]> {
   const lens = await lensFor(store, embedder, { userId, now });
   if (!lens) return [];
@@ -46,11 +47,12 @@ export async function feedFor(
   }
 
   const changes = store.changesBySource();
+  const hidden = hiddenSourceIds(store, viewer);
   const scored = rankSources(
     store,
     lens,
     Number.MAX_SAFE_INTEGER,
-    (s) => others(s.authorId) && Date.parse(s.createdAt) >= since,
+    (s) => others(s.authorId) && !hidden.has(s.id) && Date.parse(s.createdAt) >= since,
   ).map((r) => {
     let impact = 0;
     let why = "";

@@ -5,6 +5,7 @@ import { config } from "@/config";
 import { mcpHandlerFor } from "@/mcp/server";
 import { DEFAULT_MAX_BODY, readCapped } from "@/http/body";
 import { HttpError } from "@/http/error";
+import { viewerOf } from "@/orgs/visibility";
 import { optionalPrincipal, route } from "@/http/route";
 
 export const runtime = "nodejs";
@@ -27,7 +28,7 @@ async function capped(req: NextRequest): Promise<Request> {
 const handle = route(
   async (req: NextRequest): Promise<Response> => {
     const principal = optionalPrincipal(req);
-    if (principal) return mcpHandlerFor(principal.orgId, principal.userId)(await capped(req));
+    if (principal) return mcpHandlerFor(principal.orgId, principal.userId, viewerOf(principal))(await capped(req));
     if (!config.authDisabled) throw new HttpError(401, "sign in required", undefined, { "WWW-Authenticate": 'Bearer realm="orion"' });
     const url = req.nextUrl.searchParams;
     const parsed = scope.parse({

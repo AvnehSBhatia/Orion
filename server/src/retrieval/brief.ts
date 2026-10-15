@@ -5,6 +5,7 @@ import { firstName, plain } from "@/lib/text";
 import { Handles, capCitations } from "@/chat/citations";
 import type { Embedder } from "@/llm/embed";
 import type { LlmClient } from "@/llm/openrouter";
+import { hiddenSourceIds, type Viewer } from "@/orgs/visibility";
 import { feedFor } from "./feed";
 
 export const BRIEF_HOURS = 2;
@@ -23,11 +24,13 @@ const greeting = (now: number) => {
 };
 
 /** What moved for the person in the window: their ranked feed, then documents that flipped work to blocked or at risk. */
-export async function whatMoved(store: Store, embedder: Embedder, userId: string, now: number): Promise<Moved[]> {
-  const feed = await feedFor(store, embedder, { userId, sinceHours: BRIEF_HOURS, limit: BRIEF_ITEMS, now });
+export async function whatMoved(store: Store, embedder: Embedder, userId: string, now: number, viewer: Viewer = { userId, admin: false }): Promise<Moved[]> {
+  const feed = await feedFor(store, embedder, { userId, sinceHours: BRIEF_HOURS, limit: BRIEF_ITEMS, viewer, now });
+  const hidden = hiddenSourceIds(store, viewer);
   const since = new Date(now - BRIEF_HOURS * 3_600_000).toISOString();
   const flips: Moved[] = store
     .listSources(since, 200)
+    .filter((s) => !hidden.has(s.id))
     .map((s) => store.toPublicSource(s))
     .flatMap((s) => {
       const c = s.changes.find((c) => (c.statusTo === "blocked" || c.statusTo === "at_risk") && c.statusFrom !== c.statusTo);

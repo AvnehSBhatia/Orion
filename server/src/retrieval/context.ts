@@ -4,6 +4,7 @@ import { readGraph } from "@/graph/view";
 import type { Embedder } from "@/llm/embed";
 import { isEmptyFilter, matchingIds, type NodeFilter } from "./filters";
 import { dot } from "@/lib/vector";
+import { dropHidden, hiddenSourceIds, type Viewer } from "@/orgs/visibility";
 import { activeCompressor } from "@/orgspace/embeddings";
 import { lensFor, rankNodes, rankSources, type Lens, type Scored } from "./ranking";
 
@@ -59,11 +60,11 @@ function nodesFrom(
  * Keeps context light: when two or more of the chosen documents belong to one digest, they are replaced
  * by that digest at the position of the first. The originals stay readable by id.
  */
-export function collapseDigests(store: Store, sources: ContextSource[], now: number): ContextSource[] {
+export function collapseDigests(store: Store, sources: ContextSource[], now: number, hidden: ReadonlySet<string> = new Set()): ContextSource[] {
   let out = [...sources];
   for (const d of store.listDigests()) {
     const hit = out.filter((s) => d.members.includes(s.id));
-    if (hit.length < 2 || !d.members.every((id) => store.getSource(id))) continue;
+    if (hit.length < 2 || d.members.some((id) => hidden.has(id)) || !d.members.every((id) => store.getSource(id))) continue;
     const at = out.indexOf(hit[0]);
     out = out.filter((s) => !d.members.includes(s.id));
     out.splice(at, 0, { ...store.toPublicDigest(d), why: `digest of ${d.members.length} similar documents, ${ago(d.newestAt, now)}` });
@@ -94,16 +95,17 @@ export async function findNodes(
 export async function findSources(
   store: Store,
   embedder: Embedder,
-  { userId, q, k, sinceHours, now = Date.now() }: { userId: string; q?: string | null; k: number; sinceHours?: number | null; now?: number },
+  { userId, q, k, sinceHours, viewer = null, now = Date.now() }: { userId: string; q?: string | null; k: number; sinceHours?: number | null; viewer?: Viewer; now?: number },
 ): Promise<ContextSource[]> {
   const lens = await lensFor(store, embedder, { userId, q, now });
   if (!lens) return [];
   const since = sinceHours ? now - sinceHours * 3_600_000 : null;
-  const found = rankSources(store, lens, k, (s) => since === null || Date.parse(s.createdAt) >= since).flatMap((r) => {
+  const hidden = hiddenSourceIds(store, viewer);
+  const found = rankSources(store, lens, k, (s) => !hidden.has(s.id) && (since === null || Date.parse(s.createdAt) >= since)).flatMap((r) => {
     const s = store.getSource(r.id);
     return s ? [{ ...store.toPublicSource(s), why: `${matchWhy(r, !!lens.q)}, ${ago(s.createdAt, now)}` }] : [];
   });
-  return collapseDigests(store, found, now);
+  return dropHidden(store, viewer, collapseDigests(store, found, now, hidden));
 }
 
 /**
@@ -129,8 +131,9 @@ export async function buildContext(
     k = 16,
     hits = 6,
     forYou = 3,
+    viewer = null,
     now = Date.now(),
-  }: { userId: string; q: string; k?: number; hits?: number; forYou?: number; now?: number },
+  }: { userId: string; q: string; k?: number; hits?: number; forYou?: number; viewer?: Viewer; now?: number },
 ): Promise<Context> {
   const lens = await lensFor(store, embedder, { userId, q, now });
   if (!lens) return { items: [], sources: [] };
@@ -191,16 +194,17 @@ export async function buildContext(
   const items = [...out.values()];
 
   const sources = new Map<string, ContextSource>();
-  for (const r of rankSources(store, lens, SOURCES.matches)) {
+  const hidden = hiddenSourceIds(store, viewer);
+  for (const r of rankSources(store, lens, SOURCES.matches, (s) => !hidden.has(s.id))) {
     const s = store.getSource(r.id);
     if (s) sources.set(s.id, { ...store.toPublicSource(s), why: `matches the question${r.cluster ? ` in ${r.cluster}` : ""}, ${ago(s.createdAt, now)}` });
   }
   for (const n of items) {
     if (sources.size >= SOURCES.max) break;
     for (const id of store.sourceIdsForNode(n.id, SOURCES.perNode)) {
-      const s = !sources.has(id) && store.getSource(id);
+      const s = !sources.has(id) && !hidden.has(id) && store.getSource(id);
       if (s) sources.set(id, { ...store.toPublicSource(s), why: `behind ${n.label}, ${ago(s.createdAt, now)}` });
     }
   }
-  return { items, sources: collapseDigests(store, [...sources.values()].slice(0, SOURCES.max), now) };
+  return { items, sources: dropHidden(store, viewer, collapseDigests(store, [...sources.values()].slice(0, SOURCES.max), now, hidden)) };
 }
