@@ -2,11 +2,14 @@
 
 // Topic clusters: each named region of the embedding space, who feeds it, and what landed there last.
 
-import { ago, DOMAIN_TINT, initials, Quiet, useNow } from "@/components/dashboard/shared";
-import type { Domain, EmbeddingPoint, EmbeddingsResponse } from "@/lib/orion";
+import { Quiet } from "@/components/ui/Quiet";
+import type { Domain, EmbeddingPoint, EmbeddingsResponse } from "@/lib/api/types";
+import { DOMAIN_TINT } from "@/lib/domain";
+import { initials } from "@/lib/format";
+import { agoShort, useNow } from "@/lib/time";
 import { useMemo } from "react";
-import { SectionHead, Shell } from "./Chains";
-import { openNode, openSource } from "./open";
+import { SectionHead, Shell } from "./Section";
+import { openNode, openSource } from "@/lib/viewer";
 
 type Card = {
   id: string;
@@ -83,7 +86,7 @@ export function Clusters({ embeddings, scope }: { embeddings: EmbeddingsResponse
                     >
                       <span className="w-9 shrink-0 font-mono text-[10px] tracking-wide text-faint uppercase">{p.kind === "node" ? "node" : "cap"}</span>
                       <span className="min-w-0 flex-1 truncate text-muted">{p.label}</span>
-                      <span className="shrink-0 font-mono text-[11px] text-faint">{ago(p.createdAt, now)}</span>
+                      <span className="shrink-0 font-mono text-[11px] text-faint">{agoShort(p.createdAt, now)}</span>
                     </button>
                   </li>
                 ))}

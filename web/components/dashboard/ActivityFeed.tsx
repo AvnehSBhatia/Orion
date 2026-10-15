@@ -3,13 +3,17 @@
 // Live stream of what the org just captured or committed, newest first.
 // Items present on first paint render still; anything that arrives afterwards slides in and glows once.
 
-import { orion, type Source, type SourceChange } from "@/lib/orion";
-import { cn } from "@/lib/utils";
+import { Quiet } from "@/components/ui/Quiet";
+import { api } from "@/lib/api/client";
+import type { Source, SourceChange } from "@/lib/api/types";
+import { initials, shortRef } from "@/lib/format";
+import { STATUS_LABEL } from "@/lib/status";
+import { agoShort, useNow } from "@/lib/time";
 import { openSource } from "@/lib/viewer";
+import { cn } from "@/lib/utils";
 import { GitCommitHorizontal, Globe, Layers, PenLine } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
-import { ago, initials, Quiet, shortRef, STATUS_LABEL, useNow } from "./shared";
 
 const KIND_ICON = { extension: Globe, code: GitCommitHorizontal, manual: PenLine, digest: Layers } as const;
 const KIND_LABEL = { extension: "Capture", code: "Commit", manual: "Note", digest: "Digest" } as const;
@@ -93,7 +97,7 @@ export function ActivityFeed({
                     {shortRef(s.ref)}
                   </span>
                   <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums" title={new Date(s.createdAt).toLocaleString()}>
-                    {ago(s.createdAt, now)}
+                    {agoShort(s.createdAt, now)}
                   </span>
                 </div>
                 <div className="mt-0.5 flex gap-3">
@@ -104,7 +108,7 @@ export function ActivityFeed({
                   {s.hasImage && orgId && (
                     // eslint-disable-next-line @next/next/no-img-element -- remote capture thumbnail from the API
                     <img
-                      src={orion.imageUrl(orgId, s.id)}
+                      src={api.sources.imageUrl(orgId, s.id)}
                       alt=""
                       loading="lazy"
                       className="h-9 w-14 shrink-0 rounded-md border border-line object-cover object-top opacity-80 grayscale transition duration-200 group-hover:opacity-100 group-hover:grayscale-0"

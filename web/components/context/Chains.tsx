@@ -3,13 +3,15 @@
 // Dependency chains: walk graph.edges from each root and draw the paths, so a blocked node shows
 // everything downstream that is waiting on it (the ripple). Gaps ride along as callouts.
 
-import { DOMAIN_TINT, Mark, Quiet } from "@/components/dashboard/shared";
-import type { Edge, Gap, GraphResponse, PublicNode } from "@/lib/orion";
-import { sectionHint, useDemo } from "@/lib/demo";
+import { Quiet } from "@/components/ui/Quiet";
+import { Mark } from "@/components/ui/StatusMark";
+import type { Edge, Gap, GraphResponse, PublicNode } from "@/lib/api/types";
+import { DOMAIN_TINT } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 import { CircleAlert } from "lucide-react";
 import { Fragment, useMemo } from "react";
-import { openNode } from "./open";
+import { SectionHead, Shell } from "./Section";
+import { openNode } from "@/lib/viewer";
 
 const RELATION_LABEL: Record<string, string> = {
   blocks: "blocks",
@@ -189,22 +191,4 @@ function Relation({ relation, hot }: { relation: string; hot: boolean }) {
       </svg>
     </span>
   );
-}
-
-export function SectionHead({ title, note }: { title: string; note?: string }) {
-  const demo = useDemo();
-  const hint = demo.on ? sectionHint(title) : null;
-  return (
-    <div className="mb-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[14px] font-medium">{title}</h2>
-        {note && <span className="font-mono text-[11px] tracking-wide text-faint uppercase">{note}</span>}
-      </div>
-      {hint && <p className="mt-0.5 text-[12.5px] leading-snug text-faint">{hint}</p>}
-    </div>
-  );
-}
-
-export function Shell({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("overflow-hidden rounded-2xl border border-line bg-panel", className)}>{children}</div>;
 }

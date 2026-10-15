@@ -3,26 +3,19 @@
 // One component per WidgetKind. Each takes the already-filtered nodes plus the raw feeds,
 // so the dashboard decides what is in view and the widget only decides how it looks.
 
-import type { ActivityResponse, Gap, GraphResponse, PublicNode, Status, Widget, WidgetMetric } from "@/lib/orion";
-import { cn } from "@/lib/utils";
+import { byAttention } from "@/components/dashboard/filters";
+import { Quiet } from "@/components/ui/Quiet";
+import { Mark } from "@/components/ui/StatusMark";
+import type { ActivityResponse, Gap, GraphResponse, PublicNode, Status, Widget, WidgetMetric } from "@/lib/api/types";
+import { DOMAIN_LABEL, DOMAIN_TINT, DOMAINS } from "@/lib/domain";
+import { initials } from "@/lib/format";
+import { STATUS_LABEL, STATUS_TONE, STATUSES } from "@/lib/status";
+import { agoShort, useNow } from "@/lib/time";
 import { openNode } from "@/lib/viewer";
+import { cn } from "@/lib/utils";
 import { ArrowUpRight, Tag, TriangleAlert } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import {
-  ago,
-  byAttention,
-  DOMAIN_LABEL,
-  DOMAIN_TINT,
-  DOMAINS,
-  initials,
-  Mark,
-  Quiet,
-  STATUS_LABEL,
-  STATUS_TONE,
-  STATUSES,
-  useNow,
-} from "./shared";
 
 const EASE = [0.23, 1, 0.32, 1] as const;
 
@@ -334,7 +327,7 @@ export function NodeList({
                   >
                     {n.owner ? initials(n.owner) : "?"}
                   </span>
-                  <span className="font-mono text-[10.5px] text-faint tabular-nums">{ago(n.updatedAt, now)}</span>
+                  <span className="font-mono text-[10.5px] text-faint tabular-nums">{agoShort(n.updatedAt, now)}</span>
                 </span>
               </button>
             </motion.li>
@@ -397,7 +390,7 @@ export function People({ people }: { people: ActivityResponse["people"] }) {
           <span className="min-w-0 flex-1">
             <span className="flex items-baseline gap-2 text-[14px]">
               <span className="truncate">{p.name}</span>
-              <span className="ml-auto shrink-0 font-mono text-[11px] text-faint tabular-nums">{ago(p.lastAt, now)}</span>
+              <span className="ml-auto shrink-0 font-mono text-[11px] text-faint tabular-nums">{agoShort(p.lastAt, now)}</span>
             </span>
             <span className="mt-1 flex items-center gap-2">
               <span className="h-1 flex-1 rounded-full bg-raised">

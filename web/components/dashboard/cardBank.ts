@@ -1,21 +1,8 @@
+import { applyFilter, hasFilter } from "@/components/dashboard/filters";
+import type { ActivityResponse, DashboardSpec, Domain, EmbeddingsResponse, GraphResponse, PublicNode, Source, SourceChange, Status, Widget, WidgetKind, WidgetMetric } from "@/lib/api/types";
 // The card bank: ~50 candidate cards derived from live data, scored against what the user last asked for.
 // Pure functions only, so the dashboard can memoize on (graph, activity, sky, spec) and never fetch per card.
 
-import type {
-  ActivityResponse,
-  DashboardSpec,
-  Domain,
-  EmbeddingsResponse,
-  GraphResponse,
-  PublicNode,
-  Source,
-  SourceChange,
-  Status,
-  Widget,
-  WidgetKind,
-  WidgetMetric,
-} from "@/lib/orion";
-import { applyFilter, hasFilter } from "./shared";
 
 export type CardSize = Widget["size"];
 

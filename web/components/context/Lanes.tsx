@@ -3,11 +3,13 @@
 // Lineage: one lane per person over the last 2 minutes. Each dot is a capture or commit;
 // filled when it created a node, ringed when it only updated one. Shows who feeds what.
 
-import { initials, Quiet, useNow } from "@/components/dashboard/shared";
-import type { ActivityResponse, Source } from "@/lib/orion";
+import { Quiet } from "@/components/ui/Quiet";
+import type { ActivityResponse, Source } from "@/lib/api/types";
+import { initials } from "@/lib/format";
+import { useNow } from "@/lib/time";
 import { useMemo } from "react";
-import { SectionHead, Shell } from "./Chains";
-import { openSource } from "./open";
+import { SectionHead, Shell } from "./Section";
+import { openSource } from "@/lib/viewer";
 
 const WINDOW_S = 120;
 const WINDOW_MS = WINDOW_S * 1000;

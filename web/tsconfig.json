@@ -19,7 +19,8 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "orion-demo": ["./demo/entry.ts"]
     }
   },
   "include": [

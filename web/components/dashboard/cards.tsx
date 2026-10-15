@@ -2,12 +2,16 @@
 
 // Compact bank cards: a title of a few words, one supporting line, numbers big.
 
-import type { PublicNode, Source, SourceChange } from "@/lib/orion";
-import { cn } from "@/lib/utils";
+import { Mark } from "@/components/ui/StatusMark";
+import type { PublicNode, Source, SourceChange } from "@/lib/api/types";
+import { DOMAIN_LABEL, DOMAIN_TINT } from "@/lib/domain";
+import { initials } from "@/lib/format";
+import { STATUS_LABEL } from "@/lib/status";
+import { agoShort } from "@/lib/time";
 import { openSource } from "@/lib/viewer";
+import { cn } from "@/lib/utils";
 import { ArrowRight, Tag } from "lucide-react";
 import { memo } from "react";
-import { ago, DOMAIN_LABEL, DOMAIN_TINT, initials, Mark, STATUS_LABEL } from "./shared";
 
 const SHELL =
   "group flex h-full min-h-[116px] w-full flex-col justify-between rounded-2xl border border-line bg-panel p-4 text-left transition-colors duration-150 hover:border-line-strong hover:bg-raised/40 focus-visible:border-line-strong focus-visible:outline-none";
@@ -51,7 +55,7 @@ export const NodeCard = memo(function NodeCard({
         <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: DOMAIN_TINT[n.domain] }} />
         {DOMAIN_LABEL[n.domain]} · {STATUS_LABEL[n.status]}
         {n.sellable && <Tag className="size-2.5 shrink-0" />}
-        <span className="ml-auto tabular-nums">{ago(n.updatedAt, now)}</span>
+        <span className="ml-auto tabular-nums">{agoShort(n.updatedAt, now)}</span>
       </Foot>
     </button>
   );
@@ -79,7 +83,7 @@ export const PersonCard = memo(function PersonCard({
       </div>
       {latest && <p className="mt-1.5 line-clamp-1 text-[13px] text-muted">{latest.title}</p>}
       <Foot>
-        Captures <span className="ml-auto tabular-nums">{ago(lastAt, now)}</span>
+        Captures <span className="ml-auto tabular-nums">{agoShort(lastAt, now)}</span>
       </Foot>
     </button>
   );
@@ -122,7 +126,7 @@ export const ChangeCard = memo(function ChangeCard({ source, change, now }: { so
       </div>
       <Foot>
         {source.authorName ? initials(source.authorName) : "Flip"}
-        <span className="ml-auto tabular-nums">{ago(source.createdAt, now)}</span>
+        <span className="ml-auto tabular-nums">{agoShort(source.createdAt, now)}</span>
       </Foot>
     </button>
   );
