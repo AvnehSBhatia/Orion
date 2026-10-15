@@ -7,6 +7,8 @@ next-env.d.ts
 .env*.local
 
 data/
+# ...but not route folders named data (DELETE /v1/me/data)
+!server/app/**/data/
 .cache/
 *.traineddata
 *.db

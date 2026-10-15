@@ -312,8 +312,8 @@ struct LiveBackendTests {
             appName: "Mail", windowTitle: "Live test", domainPath: nil, text: "Live test block with [EMAIL]",
             textHash: "", redactionCount: 1, status: .approved, snapshotCount: 1
         )
-        let clients = try await client.fetchClients(since: nil, credentials: credentials)
-        #expect(!clients.clients.isEmpty)
+        let clients = try await client.fetchClients(since: nil, credentials: credentials) // may be empty on a new org
+        #expect(clients.etag != nil)
         let policy = try await client.fetchPolicy(credentials: credentials)
         if policy.consent.required { _ = try await client.acceptConsent(version: policy.consent.version, credentials: credentials) }
         let matcher = ClientMatcher(clients: clients.clients, rules: clients.rules ?? [])

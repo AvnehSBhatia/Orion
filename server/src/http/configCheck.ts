@@ -20,7 +20,8 @@ export function checkConfig(env: NodeJS.ProcessEnv = process.env): ConfigReport 
 
   if (config.authDisabled) problem("AUTH_DISABLED=true turns off sign-in on every route");
   if (!config.cookieSecure) problem("COOKIE_SECURE must be true (serve the API over HTTPS)");
-  if (config.extensionIds.length === 0) problem("EXTENSION_IDS must list the Chrome extension ids allowed to call the API");
+  // Only the legacy Chrome extension needs it; with none listed, no extension origin is trusted, which is safe.
+  if (config.extensionIds.length === 0) warnings.push("EXTENSION_IDS is empty: the legacy Chrome extension cannot call the API (the Mac app does not need it)");
   if (config.uiOrigins.length === 0 || config.uiOrigins.some(isLocal)) problem(`UI_ORIGIN must be the web app's public origin, not ${config.uiOrigins.join(",") || "empty"}`);
   if (!config.openRouterKey) {
     // With Gemma the server still embeds and stores captures (extraction and chat fail), so that only warns.

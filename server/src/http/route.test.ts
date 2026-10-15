@@ -242,9 +242,11 @@ describe("config check", () => {
     process.env.UI_ORIGIN = "http://localhost:3000";
     process.env.EMBED_PROVIDER = "openrouter";
     delete process.env.OPENROUTER_API_KEY;
-    const { errors } = checkConfig(prod);
-    expect(errors).toHaveLength(5);
-    expect(errors.join("\n")).toMatch(/AUTH_DISABLED[\s\S]*COOKIE_SECURE[\s\S]*EXTENSION_IDS[\s\S]*UI_ORIGIN[\s\S]*OPENROUTER_API_KEY/);
+    const { errors, warnings } = checkConfig(prod);
+    expect(errors).toHaveLength(4);
+    expect(errors.join("\n")).toMatch(/AUTH_DISABLED[\s\S]*COOKIE_SECURE[\s\S]*UI_ORIGIN[\s\S]*OPENROUTER_API_KEY/);
+    // The Mac app needs no extension ids; only the legacy extension does, so that one only warns.
+    expect(warnings.join("\n")).toMatch(/EXTENSION_IDS/);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(() => validateConfig(prod)).toThrow(/Refusing to start/);
     warn.mockRestore();
