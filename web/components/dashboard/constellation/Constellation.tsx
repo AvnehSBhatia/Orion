@@ -655,7 +655,7 @@ export function Constellation({
       {(empty || !data) && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-center">
           <p className={cn("font-mono text-[11px] tracking-wide text-faint uppercase", !empty && !error && "animate-pulse")}>
-            {empty ? "Waiting for the first capture" : error ? "Offline · retrying" : "Charting…"}
+            {empty ? "Nothing captured yet" : error ? "Reconnecting…" : "Charting…"}
           </p>
         </div>
       )}

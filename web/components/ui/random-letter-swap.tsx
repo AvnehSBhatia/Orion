@@ -2,9 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { motion, type Transition, useAnimate } from "framer-motion";
-import { useRef } from "react";
-
-type SwapTransition = Transition;
+import { type ComponentProps, useRef } from "react";
 
 function shuffled(length: number) {
   const order = Array.from({ length }, (_, index) => index);
@@ -15,19 +13,24 @@ function shuffled(length: number) {
   return order;
 }
 
+/**
+ * A real button whose label rolls letter by letter on hover or focus. The rolling letters are aria-hidden;
+ * screen readers hear the label once, from the sr-only copy.
+ */
 export function RandomLetterSwap({
   label,
   className,
   reverse = false,
-  staggerDuration = 0.03,
+  staggerDuration = 0.025,
   transition = { duration: 0.6, type: "spring" },
+  ...button
 }: {
   label: string;
   className?: string;
   reverse?: boolean;
   staggerDuration?: number;
-  transition?: SwapTransition;
-}) {
+  transition?: Transition;
+} & Omit<ComponentProps<"button">, "children" | "ref" | "onAnimationStart" | "onDrag" | "onDragStart" | "onDragEnd">) {
   const [scope, animate] = useAnimate();
   const running = useRef(false);
   const letters = label.split("");
@@ -52,14 +55,14 @@ export function RandomLetterSwap({
   };
 
   return (
-    <motion.span
+    <motion.button
       ref={scope}
+      type="button"
       data-label={label}
-      role="button"
-      tabIndex={0}
       onHoverStart={play}
       onFocus={play}
-      className={cn("relative flex items-center justify-center overflow-hidden", className)}
+      className={cn("relative flex items-center justify-center overflow-hidden rounded-sm", className)}
+      {...button}
     >
       <span className="sr-only">{label}</span>
       {letters.map((letter, index) => (
@@ -72,6 +75,6 @@ export function RandomLetterSwap({
           </motion.span>
         </span>
       ))}
-    </motion.span>
+    </motion.button>
   );
 }

@@ -3,7 +3,7 @@
 import { ActionPills } from "@/components/chat/ActionPills";
 import { ReplyText } from "@/components/chat/ReplyText";
 import { type Message, plainQuestion } from "@/lib/chat";
-import { X } from "lucide-react";
+import { CircleAlert, RotateCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 /**
@@ -15,12 +15,15 @@ export function ReplyDock({
   messages,
   onSend,
   onClose,
+  onRetry,
   keepOpen = false,
 }: {
   question: string;
   messages: Message[];
   onSend: (text: string) => void;
   onClose: () => void;
+  /** Sends a failed question again. */
+  onRetry: (question: string) => void;
   /** Demo mode: the answer stays up while the presenter talks over it. */
   keepOpen?: boolean;
 }) {
@@ -36,10 +39,10 @@ export function ReplyDock({
     setHistory(false);
   }
   useEffect(() => {
-    if (keepOpen || last.pending || hover || history) return;
+    if (keepOpen || last.pending || last.failed || hover || history) return;
     const t = window.setTimeout(() => setFolded(true), 7000);
     return () => window.clearTimeout(t);
-  }, [keepOpen, last.pending, last.text, hover, history]);
+  }, [keepOpen, last.pending, last.failed, last.text, hover, history]);
   const earlier = messages.slice(0, -2).slice(-6);
 
   if (folded && !hover) {
@@ -92,6 +95,22 @@ export function ReplyDock({
           )}
         </div>
       )}
+      {last.failed ? (
+        <div role="alert" className="mt-1 flex items-center justify-between gap-3">
+          <p className="flex items-center gap-2 text-[13px] leading-snug text-[#d4d4d4]">
+            <CircleAlert className="size-3.5 shrink-0 text-muted" />
+            {last.text}
+          </p>
+          <button
+            type="button"
+            onClick={() => onRetry(last.failed!.question)}
+            className="flex shrink-0 items-center gap-1.5 rounded-full border border-line-strong px-2.5 py-1 text-[12px] text-ink transition-colors hover:bg-raised"
+          >
+            <RotateCw className="size-3" />
+            Retry
+          </button>
+        </div>
+      ) : (
       <div className="thin-scroll mt-0.5 max-h-24 overflow-auto pr-1">
         <ReplyText
           text={last.text}
@@ -100,7 +119,8 @@ export function ReplyDock({
           className="text-[13px] leading-snug text-[#d4d4d4]"
         />
       </div>
-      {!last.pending && <ActionPills actions={last.actions} onSend={onSend} className="mt-1.5" />}
+      )}
+      {!last.pending && !last.failed && <ActionPills actions={last.actions} onSend={onSend} className="mt-1.5" />}
     </div>
   );
 }

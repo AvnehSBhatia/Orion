@@ -135,7 +135,7 @@ const DOMAIN_SHORT: Record<Domain, string> = { engineering: "Eng", sales: "Sales
 const STATUS_SHORT: Record<Status, string> = { blocked: "blocked", at_risk: "at risk", on_track: "on track", done: "done", unknown: "unknown" };
 
 const METRIC_TITLE: Record<WidgetMetric, string> = {
-  total_nodes: "Nodes",
+  total_nodes: "Projects",
   blocked: "Blocked",
   at_risk: "At risk",
   on_track: "On track",

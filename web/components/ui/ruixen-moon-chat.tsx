@@ -95,7 +95,7 @@ const RuixenMoonChat = forwardRef<HTMLTextAreaElement, MoonChatInputProps>(funct
 
   return (
     <div className={cn("w-full", className)}>
-      <div className="relative rounded-xl border border-neutral-700 bg-black/60 backdrop-blur-md">
+      <div className="relative rounded-xl border border-neutral-700 bg-black/60 backdrop-blur-md focus-within:border-neutral-400">
         <label htmlFor={id} className="sr-only">
           Ask about your work
         </label>
@@ -123,13 +123,13 @@ const RuixenMoonChat = forwardRef<HTMLTextAreaElement, MoonChatInputProps>(funct
             "w-full resize-none border-none px-4 py-3",
             "bg-transparent text-[15px] text-white",
             "focus-visible:ring-0 focus-visible:ring-offset-0",
-            "min-h-[64px] placeholder:text-neutral-500",
+            "min-h-[64px] placeholder:text-faint",
           )}
           style={{ overflow: "hidden" }}
         />
 
         <div className="flex items-center justify-between p-3 pt-1">
-          <span className="pl-1 text-[13px] text-neutral-500">Enter to send</span>
+          <span className="pl-1 text-[13px] text-faint">Enter to send</span>
           <Button
             type="button"
             onClick={submit}

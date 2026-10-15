@@ -5,6 +5,7 @@
 
 import { Mark } from "@/components/ui/StatusMark";
 import { api } from "@/lib/api/client";
+import { friendlyError } from "@/lib/errors";
 import type { PublicNode, Source, SourceDetail } from "@/lib/api/types";
 import { DOMAIN_LABEL, DOMAIN_TINT } from "@/lib/domain";
 import { refUrl, shortRef } from "@/lib/format";
@@ -12,7 +13,7 @@ import { STATUS_LABEL } from "@/lib/status";
 import { since } from "@/lib/time";
 import { fetchSource, OPEN_NODE, OPEN_SOURCE, openNode, openSource } from "@/lib/viewer";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Target = { kind: "source" | "node"; id: string; at: number };
 
@@ -61,13 +62,43 @@ export function SourceViewer({ orgId }: { orgId: string | null }) {
     };
     load()
       .then((v) => alive && setView(v))
-      .catch((e) => alive && setView({ kind: "error", message: e instanceof Error ? e.message : String(e) }));
+      .catch((e) => alive && setView({ kind: "error", message: friendlyError(e, "open this") }));
     return () => {
       alive = false;
     };
   }, [target, orgId]);
 
   const close = () => setTarget(null);
+
+  // Focus moves into the drawer when it opens and back to whatever opened it when it closes.
+  const panelRef = useRef<HTMLElement>(null);
+  const returnTo = useRef<HTMLElement | null>(null);
+  const open = !!target;
+  useEffect(() => {
+    if (!open) return;
+    returnTo.current = document.activeElement as HTMLElement | null;
+    const t = window.setTimeout(() => panelRef.current?.querySelector<HTMLElement>("button")?.focus(), 30);
+    const trap = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const items = [...panelRef.current.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), [tabindex='0']")];
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", trap);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("keydown", trap);
+      returnTo.current?.focus?.();
+    };
+  }, [open]);
 
   return (
     <AnimatePresence>
@@ -82,7 +113,10 @@ export function SourceViewer({ orgId }: { orgId: string | null }) {
         >
           <div className="absolute inset-0 bg-black/40" onClick={close} aria-hidden />
           <motion.aside
+            ref={panelRef}
             role="dialog"
+            aria-modal="true"
+            data-testid="source-viewer"
             aria-label={target.kind === "source" ? "Source" : "Node"}
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
@@ -168,10 +202,7 @@ function SourceBody({ orgId, detail }: { orgId: string; detail: SourceDetail }) 
         </ul>
       )}
 
-      {source.hasImage && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={api.sources.imageUrl(orgId, source.id)} alt="" className="mt-5 w-full rounded-lg border border-line" loading="lazy" />
-      )}
+      {source.hasImage && <Screenshot orgId={orgId} id={source.id} />}
 
       {body && (
         <pre
@@ -236,4 +267,41 @@ function NodeBody({ node, related }: { node: PublicNode; related: Source[] }) {
       )}
     </article>
   );
+}
+
+/**
+ * The capture's screenshot. Screenshots can be limited to their author and admins (403); the image is checked
+ * with a credentialed request first so a refusal reads as a note, not a broken image.
+ */
+function Screenshot({ orgId, id }: { orgId: string; id: string }) {
+  const [state, setState] = useState<{ id: string; url: string | null; status: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let url: string | null = null;
+    fetch(api.sources.imageUrl(orgId, id), { credentials: "include", cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) return alive && setState({ id, url: null, status: res.status });
+        url = URL.createObjectURL(await res.blob());
+        if (alive) setState({ id, url, status: 200 });
+      })
+      .catch(() => alive && setState({ id, url: null, status: 0 }));
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [orgId, id]);
+  if (!state || state.id !== id) return <div className="mt-5 h-40 w-full animate-pulse rounded-lg bg-raised" aria-label="Loading screenshot" />;
+  if (!state.url) {
+    return (
+      <p className="mt-5 rounded-lg border border-dashed border-line-strong px-3 py-2.5 text-[13px] text-muted">
+        {state.status === 403
+          ? "Screenshot hidden. Only the person who captured it and your org's admins can see it."
+          : state.status === 404
+            ? "The screenshot was removed by your org's retention policy."
+            : "The screenshot couldn't be loaded."}
+      </p>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={state.url} alt="Screenshot of the captured page" className="mt-5 w-full rounded-lg border border-line" />;
 }

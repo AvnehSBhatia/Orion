@@ -3,6 +3,8 @@
 import { ApiError } from "@/lib/api/client";
 
 export function friendlyError(error: unknown, action = "do that"): string {
+  if (error instanceof DOMException && error.name === "TimeoutError") return "Orion took too long to answer. Try again.";
+  if (error instanceof DOMException && error.name === "AbortError") return "Stopped.";
   if (!(error instanceof ApiError)) return `Something went wrong. Try again.`;
   if (error.status === 0) return "Can't reach Orion right now. Check your connection and try again.";
   if (error.status === 402) return "Your org has used this month's model budget. An admin can raise it in Admin, Capture policy.";

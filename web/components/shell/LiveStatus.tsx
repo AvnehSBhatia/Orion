@@ -7,14 +7,18 @@ import { cn } from "@/lib/utils";
 import { openSource } from "@/lib/viewer";
 import { AnimatePresence, motion } from "motion/react";
 
-/** Pulse, counts, and the newest capture, so the swarm is visibly landing. */
+export type Connection = "live" | "reconnecting" | "down";
+
+/** Pulse, counts, and the newest capture while connected; an honest "Reconnecting" when polls fail. */
 export function LiveStatus({
-  offline,
+  connection,
+  lastOk,
   graph,
   activity,
   stars,
 }: {
-  offline: boolean;
+  connection: Connection;
+  lastOk: number | null;
   graph: GraphResponse | null;
   activity: ActivityResponse | null;
   stars: number;
@@ -22,11 +26,11 @@ export function LiveStatus({
   const now = useNow(1000);
   const latest = activity?.sources[0];
   const fresh = latest ? now - Date.parse(latest.createdAt) < 15_000 : false;
-  if (offline) {
+  if (connection !== "live") {
     return (
-      <span className="hidden items-center gap-2 font-mono text-[12px] tracking-wide text-faint uppercase md:flex">
-        <span className="size-1.5 rounded-full bg-faint" />
-        Offline · sample data
+      <span role="status" className="hidden items-center gap-2 font-mono text-[12px] tracking-wide text-faint uppercase md:flex">
+        <span className="size-1.5 animate-pulse rounded-full bg-faint" />
+        {connection === "down" ? "Can't reach Orion" : `Reconnecting${lastOk ? ` · updated ${ago(new Date(lastOk).toISOString(), now)}` : ""}`}
       </span>
     );
   }
@@ -36,7 +40,7 @@ export function LiveStatus({
     <span className="hidden min-w-0 items-center gap-3 md:flex">
       <span className="flex shrink-0 items-center gap-2 font-mono text-[12px] tracking-wide text-faint uppercase">
         <span className={cn("relative size-1.5 rounded-full", fresh ? "orion-live bg-ink text-ink" : "bg-muted")} />
-        {nodes} nodes · {sources} sources
+        {nodes.toLocaleString("en-US")} projects · {sources.toLocaleString("en-US")} captures
       </span>
       {latest && (
         <AnimatePresence mode="popLayout" initial={false}>

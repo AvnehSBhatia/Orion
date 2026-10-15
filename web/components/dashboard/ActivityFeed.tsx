@@ -46,7 +46,7 @@ export function ActivityFeed({
     return loading ? (
       <Quiet title="Connecting" className={className} />
     ) : (
-      <Quiet title="Waiting for the first capture" className={className} />
+      <Quiet title="Nothing matches this card right now" className={className} />
     );
   }
 
@@ -111,6 +111,8 @@ export function ActivityFeed({
                       src={api.sources.imageUrl(orgId, s.id)}
                       alt=""
                       loading="lazy"
+                      // Hidden screenshots (403) or pruned ones (404) just leave no thumbnail.
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
                       className="h-9 w-14 shrink-0 rounded-md border border-line object-cover object-top opacity-80 grayscale transition duration-200 group-hover:opacity-100 group-hover:grayscale-0"
                     />
                   )}

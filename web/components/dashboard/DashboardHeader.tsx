@@ -5,7 +5,10 @@ import { agoShort, useNow } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { LayoutGrid, Sparkles, UserRound } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { memo } from "react";
+import { createContext, memo, useContext } from "react";
+
+/** True while polls are failing: live indicators say so instead of claiming "Live". */
+export const StaleContext = createContext(false);
 
 const EASE = [0.23, 1, 0.32, 1] as const;
 
@@ -50,12 +53,13 @@ export const DashboardHeader = memo(function DashboardHeader({ spec, activity }:
 });
 
 function Live({ activity }: { activity: ActivityResponse | null }) {
+  const stale = useContext(StaleContext);
   return (
     <div className="flex items-center gap-4 font-mono text-[11px] tracking-wide text-faint uppercase">
-      <LiveDot on={!!activity} label={activity ? "Live" : "Connecting"} />
+      <LiveDot on={!!activity && !stale} label={stale ? "Reconnecting" : activity ? "Live" : "Connecting"} />
       {activity && (
         <span className="tabular-nums">
-          {activity.counts.nodes} nodes · {activity.counts.sources} src
+          {activity.counts.nodes.toLocaleString("en-US")} projects · {activity.counts.sources.toLocaleString("en-US")} captures
         </span>
       )}
     </div>

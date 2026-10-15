@@ -1,7 +1,9 @@
 "use client";
 
 import { Centered } from "@/components/auth/Centered";
+import { ConsentScreen } from "@/components/auth/ConsentScreen";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { Logo } from "@/components/ui/Logo";
 import { SessionContext } from "@/components/auth/session";
 import { api, SIGNED_OUT_EVENT, statusOf } from "@/lib/api/client";
 import type { Me } from "@/lib/api/types";
@@ -59,32 +61,48 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const me = state.kind === "signed-in" ? state.me : null;
   const session = useMemo(() => (me ? { me, signOut, refresh: check } : null), [me, signOut, check]);
 
-  if (state.kind === "loading") return <div className="min-h-dvh bg-bg" />;
-  if (state.kind === "offline") {
+  if (state.kind === "loading") {
     return (
-      <Centered>
-        <p className="text-sm text-muted">Could not reach the Orion server: {state.error}</p>
-        <button type="button" onClick={check} className="mt-4 h-10 rounded-md border border-line-strong px-4 text-sm text-ink hover:bg-raised">
-          Try again
-        </button>
-      </Centered>
+      <div className="flex min-h-dvh items-center justify-center bg-bg" role="status" aria-label="Loading Orion">
+        <span className="animate-pulse">
+          <Logo size={28} />
+        </span>
+      </div>
     );
   }
+  if (state.kind === "offline") return <Offline onRetry={check} />;
   if (state.kind === "signed-out" || !session) return <LoginForm error={state.kind === "signed-out" ? state.error : undefined} onSignedIn={check} />;
 
   return (
     <SessionContext.Provider value={session}>
-      <div key={session.me.username ?? "local"}>{children}</div>
-      {!session.me.authDisabled && (
-        <button
-          type="button"
-          onClick={signOut}
-          className="fixed bottom-3 left-3 z-50 rounded-md px-2 py-1 text-xs text-faint hover:text-ink"
-          title={`Signed in as ${session.me.username}`}
-        >
-          Sign out {session.me.username}
-        </button>
-      )}
+      <div key={session.me.username ?? "local"}>
+        {session.me.consent?.required ? <ConsentScreen /> : children}
+      </div>
     </SessionContext.Provider>
+  );
+}
+
+/** The server could not be reached at load: say so plainly and keep retrying with backoff. */
+function Offline({ onRetry }: { onRetry: () => Promise<void> }) {
+  const [attempt, setAttempt] = useState(0);
+  const delay = Math.min(30, 2 ** Math.min(attempt, 5));
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setAttempt((n) => n + 1);
+      void onRetry();
+    }, delay * 1000);
+    return () => window.clearTimeout(t);
+  }, [attempt, delay, onRetry]);
+  return (
+    <Centered>
+      <Logo size={24} />
+      <h1 className="mt-4 text-[20px] font-semibold tracking-[-0.02em]">Can&apos;t reach Orion</h1>
+      <p className="mt-2 text-sm text-muted" role="status">
+        The server isn&apos;t answering. This page tries again on its own in {delay} seconds.
+      </p>
+      <button type="button" onClick={() => void onRetry()} className="mt-5 h-10 rounded-md border border-line-strong px-4 text-sm text-ink hover:bg-raised">
+        Try now
+      </button>
+    </Centered>
   );
 }

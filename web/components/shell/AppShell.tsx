@@ -12,7 +12,7 @@ import { type MapCamera, StarMap } from "@/components/map/StarMap";
 import { ProjectPage } from "@/components/project/ProjectPage";
 import { BlackHole, type BlackHoleHandle } from "@/components/ui/black-hole";
 import { Logo } from "@/components/ui/Logo";
-import RandomLetterSwapNav from "@/components/ui/m-random-letter-swap-1";
+import { Quiet } from "@/components/ui/Quiet";
 import RuixenMoonChat, { type QuickActionItem } from "@/components/ui/ruixen-moon-chat";
 import { SourceViewer } from "@/components/viewer/SourceViewer";
 import type { ChatTurn, Domain, OrgSummary, ViewCommand } from "@/lib/api/types";
@@ -21,13 +21,17 @@ import { DOMAIN_LABEL } from "@/lib/domain";
 import { friendlyError } from "@/lib/errors";
 import { api } from "@/lib/api/client";
 import { toStars } from "@/lib/stars";
-import { useNow } from "@/lib/time";
+import { INTRO_SEEN_KEY, readStored, writeStored } from "@/lib/storage";
+import { ago, useNow } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { CircleAlert, Megaphone, TrendingUp } from "lucide-react";
 import { type ComposerControl, DemoCaption, noteDemoSent, scrollToCard, useDemo, useDemoKeys } from "orion-demo";
-import { type KeyboardEvent, type MouseEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { AccountMenu, accountLinks } from "./AccountMenu";
 import { APP_VARS, BEATS, HERO_VARS, type Phase, useIntroScroll } from "./intro";
-import { LiveStatus } from "./LiveStatus";
+import { type Connection, LiveStatus } from "./LiveStatus";
+import { MobileMenu, Nav, type View } from "./Nav";
+import { Onboarding } from "./Onboarding";
 import { Picker } from "./Picker";
 import { ReplyDock } from "./ReplyDock";
 import { ResetBar } from "./ResetBar";
@@ -37,22 +41,20 @@ import { useDashboardSpec } from "./useDashboardSpec";
 import { useToasts } from "./useToasts";
 import { useWorkspace } from "./useWorkspace";
 
-type View = "home" | "map" | "context" | "blocked";
+/** Answers slower than this are cut off with a friendly message and a Retry. */
+const CHAT_TIMEOUT_MS = 90_000;
 
-const NAV = ["Home", "Map", "Context", "Blocked", "Ask"];
-
-const ACTIVE: Record<View, string> = {
-  home: "[&_[data-label='Home']]:text-foreground",
-  map: "[&_[data-label='Map']]:text-foreground",
-  context: "[&_[data-label='Context']]:text-foreground",
-  blocked: "[&_[data-label='Blocked']]:text-foreground",
-};
+/** Returning visitors, and anyone on a touch screen (the scroll scrub is desktop-only), skip the intro. */
+function initialPhase(): Phase {
+  if (typeof window === "undefined") return "hero";
+  return readStored(INTRO_SEEN_KEY) ? "app" : "hero";
+}
 
 const ACTION_ICONS = [TrendingUp, CircleAlert, Megaphone];
 
 export function AppShell() {
-  const { me } = useSession();
-  const [phase, setPhase] = useState<Phase>("hero");
+  const { me, signOut } = useSession();
+  const [phase, setPhase] = useState<Phase>(initialPhase);
   const [view, setView] = useState<View>("home");
   const [domainFilter, setDomainFilter] = useState<Domain | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -75,6 +77,9 @@ export function AppShell() {
     phaseRef.current = phase;
     selectedRef.current = selectedId;
   });
+  useEffect(() => {
+    if (phase === "app") writeStored(INTRO_SEEN_KEY, "1");
+  }, [phase]);
 
   const { toasts, notify } = useToasts();
   const ws = useWorkspace({ signedInUser: me.userId });
@@ -138,12 +143,20 @@ export function AppShell() {
     caption: "",
   });
 
-  const ask = async (text: string) => {
+  const ask = async (text: string, { retry = false } = {}) => {
     noteAsked();
     setReplyOpen(true);
+    // A retry replaces the failed question and its error, so the conversation reads as one ask.
+    const dropFailed = (list: Message[]) => {
+      const at = list.findIndex((item) => item.failed);
+      if (at < 0) return list;
+      return list.filter((_, i) => i !== at && !(retry && i === at - 1 && list[i].role === "user"));
+    };
     // The conversation so far goes with the question, so "how would you fix this?" knows what "this" is.
-    const history: ChatTurn[] = messages.filter((item) => !item.pending && !item.failed).map((item) => ({ role: item.role, text: item.text }));
-    setMessages((current) => [...current.filter((item) => !item.failed), { role: "user", text }, { role: "assistant", text: "", pending: true }]);
+    const history: ChatTurn[] = dropFailed(messages)
+      .filter((item) => !item.pending)
+      .map((item) => ({ role: item.role, text: item.text }));
+    setMessages((current) => [...dropFailed(current), { role: "user", text }, { role: "assistant", text: "", pending: true }]);
     // The streaming reply is the one pending message; it is replaced in place as tokens land.
     const update = (message: Message) =>
       setMessages((current) => {
@@ -173,6 +186,7 @@ export function AppShell() {
           update({ role: "assistant", text: streamed, pending: true });
         },
         history,
+        AbortSignal.timeout(CHAT_TIMEOUT_MS),
       );
       update({ role: "assistant", text: response.reply, sources: response.sources, actions: response.actions });
       if (response.viewCommand) applyView(response.viewCommand);
@@ -192,13 +206,24 @@ export function AppShell() {
     }
   };
 
-  const sendFromMap = (text: string) => {
+  const sendFromMap = (text: string, options?: { retry?: boolean }) => {
     noteDemoSent(text);
-    void ask(text);
+    void ask(text, options);
     if (phase === "hero") {
-      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      setPhase(reduce ? "app" : "entering");
+      // The scrub is a desktop moment: reduced motion, touch screens, and repeat visits go straight in.
+      const skip =
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+        window.matchMedia("(pointer: coarse)").matches ||
+        !!readStored(INTRO_SEEN_KEY);
+      setPhase(skip ? "app" : "entering");
     }
+  };
+
+  const goHome = () => {
+    setSelectedId(null);
+    setDomainFilter(null);
+    setView("home");
+    setPhase("hero");
   };
 
   const navigate = (next: View) => {
@@ -233,14 +258,7 @@ export function AppShell() {
     setView("context");
   };
 
-  const onNav = (event: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) => {
-    if ("key" in event && event.key !== "Enter" && event.key !== " ") return;
-    const label = (event.target as HTMLElement).closest("[data-label]")?.getAttribute("data-label");
-    if (!label) return;
-    event.preventDefault();
-    if (label === "Ask") composerRef.current?.focus();
-    else navigate(label.toLowerCase() as View);
-  };
+  const focusComposer = () => composerRef.current?.focus();
 
   useIntroScroll({ phase, sectionRef, stageRef, mapRef, highlightRef, onFinish: () => setPhase("app") });
 
@@ -269,6 +287,7 @@ export function AppShell() {
           stars={stars}
           messages={messages}
           onSend={(text) => void ask(text)}
+          onRetry={(text) => void ask(text, { retry: true })}
           onSelect={setSelectedId}
           onNavigate={navigate}
         />
@@ -287,6 +306,11 @@ export function AppShell() {
       ? stars.filter((star) => star.status === "blocked")
       : [...inDomain].sort((a, b) => Number(a.status === "done") - Number(b.status === "done"));
   const showMap = phase !== "app" || view === "map";
+  const connection: Connection = ws.unreachable ? "down" : ws.reconnecting ? "reconnecting" : "live";
+  const org = orgs.find((item) => item.id === orgId) ?? null;
+  const empty = !!graph && graph.nodes.length === 0 && (activity?.counts.sources ?? 0) === 0;
+  const canViewAs = !!(me.admin || me.authDisabled);
+  const who = [user?.name ?? me.username, org?.name].filter(Boolean).join(" · ");
   const map = <StarMap ref={mapRef} stars={stars} highlightIds={highlightIds} onSelect={setSelectedId} onMore={showDomain} />;
 
   return (
@@ -296,6 +320,14 @@ export function AppShell() {
         style={phase === "app" ? APP_VARS : HERO_VARS}
         className={cn("h-dvh overflow-hidden bg-bg text-ink", phase === "entering" ? "fixed inset-0" : "sticky top-0")}
       >
+        {phase === "app" && (
+          <a
+            href="#main"
+            className="sr-only z-[70] rounded-md bg-ink px-3 py-2 text-[13px] text-bg focus:not-sr-only focus:absolute focus:top-2 focus:left-2"
+          >
+            Skip to content
+          </a>
+        )}
         {phase !== "app" && (
           <div
             className="absolute inset-0 origin-bottom"
@@ -307,6 +339,7 @@ export function AppShell() {
             <BlackHole ref={holeRef} />
           </div>
         )}
+        {phase === "hero" && <AccountMenu name={me.userId === user?.id ? user?.name : undefined} orgName={org?.name} className="absolute top-3 right-4 z-30" />}
         {phase === "entering" && (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-40 h-px bg-white/80" style={{ width: "calc(var(--progress) * 100%)" }} />
         )}
@@ -317,31 +350,49 @@ export function AppShell() {
           inert={phase !== "app"}
         >
           <span className="flex min-w-0 items-center gap-2.5">
-            <Logo />
-            <span className="hidden text-[14px] font-semibold tracking-[-0.01em] sm:inline">Orion</span>
-            {orgs.length > 0 && (
+            <MobileMenu
+              view={view}
+              onNavigate={navigate}
+              onAsk={focusComposer}
+              links={accountLinks(me.admin)}
+              onSignOut={me.authDisabled ? undefined : () => void signOut()}
+              who={who}
+            />
+            <button
+              type="button"
+              onClick={goHome}
+              aria-label="Orion: back to the start screen"
+              className="flex items-center gap-2.5 rounded-md"
+            >
+              <Logo />
+              <span className="hidden text-[14px] font-semibold tracking-[-0.01em] sm:inline">Orion</span>
+            </button>
+            {orgs.length > 1 ? (
               <>
                 <span className="hidden text-line-strong sm:inline">/</span>
                 <Picker
                   label="Organization"
-                  current={orgs.find((org) => org.id === orgId)?.name ?? "Choose org"}
+                  current={org?.name ?? "Choose org"}
                   value={orgId}
-                  options={orgs.map((org: OrgSummary) => ({
-                    id: org.id,
-                    title: org.name,
-                    detail: `${org.members} ${org.members === 1 ? "person" : "people"}`,
+                  options={orgs.map((item: OrgSummary) => ({
+                    id: item.id,
+                    title: item.name,
+                    detail: `${item.members} ${item.members === 1 ? "person" : "people"}`,
                   }))}
                   onPick={chooseOrg}
                 />
               </>
-            )}
+            ) : org ? (
+              <>
+                <span className="hidden text-line-strong sm:inline">/</span>
+                <span className="truncate px-2 text-[14px] text-muted">{org.name}</span>
+              </>
+            ) : null}
           </span>
-          <div onClick={onNav} onKeyDown={onNav} className={cn("[&>div]:min-h-0 [&>div]:px-0 max-md:[&_nav]:gap-4 max-sm:hidden", ACTIVE[view])}>
-            <RandomLetterSwapNav links={NAV} />
-          </div>
-          <span className="flex min-w-0 items-center justify-end gap-4">
-            <LiveStatus offline={ws.unreachable} graph={graph} activity={activity} stars={stars.length} />
-            {users.length > 0 && (
+          <Nav view={view} onNavigate={navigate} onAsk={focusComposer} />
+          <span className="flex min-w-0 items-center justify-end gap-3 md:gap-4">
+            <LiveStatus connection={connection} lastOk={ws.lastOk} graph={graph} activity={activity} stars={stars.length} />
+            {canViewAs && users.length > 1 && (
               <Picker
                 label="Viewing as"
                 align="right"
@@ -351,11 +402,36 @@ export function AppShell() {
                 onPick={ws.chooseUser}
               />
             )}
+            <AccountMenu name={me.userId === user?.id ? user?.name : undefined} orgName={org?.name} className="max-sm:hidden" />
           </span>
         </header>
 
-        <div className="absolute inset-x-0 top-14" style={{ bottom: phase === "app" ? 0 : "calc(var(--dock, 200px) + 32px)" }} inert={phase !== "app"}>
-          {showMap ? (
+        {phase === "app" && connection !== "live" && (
+          <div
+            role="status"
+            className="absolute inset-x-0 top-14 z-[15] flex items-center justify-center gap-2 border-b border-line bg-panel px-4 py-1.5 text-[13px] text-muted"
+          >
+            <span className="size-1.5 animate-pulse rounded-full bg-faint" />
+            {connection === "down"
+              ? "Can't reach Orion. Retrying…"
+              : `Reconnecting… Showing what was there ${ws.lastOk ? ago(new Date(ws.lastOk).toISOString(), minute) : "earlier"}.`}
+          </div>
+        )}
+
+        <main
+          id="main"
+          tabIndex={-1}
+          className="absolute inset-x-0 top-14 outline-none"
+          style={{ bottom: phase === "app" ? 0 : "calc(var(--dock, 200px) + 32px)" }}
+          inert={phase !== "app"}
+        >
+          {ws.unreachable && !graph ? (
+            <div className="flex h-full items-center justify-center px-6" style={{ paddingBottom: "calc(var(--dock, 200px) + 40px)" }}>
+              <div className="max-w-sm text-center">
+                <Quiet title="Can't reach Orion right now" detail="Your data is safe. This page retries on its own every few seconds." />
+              </div>
+            </div>
+          ) : showMap ? (
             <div className="relative h-full px-4 pt-4">
               <div className="absolute top-5 left-6 z-10 hidden md:block" style={{ opacity: "var(--header)" }}>
                 <p className="text-[14px] font-medium">Company map</p>
@@ -367,7 +443,9 @@ export function AppShell() {
                         .join(", ") || "Click a project for details"
                     : stars.length
                       ? "Click a project for details"
-                      : "Waiting for the first capture"}
+                      : graph
+                        ? "Nothing captured yet"
+                        : "Loading"}
                 </p>
                 {demo.on && <p className="mt-4 font-mono text-[11px] tracking-wide text-muted uppercase">Teams → projects</p>}
                 <div className={demo.on ? "mt-2" : "mt-4"}>
@@ -377,6 +455,30 @@ export function AppShell() {
               <div className="h-full max-sm:hidden">{map}</div>
               <div className="h-full sm:hidden">
                 <CompactMap stars={stars} highlightIds={highlightIds} onSelect={setSelectedId} />
+              </div>
+            </div>
+          ) : view === "home" && empty ? (
+            <div className="thin-scroll h-full overflow-auto" style={{ paddingBottom: "calc(var(--dock, 200px) + 40px)" }}>
+              <Onboarding org={org} users={users} activity={activity} />
+            </div>
+          ) : view === "blocked" && listed.length === 0 && graph ? (
+            <div className="flex h-full items-center justify-center px-6" style={{ paddingBottom: "calc(var(--dock, 200px) + 40px)" }}>
+              <div className="max-w-md text-center">
+                <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Nothing is blocked</h1>
+                <p className="mt-2 text-muted">
+                  {empty
+                    ? "Blocked work shows up here once people start capturing."
+                    : `${stars.filter((star) => star.status === "at_risk").length} projects are at risk. Ask Orion what's slipping, or open Context to see how work connects.`}
+                </p>
+                {!empty && (
+                  <button
+                    type="button"
+                    onClick={() => navigate("context")}
+                    className="mt-4 rounded-md border border-line-strong px-3 py-1.5 text-[13px] text-ink transition-colors hover:bg-raised"
+                  >
+                    Open Context
+                  </button>
+                )}
               </div>
             </div>
           ) : view === "home" ? (
@@ -391,6 +493,7 @@ export function AppShell() {
                 highlightIds={highlightIds}
                 onSelectNode={setSelectedId}
                 renderMap={() => <div className="h-full">{map}</div>}
+                stale={connection !== "live"}
               />
             </div>
           ) : (
@@ -407,7 +510,7 @@ export function AppShell() {
               stars={listed}
             />
           )}
-        </div>
+        </main>
 
         {phase === "entering" &&
           BEATS.map((beat) => (
@@ -452,6 +555,7 @@ export function AppShell() {
               messages={messages}
               onSend={sendFromMap}
               onClose={() => setReplyOpen(false)}
+              onRetry={(text) => sendFromMap(text, { retry: true })}
               keepOpen={demo.on}
             />
           )}

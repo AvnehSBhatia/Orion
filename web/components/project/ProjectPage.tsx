@@ -7,6 +7,7 @@ import { percentChange, type Star } from "@/lib/stars";
 import { statusLabel } from "@/lib/status";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Donut, LineChart } from "@/components/project/Charts";
+import { AccountMenu } from "@/components/shell/AccountMenu";
 import { Logo } from "@/components/ui/Logo";
 import { cn } from "@/lib/utils";
 import {
@@ -30,6 +31,7 @@ export function ProjectPage({
   stars,
   messages,
   onSend,
+  onRetry,
   onSelect,
   onNavigate,
 }: {
@@ -38,6 +40,8 @@ export function ProjectPage({
   stars: Star[];
   messages: Message[];
   onSend: (message: string) => void;
+  /** Sends a failed question again, as it was first sent. */
+  onRetry: (message: string) => void;
   onSelect: (id: string) => void;
   onNavigate: (view: View) => void;
 }) {
@@ -124,6 +128,7 @@ export function ProjectPage({
           <span className="text-[14px] text-muted">{DOMAIN_LABEL[star.domain]}</span>
           <span className="text-line-strong">/</span>
           <span className="truncate text-[14px]">{star.label}</span>
+          <AccountMenu className="ml-auto max-sm:hidden" />
         </header>
 
         <main id="project-sheet" className="mx-auto max-w-5xl space-y-5 px-4 py-6 md:px-8 md:py-8">
@@ -219,6 +224,7 @@ export function ProjectPage({
           <ChatPanel
             messages={messages}
             onSend={handleSend}
+            onRetry={onRetry}
             suggestions={prompts}
             className="h-[560px] overflow-hidden rounded-2xl border border-line xl:hidden"
           />
@@ -228,6 +234,7 @@ export function ProjectPage({
       <ChatPanel
         messages={messages}
         onSend={handleSend}
+        onRetry={onRetry}
         suggestions={prompts}
         className="hidden w-[340px] shrink-0 border-l border-line xl:flex"
       />

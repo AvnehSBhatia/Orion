@@ -57,7 +57,7 @@ export function Lanes({ activity, scope }: { activity: ActivityResponse | null; 
       <SectionHead title="Who feeds what" note={total ? `${total} in 2 min` : "Last 2 min"} />
       <Shell>
         {lanes.length === 0 ? (
-          <Quiet title={activity ? "Quiet for the last 2 minutes." : "Loading activity…"} />
+          <Quiet title={activity ? "No captures in the last 2 minutes." : "Loading activity…"} />
         ) : (
           <div className="px-4 py-4 md:px-5">
             <div className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-4 md:grid-cols-[minmax(0,12rem)_1fr]">

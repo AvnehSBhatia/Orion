@@ -11,11 +11,14 @@ import { useEffect, useRef } from "react";
 export function ChatPanel({
   messages,
   onSend,
+  onRetry,
   suggestions = [],
   className,
 }: {
   messages: Message[];
   onSend: (message: string) => void;
+  /** Sends a failed question again; defaults to onSend. */
+  onRetry?: (message: string) => void;
   suggestions?: string[];
   className?: string;
 }) {
@@ -46,8 +49,21 @@ export function ChatPanel({
             </p>
           ) : (
             <div key={index} className="max-w-[95%] text-[13px] leading-relaxed text-[#d4d4d4]">
-              <ReplyText text={message.text} sources={message.sources} streaming={message.pending} />
-              {!message.pending && <ActionPills actions={message.actions} onSend={onSend} className="mt-2" />}
+              {message.failed ? (
+                <div role="alert">
+                  <p>{message.text}</p>
+                  <button
+                    type="button"
+                    onClick={() => (onRetry ?? onSend)(message.failed!.question)}
+                    className="mt-2 rounded-full border border-line-strong px-3 py-1 text-[12px] text-ink transition-colors hover:bg-raised"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <ReplyText text={message.text} sources={message.sources} streaming={message.pending} />
+              )}
+              {!message.pending && !message.failed && <ActionPills actions={message.actions} onSend={onSend} className="mt-2" />}
             </div>
           ),
         )}

@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from "react";
 const EASE = [0.23, 1, 0.32, 1] as const;
 
 export const METRIC_LABEL: Record<WidgetMetric, string> = {
-  total_nodes: "Nodes",
+  total_nodes: "Projects",
   blocked: "Blocked",
   at_risk: "At risk",
   on_track: "On track",
@@ -182,7 +182,7 @@ export function StatusBreakdown({ nodes }: { nodes: PublicNode[] }) {
   const rows = STATUSES.map((s) => ({ s, n: nodes.filter((x) => x.status === s).length })).filter((r) => r.n > 0 || r.s !== "unknown");
   return (
     <div>
-      <div className="flex h-2 gap-0.5 overflow-hidden rounded-full" role="img" aria-label="Nodes by status">
+      <div className="flex h-2 gap-0.5 overflow-hidden rounded-full" role="img" aria-label="Projects by status">
         {rows
           .filter((r) => r.n > 0)
           .map((r) => (

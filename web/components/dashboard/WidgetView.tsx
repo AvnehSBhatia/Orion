@@ -5,12 +5,12 @@ import { WidgetCard } from "@/components/dashboard/WidgetCard";
 import { Quiet } from "@/components/ui/Quiet";
 import type { ActivityResponse, GraphResponse, PublicNode, Widget } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
-import { memo, useMemo } from "react";
+import { memo, useContext, useMemo } from "react";
 import { ActivityFeed } from "./ActivityFeed";
 import type { Card } from "./cardBank";
 import { ChangeCard, ClusterCard, NodeCard, PersonCard } from "./cards";
 import { Constellation } from "./constellation/Constellation";
-import { LiveDot } from "./DashboardHeader";
+import { LiveDot, StaleContext } from "./DashboardHeader";
 import { DomainBreakdown, Gaps, Kpi, METRIC_LABEL, NodeList, Note, People, StatusBreakdown } from "./widgets";
 
 export const CardView = memo(function CardView({
@@ -83,6 +83,7 @@ function WidgetView({
   renderMap?: () => React.ReactNode;
   nodeById: Map<string, PublicNode>;
 }) {
+  const stale = useContext(StaleContext);
   const filtered = hasFilter(w.filter);
   const nodes = useMemo(() => applyFilter(graph?.nodes ?? [], w.filter), [graph, w.filter]);
   const big = size === "lg" || size === "full";
@@ -108,7 +109,7 @@ function WidgetView({
 
     case "node_list":
       return (
-        <WidgetCard title={w.title || "Nodes"} note={graph ? `${nodes.length}` : undefined} flush>
+        <WidgetCard title={w.title || "Projects"} note={graph ? `${nodes.length}` : undefined} flush>
           {graph ? <NodeList nodes={nodes} highlightIds={highlightIds} onSelectNode={onSelectNode} tall={big} /> : loadingGraph}
         </WidgetCard>
       );
@@ -124,7 +125,7 @@ function WidgetView({
           ? all.filter((s) => sourceMatches(s, ids, w.filter))
           : all;
       return (
-        <WidgetCard title={w.title || "Activity"} note={<LiveDot on={!!activity} label={activity ? `${activity.counts.lastHour}/hr` : "…"} />} flush>
+        <WidgetCard title={w.title || "Activity"} note={<LiveDot on={!!activity && !stale} label={activity ? `${activity.counts.lastHour}/hr` : "…"} />} flush>
           <div className={cn("thin-scroll overflow-auto", big ? "max-h-[460px]" : "max-h-[300px]")}>
             <ActivityFeed
               sources={sources}

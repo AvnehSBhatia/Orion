@@ -15,7 +15,7 @@ import { DemoCardHint } from "orion-demo";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { buildBank, type Card, specKey, specTerms } from "./cardBank";
 import { prefetchSky, useSkySnapshot } from "./constellation/sky";
-import { DashboardHeader } from "./DashboardHeader";
+import { DashboardHeader, StaleContext } from "./DashboardHeader";
 import { GLOW_MS, useDeck } from "./useDeck";
 import { CardView } from "./WidgetView";
 
@@ -38,6 +38,7 @@ export function DynamicDashboard({
   highlightIds,
   onSelectNode,
   renderMap,
+  stale = false,
 }: {
   spec: DashboardSpec;
   graph: GraphResponse | null;
@@ -46,6 +47,8 @@ export function DynamicDashboard({
   highlightIds: string[];
   onSelectNode: (id: string) => void;
   renderMap: () => React.ReactNode;
+  /** Polls are failing: live indicators say "Reconnecting". */
+  stale?: boolean;
 }) {
   const reduce = useReducedMotion();
   useEffect(() => {
@@ -80,10 +83,13 @@ export function DynamicDashboard({
   }, [bank, ids]);
 
   return (
+    <StaleContext.Provider value={stale}>
     <div className="mx-auto w-full max-w-[1400px] px-4 py-5 md:px-8 md:py-6">
       <DashboardHeader spec={spec} activity={activity} />
 
-      {cards.length === 0 ? (
+      {!graph && !activity ? (
+        <DashboardSkeleton />
+      ) : cards.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-line-strong">
           <Quiet title="Ask Orion what to watch" className="py-16" />
         </div>
@@ -134,6 +140,22 @@ export function DynamicDashboard({
           </div>
         </LayoutGroup>
       )}
+    </div>
+    </StaleContext.Provider>
+  );
+}
+
+/** The deck's shape while the first graph and activity load: four stat tiles and two wide cards. */
+function DashboardSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-4" aria-busy aria-label="Loading your dashboard">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="h-[116px] animate-pulse rounded-2xl border border-line bg-panel" />
+      ))}
+      <div className="h-[340px] animate-pulse rounded-2xl border border-line bg-panel md:col-span-3" />
+      <div className="h-[340px] animate-pulse rounded-2xl border border-line bg-panel" />
+      <div className="h-[220px] animate-pulse rounded-2xl border border-line bg-panel md:col-span-2" />
+      <div className="h-[220px] animate-pulse rounded-2xl border border-line bg-panel md:col-span-2" />
     </div>
   );
 }

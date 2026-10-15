@@ -6,7 +6,8 @@
   --raised: #141414;
   --ink: #ededed;
   --muted: #8f8f8f;
-  --faint: #5a5a5a;
+  --faint: #808080; /* 5.3:1 on --bg, 4.6:1 on --raised (WCAG AA) */
+  --danger: #ff9e97; /* errors only; 9:1 on --bg */
   --line: #1f1f1f;
   --line-strong: #2e2e2e;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
@@ -20,6 +21,7 @@
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
+  --color-danger: var(--danger);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-foreground: var(--ink);

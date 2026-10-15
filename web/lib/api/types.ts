@@ -151,7 +151,8 @@ export type EmbeddingsResponse = { points: EmbeddingPoint[]; clusters: { id: str
 
 // ---- Session, accounts, admin -------------------------------------------------------
 
-export type Consent = { required: boolean; version: number; acceptedAt: string | null };
+/** `notice` is the org's monitoring notice text (markdown-ish plain text), when the server sends one. */
+export type Consent = { required: boolean; version: number; acceptedAt: string | null; notice?: string | null };
 
 export type Me = {
   username?: string;
