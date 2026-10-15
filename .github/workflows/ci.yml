@@ -112,6 +112,20 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+  mac:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: mac/Constellation
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, test, smoke test
+        run: |
+          swift --version
+          swift build -c release
+          swift test
+          .build/release/Constellation --smoke-test
+
   audit:
     # Known vulnerabilities in production dependencies. Separate job so a new advisory is visible
     # without hiding the build result.

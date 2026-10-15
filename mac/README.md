@@ -2,7 +2,7 @@
 
 ## Build
 
-Plain `swift build` fails on some Macs with stale Command Line Tools. If it does, use a wrapper script that adds a VFS overlay hiding the stale files (the one used in development lives outside the repo), then run `<wrapper> build -c release`, `<wrapper> test`, and `.build/release/Constellation --smoke-test` from `mac/Constellation`.
+Plain `swift build` fails on some Macs with stale Command Line Tools ("Invalid manifest", "redefinition of module 'SwiftBridging'", "no such module 'Testing'"). Then use `scripts/swift-clt.sh` in place of `swift` from `mac/Constellation`: `scripts/swift-clt.sh build -c release`, `scripts/swift-clt.sh test`, then `.build/release/Constellation --smoke-test`. It hides the stale files with a VFS overlay, no sudo.
 
 ## Connecting to Orion
 

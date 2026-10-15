@@ -16,12 +16,12 @@ web dashboard (:3000) ◀────────┘        │            └�
 |---|---|
 | `server/` | Backend (Next.js API). Routes in `server/app/api/**/route.ts`, logic in `server/src/` (`http/`, `auth/`, `orgs/`, `ingest/`, `orgspace/`, `retrieval/`, `digests/`, `dashboard/`, `chat/`, `mcp/`; map in [`server/src/README.md`](server/src/README.md)). Tests next to the code (`*.test.ts`). |
 | `web/` | Dashboard UI (Next.js). |
-| `extension/` | Chrome extension that captures the tabs, windows, and screens a person picks. |
+| `extension/` | Legacy Chrome extension (tabs, windows, screens). The Mac app is the capture client now; the extension still builds and works. |
 | `codebase-agent/` | Turns commits into feature cards; respects `+.` private paths in `.gitignore`. Also runs in CI (`.github/workflows/ctx-sync.yml`). |
 | `.agents/skills/orion-context/` | Skill that teaches coding agents to pull context and write feature cards. |
 | `server/scripts/` | `account.ts` (accounts and tokens), `seed.ts` (demo org), `bench.ts`, `bench-embed.ts`, `eval.ts` (cost and accuracy). |
 | `demo/` | Tiny fake product for the codebase agent demo. |
-| `mac/` | Constellation Time, the native macOS capture app (Swift). Its backend contract is in [`mac/BACKEND_CONTRACT.md`](mac/BACKEND_CONTRACT.md). |
+| `mac/` | Constellation, the native macOS capture app (Swift): reads on-screen text through Accessibility (no screenshots), redacts on the Mac, and sends only what the person approves to the server's `/v1` ([`docs/mac-v1.md`](docs/mac-v1.md), [`mac/README.md`](mac/README.md)). |
 
 ## Run it locally
 
