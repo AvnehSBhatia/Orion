@@ -34,10 +34,40 @@ struct DraftView: View {
             }
             ForEach(model.draft?.entries ?? []) { entry in
                 EntryCard(entry: entry, model: model, clients: directory.list.clients)
-                    .id("\(entry.id)-\(entry.status)-\(entry.description)-\(entry.minutes)-\(entry.clientId ?? "")")
+                    .id("\(entry.id)-\(entry.status)-\(entry.edited)-\(entry.narrative)-\(entry.minutes)-\(entry.clientId ?? "")")
             }
+            if let draft = model.draft, !draft.entries.isEmpty { DoneForToday(model: model) }
         }
         .task { await model.refresh() }
+    }
+}
+
+/// The end of the day: finalize, then the CSV.
+private struct DoneForToday: View {
+    @ObservedObject var model: DraftModel
+
+    var body: some View {
+        GlassCard {
+            if let exported = model.exported {
+                HStack(spacing: Theme.Space.m) {
+                    StarBadge(kind: .accepted)
+                    Text("Exported \(exported) \(exported == 1 ? "entry" : "entries")").font(Theme.Typo.bodyStrong)
+                    Spacer(minLength: Theme.Space.s)
+                    Button("Download CSV") { Task { await model.downloadCSV() } }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(model.downloading)
+                }
+            } else {
+                HStack(spacing: Theme.Space.m) {
+                    Text(model.pendingCount > 0 ? "\(model.pendingCount) still to review" : "Everything is reviewed")
+                        .font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
+                    Spacer(minLength: Theme.Space.s)
+                    Button("Done for Today") { Task { await model.finalize() } }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(model.finalizing)
+                }
+            }
+        }
     }
 }
 
@@ -58,13 +88,13 @@ private struct EntryCard: View {
         self.entry = entry
         self.model = model
         self.clients = clients
-        _description = State(initialValue: entry.description)
+        _description = State(initialValue: entry.narrative)
         _minutes = State(initialValue: entry.minutes)
         _clientId = State(initialValue: entry.clientId)
     }
 
     private var changed: Bool {
-        description != entry.description || minutes != entry.minutes || clientId != entry.clientId
+        description != entry.narrative || minutes != entry.minutes || clientId != entry.clientId
     }
 
     private var badge: StarBadge.Kind {
@@ -76,7 +106,7 @@ private struct EntryCard: View {
     }
 
     var body: some View {
-        GlassCard(emphasis: clientId == nil && entry.status != .rejected ? .dashed : .normal) {
+        GlassCard(emphasis: (clientId == nil || entry.unmatched) && entry.status != .rejected ? .dashed : .normal) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 topRow
                 descriptionView
@@ -160,7 +190,7 @@ private struct EntryCard: View {
 
             if changed {
                 Button("Revert") {
-                    description = entry.description
+                    description = entry.narrative
                     minutes = entry.minutes
                     clientId = entry.clientId
                 }
@@ -181,19 +211,15 @@ private struct EntryCard: View {
         }
     }
 
+    /// The quotes the entry was written from, each under the block it came from.
     private var evidence: some View {
-        let blocks = model.evidence(for: entry)
-        return InsetPanel {
+        InsetPanel {
             VStack(alignment: .leading, spacing: 4) {
-                if blocks.isEmpty {
-                    Text("These blocks are no longer on this Mac.")
+                if entry.evidence.isEmpty {
+                    Text("No quotes kept for this entry.")
                 }
-                ForEach(blocks) { item in
-                    Text("\(item.record.startedAt.formatted(date: .omitted, time: .shortened))  \(item.record.appName)  \(item.record.windowTitle)")
-                        .lineLimit(1)
-                }
-                if !blocks.isEmpty, blocks.count < entry.blockIds.count {
-                    Text("\(entry.blockIds.count - blocks.count) more not on this Mac")
+                ForEach(Array(entry.evidence.enumerated()), id: \.offset) { _, item in
+                    Text("\u{201C}\(item.quote)\u{201D}").lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -207,7 +233,7 @@ private struct EntryCard: View {
     private func submit(_ action: DraftReview.Action) {
         editingText = false
         reopened = false
-        Task { await model.review(entry, action: action, description: description, minutes: minutes, clientId: clientId) }
+        Task { await model.review(entry, action: action, narrative: description, minutes: minutes, clientId: clientId) }
     }
 }
 

@@ -108,7 +108,7 @@ public struct WorkBlocksResponse: Codable, Sendable, Equatable {
 
 public struct BackendClient: Sendable {
     public let baseURL: URL
-    private let session: URLSession
+    let session: URLSession
 
     public static let requestTimeout: TimeInterval = 20
     /// Most blocks per POST /v1/work-blocks.
@@ -150,7 +150,7 @@ public struct BackendClient: Sendable {
 
     /// POST /v1/summaries  The AI's summary of a waiting batch. The backend keeps nothing.
     public func summarize(_ blocks: [WorkBlockPayload], credentials: DeviceCredentials) async throws -> SummaryResponse {
-        try await send("POST", "/v1/summaries", body: SummaryRequest(deviceId: credentials.deviceId, blocks: blocks),
+        try await send("POST", "/v1/summaries", body: SummaryRequest(blocks: blocks),
                        token: credentials.token)
     }
 
@@ -173,7 +173,8 @@ public struct BackendClient: Sendable {
     /// POST /v1/drafts/entries/:id/review. Returns the entry as the backend now has it.
     public func review(entry id: String, _ review: DraftReview, credentials: DeviceCredentials) async throws -> DraftEntry {
         let escaped = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? id
-        return try await send("POST", "/v1/drafts/entries/\(escaped)/review", body: review, token: credentials.token)
+        let reply: DraftReviewResponse = try await send("POST", "/v1/drafts/entries/\(escaped)/review", body: review, token: credentials.token)
+        return reply.entry
     }
 
     /// DELETE /v1/me/data
@@ -213,7 +214,7 @@ public struct BackendClient: Sendable {
         return request
     }
 
-    private func send<Body: Encodable, Response: Decodable>(
+    func send<Body: Encodable, Response: Decodable>(
         _ method: String, _ path: String, body: Body?, token: String?
     ) async throws -> Response {
         let request = try makeRequest(method, path, body: body, token: token)

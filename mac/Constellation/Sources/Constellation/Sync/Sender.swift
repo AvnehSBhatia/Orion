@@ -159,7 +159,7 @@ import Foundation
     }
 
     /// Runs a call with the current connection; a rejected token disconnects, as for sending.
-    private func withBackend<T: Sendable>(_ call: (BackendClient, DeviceCredentials) async throws -> T) async throws -> T {
+    func withBackend<T: Sendable>(_ call: (BackendClient, DeviceCredentials) async throws -> T) async throws -> T {
         guard let credentials, let client else { throw BackendError.notConnected }
         do {
             return try await call(client, credentials)
