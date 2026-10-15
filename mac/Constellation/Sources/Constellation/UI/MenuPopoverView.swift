@@ -108,14 +108,14 @@ struct MenuPopoverView: View {
         switch engine.status.state {
         case .on: "On"
         case .paused: "Paused"
-        case .off: "Off"
+        case .off: settings.policy.captureEnabled ? "Off" : "Paused"
         }
     }
 
     private var detail: String {
         let status = engine.status
         switch status.state {
-        case .off: return "Nothing is read."
+        case .off: return settings.policy.captureEnabled ? "Nothing is read." : "Paused by your company"
         case .paused(let until): return "Until \(until.formatted(date: .abbreviated, time: .shortened))"
         case .on:
             if !status.trusted { return "Needs Accessibility permission" }

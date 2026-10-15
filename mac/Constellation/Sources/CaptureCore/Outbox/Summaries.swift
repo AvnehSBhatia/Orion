@@ -4,16 +4,12 @@ import Foundation
 // POST /v1/summaries: the backend's AI summarizes a batch while it waits in the
 // Outbox, so people read a summary instead of raw captured text. The blocks are
 // the same redacted payloads POST /v1/work-blocks would get. The backend must not
-// keep them or the summary; only approved, sent blocks are stored.
+// keep them or the summary; only approved, sent blocks are stored (decision D).
 
 public struct SummaryRequest: Codable, Sendable {
-    public var deviceId: String
     public var blocks: [WorkBlockPayload]
 
-    enum CodingKeys: String, CodingKey {
-        case deviceId = "device_id"
-        case blocks
-    }
+    public init(blocks: [WorkBlockPayload]) { self.blocks = blocks }
 }
 
 public struct SummaryResponse: Codable, Sendable, Equatable {

@@ -26,6 +26,9 @@ enum CaptureState: Equatable {
         static let autoApprove = "autoApprove"
         static let backendURL = "backendURL"
         static let installId = "installId"
+        static let consentVersion = "consentVersion"
+        static let browserPageText = "browserPageText"
+        static let policy = "orgPolicy"
     }
 
     private let defaults = UserDefaults(suiteName: "com.traxrobotics.constellation") ?? .standard
@@ -53,6 +56,15 @@ enum CaptureState: Equatable {
     @Published var autoApprove: Bool { didSet { defaults.set(autoApprove, forKey: Key.autoApprove) } }
     /// Where approved items are sent. The local mock backend until the real one exists.
     @Published var backendURL: String { didSet { defaults.set(backendURL, forKey: Key.backendURL) } }
+    /// The notice version this person accepted (nil: none yet).
+    @Published var consentVersion: Int? { didSet { defaults.set(consentVersion, forKey: Key.consentVersion) } }
+    /// Personal switch for reading page text in browsers. Off by default, and does nothing
+    /// unless the company's policy allows it too.
+    @Published var browserPageText: Bool { didSet { defaults.set(browserPageText, forKey: Key.browserPageText) } }
+    /// The company's last policy. Kept, so an outage never lifts its exclusions or its pause.
+    @Published var policy: OrgPolicy {
+        didSet { defaults.set(try? JSONEncoder().encode(policy), forKey: Key.policy) }
+    }
     /// A random id for this install, sent at registration instead of the computer or user name.
     let installId: String
 
@@ -72,6 +84,9 @@ enum CaptureState: Equatable {
         outboxMode = defaults.string(forKey: Key.outboxMode).flatMap(OutboxMode.init(rawValue:)) ?? .reviewFirst
         autoApprove = defaults.object(forKey: Key.autoApprove) as? Bool ?? true
         backendURL = defaults.string(forKey: Key.backendURL) ?? "http://localhost:8787"
+        consentVersion = defaults.object(forKey: Key.consentVersion) as? Int
+        browserPageText = defaults.bool(forKey: Key.browserPageText)
+        policy = defaults.data(forKey: Key.policy).flatMap { try? JSONDecoder().decode(OrgPolicy.self, from: $0) } ?? OrgPolicy()
         if let existing = defaults.string(forKey: Key.installId) {
             installId = existing
         } else {
@@ -80,7 +95,16 @@ enum CaptureState: Equatable {
         }
     }
 
-    var rules: ExclusionRules { ExclusionRules(skipDomains: skipDomains, skipWords: skipWords) }
+    /// The person's own skip list plus the company's excluded hosts.
+    var rules: ExclusionRules {
+        ExclusionRules(skipDomains: skipDomains + policy.excludedHosts.filter { !skipDomains.contains($0) }, skipWords: skipWords)
+    }
+
+    /// Browser page text is read only when the company allows it and the person turned it on.
+    var readsBrowserPageText: Bool { policy.browserPageText && browserPageText }
+
+    /// Work blocks wait for the person to accept the company's notice.
+    var consentPending: Bool { policy.needsConsent(accepted: consentVersion) }
 
     var redaction: RedactionOptions {
         RedactionOptions(
@@ -95,6 +119,7 @@ enum CaptureState: Equatable {
     }
 
     var state: CaptureState {
+        if !policy.captureEnabled { return .off }
         if !captureOn { return .off }
         if let pausedUntil, isPaused { return .paused(until: pausedUntil) }
         return .on

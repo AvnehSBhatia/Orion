@@ -15,11 +15,15 @@ public struct CaptureRequest: Sendable {
     public var rules: ExclusionRules
     public var redaction: RedactionOptions
     public var names: NameMasker?
+    /// Browsers: also read the page's text. Only when the company allows it and the person turned it on.
+    public var readPageText: Bool
 
     public init(
         pid: pid_t, bundleId: String, appName: String, isBrowser: Bool, turnOnElectronTree: Bool,
-        rules: ExclusionRules, redaction: RedactionOptions = RedactionOptions(), names: NameMasker? = nil
+        rules: ExclusionRules, redaction: RedactionOptions = RedactionOptions(), names: NameMasker? = nil,
+        readPageText: Bool = false
     ) {
+        self.readPageText = readPageText
         self.pid = pid
         self.bundleId = bundleId
         self.appName = appName
@@ -76,12 +80,13 @@ public enum WindowCapture {
         if request.isBrowser { snapshot.windowTitle = TextCleanup.browserTitle(snapshot.windowTitle, appName: request.appName) }
 
         if request.isBrowser {
-            // Browsers: title plus domain and path only. Page text is never read.
+            // Browsers: title plus domain and path. Page text only with the policy and personal switches.
             snapshot.domainPath = BrowserURL.domainAndPath(BrowserURL.find(in: window))
             if request.rules.skipsDomain(snapshot.domainPath) {
                 return finish(skipped(snapshot, .skippedDomain))
             }
-        } else {
+        }
+        if !request.isBrowser || request.readPageText {
             let walk = AXReader.walkText(window, start: start, skip: profile?.skipIdentifiers ?? [],
                                          dropAreaLabels: profile?.dropAreaLabels ?? false)
             // Both the record's title and the window's own (Mail's mailbox name and count).

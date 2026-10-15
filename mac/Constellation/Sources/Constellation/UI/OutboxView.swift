@@ -88,7 +88,7 @@ private struct NowCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     switch settings.state {
                     case .off:
-                        Text("Capture is off, so nothing new arrives here.")
+                        Text(settings.policy.captureEnabled ? "Capture is off, so nothing new arrives here." : "Paused by your company.")
                     case .paused(let until):
                         Text("Paused until \(until.formatted(date: .omitted, time: .shortened)), so nothing new arrives here.")
                     case .on:
@@ -170,22 +170,36 @@ private struct ConnectionCard: View {
                             }
                         }
                         Button("Connect") {
-                            Task { await sender.connect(urlText: editing ? url : settings.backendURL, enrollmentCode: code) }
+                            Task { await sender.connect(urlText: editing ? url : settings.backendURL, authCode: code) }
                         }
                         .buttonStyle(PrimaryButtonStyle(small: true))
-                        .disabled(sender.state == .connecting)
+                        .disabled(sender.state == .connecting || code.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
                 }
 
-                if editing && !sender.isConnected {
-                    TextField("Backend address, e.g. https://api.example.com", text: $url).spaceField()
-                    TextField("Enrollment code, only if your company gave you one", text: $code).spaceField()
-                    Button("Cancel") { editing = false }.buttonStyle(LinkButtonStyle(color: Theme.textSecondary))
+                if !sender.isConnected {
+                    if editing {
+                        TextField("Backend address, e.g. https://api.example.com", text: $url).spaceField()
+                    }
+                    TextField("Auth code", text: $code).spaceField()
+                    Text("From the Orion web app: Settings → Connect your Mac").font(Theme.Typo.caption)
+                        .foregroundStyle(Theme.textTertiary)
+                    if editing { Button("Cancel") { editing = false }.buttonStyle(LinkButtonStyle(color: Theme.textSecondary)) }
+                }
+                if sender.isConnected, settings.consentPending {
+                    ConsentNotice(sender: sender, settings: settings)
+                }
+                if sender.isConnected, settings.policy.browserPageText {
+                    Toggle("Also read page text in browsers (your company allows it)", isOn: $settings.browserPageText)
+                        .font(Theme.Typo.caption)
                 }
 
                 if case .failed(let message) = sender.state {
                     Text(message).font(Theme.Typo.caption).foregroundStyle(Theme.warning)
                         .fixedSize(horizontal: false, vertical: true)
+                }
+                if let error = sender.policyError, sender.isConnected {
+                    Text("Company policy couldn't update. \(error)").font(Theme.Typo.caption).foregroundStyle(Theme.warning)
                 }
                 if sender.isConnected {
                     Text(clientsCaption).font(Theme.Typo.caption)
@@ -226,6 +240,29 @@ private struct ConnectionCard: View {
         guard let at = directory.list.syncedAt else { return "Clients not synced yet" }
         let count = directory.list.clients.count
         return "\(count) \(count == 1 ? "client" : "clients") synced \(at.formatted(date: .omitted, time: .shortened))"
+    }
+}
+
+/// The company's monitoring notice. Nothing is sent until it is accepted.
+private struct ConsentNotice: View {
+    @ObservedObject var sender: Sender
+    @ObservedObject var settings: Settings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Your company's monitoring notice").font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
+            ScrollView {
+                Text((try? AttributedString(markdown: settings.policy.consent.notice,
+                                            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
+                    ?? AttributedString(settings.policy.consent.notice))
+                    .font(Theme.Typo.caption).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 140)
+            Text("Until you accept, nothing is sent.").font(Theme.Typo.caption).foregroundStyle(Theme.warning)
+            Button("Accept and continue") { Task { await sender.acceptConsent() } }
+                .buttonStyle(PrimaryButtonStyle(small: true))
+                .disabled(sender.consentBusy)
+        }
     }
 }
 
@@ -523,6 +560,9 @@ private struct ItemRow: View {
     private var status: String {
         if let sentAt = item.sentAt {
             return "Sent at \(sentAt.formatted(date: .omitted, time: .shortened)) to \(item.sentTo ?? "the backend")"
+        }
+        if let reason = item.rejectedReason, item.rejectedCount > 0 {
+            return item.gaveUp ? "Not accepted by the server: \(reason)" : "Not accepted by the server: \(reason). Will try again."
         }
         if item.record.status == .approved { return "Approved, waiting to send" }
         return item.edited ? "Waiting for review (edited)" : "Waiting for review"

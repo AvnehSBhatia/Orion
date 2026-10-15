@@ -1,3 +1,9 @@
+# Mac app and backend contract
+
+The current contract is **[docs/mac-v1.md](../docs/mac-v1.md)**: registration with a one-time auth code, `/v1/policy`, `/v1/consent`, `/v1/clients` (etag, alias rules), `/v1/work-blocks` (batch_hash, accepted_ids, rejected), summaries, drafts, deletion. Where this file and that one differ, that one wins. The older text below is kept for history only.
+
+---
+
 # Constellation backend contract (Mac app side)
 
 Request and response shapes the Mac app uses. The endpoint list comes from the team plan; the bodies below are what the app sends and expects today. `mac/mock-backend/server.mjs` implements them and is the reference if anything here is unclear.
