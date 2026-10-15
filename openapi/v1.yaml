@@ -4,13 +4,15 @@ info:
   version: 1.0.0
   description: |
     Shared contract for the Mac app and the backend. Change it only when both owners agree.
+    The Orion server implements this at /v1; docs/mac-v1.md explains the behaviour and the decisions
+    (per-block rejection, local-day drafts, billing increments, policy and consent, no screenshots).
     Every endpoint is HTTPS JSON. Device calls send `Authorization: Bearer <device_token>`
     except `POST /v1/devices/register` and `GET /v1/health`.
     Errors use `{ "error": { "code": "...", "message": "..." } }`.
     Owner calls send `Authorization: Bearer <owner_token>` or a Supabase JWT
     (`SUPABASE_JWT_SECRET`, HS256, `email` and `org_id` claims).
-    The daily draft is a stub until zero-data-retention is confirmed: it groups records
-    and does not send text to a model. Narratives from the stub contain no captured text.
+    Narratives and Outbox summaries come from a model called with zero-data-retention routing;
+    a narrative that quotes anything outside its evidence falls back to a stub.
 servers:
   - url: http://localhost:3000
     description: Local
@@ -104,11 +106,11 @@ paths:
       operationId: submitWorkBlocks
       summary: Submit Outbox-approved work blocks. Idempotent on local_id.
       description: |
-        Maximum 500 blocks. Each snippet is at most 1,500 characters.
-        A Mac activity record may hold 4,000 characters locally; the app sends this capped snippet
-        plus text_hash of the local text, app_bundle_id, and domain_path.
-        A snippet that matches an email, card number, or API-key shape is rejected with 422.
-        The server logs the pattern type only, never the text.
+        Maximum 500 blocks, 8 MB body. Each snippet is at most 1,500 characters.
+        A block is rejected on its own, never the whole batch: a snippet or title with a card number
+        or API key shape (emails are allowed, the person may turn email redaction off), ended_at before
+        started_at, an excluded host, or an invalid block. The server logs the pattern type only.
+        The app marks exactly accepted_ids as sent.
       requestBody:
         required: true
         content:
@@ -117,31 +119,124 @@ paths:
               type: object
               required: [batch_hash, blocks]
               properties:
-                batch_hash: { type: string }
+                batch_hash: { type: string, description: "SHA-256 hex of the sorted local_ids joined by newlines" }
                 blocks:
                   type: array
                   maxItems: 500
                   items: { $ref: '#/components/schemas/WorkBlockInput' }
       responses:
         '200':
-          description: Batch stored. Duplicates of a known local_id are counted, not inserted again.
+          description: Stored blocks. Duplicates of a known local_id are counted, not inserted again.
           content:
             application/json:
               schema:
                 type: object
-                required: [accepted, duplicate]
+                required: [accepted, duplicate, accepted_ids, rejected]
                 properties:
                   accepted: { type: integer, minimum: 0 }
                   duplicate: { type: integer, minimum: 0 }
-        '422':
-          description: A snippet failed the redaction guard
+                  accepted_ids: { type: array, items: { type: string }, description: "Every local_id now stored, new or duplicate" }
+                  rejected:
+                    type: array
+                    items:
+                      type: object
+                      required: [local_id, reason]
+                      properties:
+                        local_id: { type: string }
+                        reason: { type: string, enum: [card_number, api_key, ended_before_started, excluded_host, invalid] }
+        '403':
+          description: consent_required or capture_paused
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /v1/policy:
+    get:
+      operationId: capturePolicy
+      summary: The org's capture policy and the monitoring notice. Polled on connect and every 5 minutes.
+      responses:
+        '200':
+          description: Policy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [capture_enabled, excluded_hosts, capture_interval_sec, browser_page_text, consent]
+                properties:
+                  capture_enabled: { type: boolean }
+                  excluded_hosts: { type: array, items: { type: string } }
+                  capture_interval_sec: { type: integer, minimum: 1 }
+                  browser_page_text: { type: boolean, description: "Org allows reading page text in browsers (the person must also turn it on)" }
+                  consent:
+                    type: object
+                    required: [required, version, notice]
+                    properties:
+                      required: { type: boolean }
+                      version: { type: integer }
+                      notice: { type: string, description: Markdown }
+  /v1/consent:
+    post:
+      operationId: acceptConsent
+      summary: Accept the current monitoring notice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: integer }
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted_at]
+                properties:
+                  accepted_at: { type: string, format: date-time }
+        '409':
+          description: Not the current version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /v1/summaries:
+    post:
+      operationId: summarizeBatch
+      summary: Outbox summary of blocks waiting for approval. Stores and logs nothing.
+      description: Model calls use zero-data-retention routing. Without a model key or over budget, a plain list of titles.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [blocks]
+              properties:
+                blocks:
+                  type: array
+                  maxItems: 500
+                  items: { $ref: '#/components/schemas/WorkBlockInput' }
+      responses:
+        '200':
+          description: One to three sentences, second person, past tense, markers kept
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [summary]
+                properties:
+                  summary: { type: string, maxLength: 600 }
   /v1/drafts/today:
     get:
       operationId: todayDraft
-      summary: The person's daily draft
+      summary: The person's daily draft for their local day
+      parameters:
+        - in: query
+          name: tz
+          schema: { type: string, example: America/Los_Angeles }
+          description: IANA zone; today and block selection use the local day. UTC when missing or invalid.
       responses:
         '200':
           description: Today's draft. Entries the model could not match stay proposed with unmatched true.
@@ -310,6 +405,101 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Client' }
+  /v1/owner/clients/{id}:
+    patch:
+      operationId: updateClient
+      security:
+        - ownerToken: []
+      summary: Change or deactivate a client
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                aliases: { type: array, items: { type: string } }
+                domains: { type: array, items: { type: string } }
+                project_codes: { type: array, items: { type: string } }
+                active: { type: boolean }
+      responses:
+        '200':
+          description: Client
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Client' }
+  /v1/owner/clients/import:
+    post:
+      operationId: importClients
+      security:
+        - ownerToken: []
+      summary: "CSV import: name,aliases,domains,project_codes with ; inside a cell"
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema: { type: string }
+      responses:
+        '200':
+          description: Counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created: { type: integer }
+                  updated: { type: integer }
+  /v1/owner/export.csv:
+    get:
+      operationId: firmExport
+      security:
+        - ownerToken: []
+      summary: Accepted and edited entries for everyone (date,person,client,minutes,narrative,status). No snippets.
+      parameters:
+        - { in: query, name: from, schema: { type: string, format: date } }
+        - { in: query, name: to, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: CSV
+          content:
+            text/csv:
+              schema: { type: string }
+  /v1/owner/pilot:
+    get:
+      operationId: pilotTotals
+      security:
+        - ownerToken: []
+      summary: Per-person accepted, edited, rejected counts and active days. No snippets or titles.
+      parameters:
+        - { in: query, name: from, schema: { type: string, format: date } }
+        - { in: query, name: to, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Totals
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [people]
+                properties:
+                  people:
+                    type: array
+                    items:
+                      type: object
+                      required: [user_id, name, accepted, edited, rejected, active_days]
+                      properties:
+                        user_id: { type: string }
+                        name: { type: string }
+                        accepted: { type: integer }
+                        edited: { type: integer }
+                        rejected: { type: integer }
+                        active_days: { type: integer }
   /v1/owner/alias-rules/{id}/accept:
     post:
       operationId: acceptAliasRule
@@ -409,7 +599,7 @@ components:
         client_id: { type: string, format: uuid, nullable: true }
         started_at: { type: string, format: date-time }
         ended_at: { type: string, format: date-time }
-        minutes: { type: integer, minimum: 0 }
+        minutes: { type: integer, minimum: 0, description: "Covered time rounded up to the org billing increment (6 or 15)" }
         narrative: { type: string }
         evidence:
           type: array
