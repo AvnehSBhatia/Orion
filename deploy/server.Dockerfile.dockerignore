@@ -1,0 +1,14 @@
+**
+!server/**
+server/node_modules
+server/.next
+server/data
+server/.cache
+server/.env
+server/.env.*
+!server/.env.example
+server/**/*.db
+server/**/*.db-wal
+server/**/*.db-shm
+server/**/*.traineddata
+server/scripts/probe-*.ts

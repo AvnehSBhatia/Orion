@@ -11,6 +11,14 @@ public enum BackendError: Error, Equatable {
     /// The backend no longer accepts this device's token.
     case unauthorized
     case server(status: Int)
+    /// 429, or 5xx with a Retry-After: wait at least this long (seconds) before trying again.
+    case throttled(status: Int, retryAfter: TimeInterval?)
+    /// 403 consent_required: the person has not accepted the company's notice yet.
+    case consentRequired
+    /// 403 capture_paused: the company paused capture.
+    case capturePaused
+    /// Registration: the auth code is invalid, used, or expired.
+    case badCode
     case network(String)
     case badResponse
 }
@@ -23,35 +31,30 @@ extension BackendError: LocalizedError {
         case .insecureURL: "Use an https address (http is only allowed for localhost)."
         case .unauthorized: "The backend no longer accepts this Mac. Connect again."
         case .server(let status): "The backend answered with an error (\(status))."
+        case .throttled(let status, _): "The backend is busy (\(status))."
+        case .consentRequired: "Accept your company's monitoring notice first."
+        case .capturePaused: "Paused by your company."
+        case .badCode: "That code didn't work. Make a new one in the Orion web app (Settings, Connect your Mac)."
         case .network(let message): "Couldn't reach the backend: \(message)"
         case .badResponse: "The backend sent an answer this app doesn't understand."
         }
     }
 }
 
-/// Sent once, to get a device token. No computer name or user name is sent.
+/// Sent once, to get a device token: the Mac model (never the computer or user name)
+/// and the one-time code made in the Orion web app.
 public struct DeviceRegistration: Codable, Sendable, Equatable {
-    public var installId: String
-    public var platform: String
-    public var osVersion: String
-    public var appVersion: String
-    /// Optional code from the company, if the backend needs one to know who this is.
-    public var enrollmentCode: String?
+    public var name: String
+    public var authCode: String
 
     enum CodingKeys: String, CodingKey {
-        case installId = "install_id"
-        case platform
-        case osVersion = "os_version"
-        case appVersion = "app_version"
-        case enrollmentCode = "enrollment_code"
+        case name
+        case authCode = "auth_code"
     }
 
-    public init(installId: String, platform: String, osVersion: String, appVersion: String, enrollmentCode: String?) {
-        self.installId = installId
-        self.platform = platform
-        self.osVersion = osVersion
-        self.appVersion = appVersion
-        self.enrollmentCode = enrollmentCode
+    public init(name: String, authCode: String) {
+        self.name = name
+        self.authCode = authCode
     }
 }
 
@@ -86,29 +89,65 @@ public struct DeviceCredentials: Codable, Sendable, Equatable {
 }
 
 public struct WorkBlocksRequest: Codable, Sendable {
-    public var deviceId: String
+    /// SHA-256 hex of the sorted local ids joined by newlines.
+    public var batchHash: String
     public var blocks: [WorkBlockPayload]
 
     enum CodingKeys: String, CodingKey {
-        case deviceId = "device_id"
+        case batchHash = "batch_hash"
         case blocks
+    }
+
+    public init(blocks: [WorkBlockPayload]) {
+        self.blocks = blocks
+        batchHash = WorkBlockPayload.batchHash(blocks)
     }
 }
 
 public struct WorkBlocksResponse: Codable, Sendable, Equatable {
     public struct Rejected: Codable, Sendable, Equatable {
-        public var id: String
+        public var localId: String
         public var reason: String
+
+        enum CodingKeys: String, CodingKey {
+            case localId = "local_id"
+            case reason
+        }
+
+        public init(localId: String, reason: String) {
+            self.localId = localId
+            self.reason = reason
+        }
     }
 
-    /// Ids the backend stored. Sending the same id again is safe: the backend keeps one copy.
-    public var accepted: [String]
-    public var rejected: [Rejected]?
+    public var accepted: Int?
+    public var duplicate: Int?
+    /// Every id now stored, new or duplicate. Sending one again is safe.
+    public var acceptedIds: [String]
+    public var rejected: [Rejected]
+
+    enum CodingKeys: String, CodingKey {
+        case accepted, duplicate, rejected
+        case acceptedIds = "accepted_ids"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        accepted = try? c.decodeIfPresent(Int.self, forKey: .accepted)
+        duplicate = try? c.decodeIfPresent(Int.self, forKey: .duplicate)
+        acceptedIds = try c.decodeIfPresent([String].self, forKey: .acceptedIds) ?? []
+        rejected = (try? c.decodeIfPresent([Rejected].self, forKey: .rejected)) ?? []
+    }
+
+    public init(acceptedIds: [String], rejected: [Rejected] = []) {
+        self.acceptedIds = acceptedIds
+        self.rejected = rejected
+    }
 }
 
 public struct BackendClient: Sendable {
     public let baseURL: URL
-    private let session: URLSession
+    let session: URLSession
 
     public static let requestTimeout: TimeInterval = 20
     /// Most blocks per POST /v1/work-blocks.
@@ -138,19 +177,46 @@ public struct BackendClient: Sendable {
     // MARK: Endpoints
 
     /// POST /v1/devices/register
+    /// The register answer: `device_token`, while the Keychain copy keeps its older `token` key.
+    private struct RegisterResponse: Decodable {
+        var deviceId: String
+        var deviceToken: String
+        enum CodingKeys: String, CodingKey {
+            case deviceId = "device_id"
+            case deviceToken = "device_token"
+        }
+    }
+
     public func register(_ registration: DeviceRegistration) async throws -> DeviceCredentials {
-        try await send("POST", "/v1/devices/register", body: registration, token: nil)
+        do {
+            let r: RegisterResponse = try await send("POST", "/v1/devices/register", body: registration, token: nil)
+            return DeviceCredentials(deviceId: r.deviceId, token: r.deviceToken)
+        } catch BackendError.unauthorized {
+            throw BackendError.badCode
+        }
+    }
+
+    /// GET /v1/policy
+    public func fetchPolicy(credentials: DeviceCredentials) async throws -> OrgPolicy {
+        try await send("GET", "/v1/policy", body: Empty?.none, token: credentials.token)
+    }
+
+    private struct ConsentRequest: Codable { var version: Int }
+
+    /// POST /v1/consent
+    public func acceptConsent(version: Int, credentials: DeviceCredentials) async throws -> ConsentResponse {
+        try await send("POST", "/v1/consent", body: ConsentRequest(version: version), token: credentials.token)
     }
 
     /// POST /v1/work-blocks
     public func postWorkBlocks(_ blocks: [WorkBlockPayload], credentials: DeviceCredentials) async throws -> WorkBlocksResponse {
-        try await send("POST", "/v1/work-blocks", body: WorkBlocksRequest(deviceId: credentials.deviceId, blocks: blocks),
+        try await send("POST", "/v1/work-blocks", body: WorkBlocksRequest(blocks: blocks),
                        token: credentials.token)
     }
 
     /// POST /v1/summaries  The AI's summary of a waiting batch. The backend keeps nothing.
     public func summarize(_ blocks: [WorkBlockPayload], credentials: DeviceCredentials) async throws -> SummaryResponse {
-        try await send("POST", "/v1/summaries", body: SummaryRequest(deviceId: credentials.deviceId, blocks: blocks),
+        try await send("POST", "/v1/summaries", body: SummaryRequest(blocks: blocks),
                        token: credentials.token)
     }
 
@@ -173,12 +239,19 @@ public struct BackendClient: Sendable {
     /// POST /v1/drafts/entries/:id/review. Returns the entry as the backend now has it.
     public func review(entry id: String, _ review: DraftReview, credentials: DeviceCredentials) async throws -> DraftEntry {
         let escaped = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))) ?? id
-        return try await send("POST", "/v1/drafts/entries/\(escaped)/review", body: review, token: credentials.token)
+        let reply: DraftReviewResponse = try await send("POST", "/v1/drafts/entries/\(escaped)/review", body: review, token: credentials.token)
+        return reply.entry
     }
 
     /// DELETE /v1/me/data
     public func deleteMyData(credentials: DeviceCredentials) async throws {
-        let _: Empty = try await send("DELETE", "/v1/me/data", body: Empty?.none, token: credentials.token)
+        let _: Empty = try await send("DELETE", "/v1/me/data", body: Empty?.none, token: credentials.token, lenient: true)
+    }
+
+    /// How long to wait after the n-th failure in a row: 30 s, 1 min, 2 min ... up to 15 min,
+    /// and never less than the server's Retry-After.
+    public static func minimumWait(failures: Int, retryAfter: TimeInterval?) -> TimeInterval {
+        max(min(30 * pow(2, Double(max(failures, 1) - 1)), 900), retryAfter ?? 0)
     }
 
     // MARK: Plumbing
@@ -200,6 +273,23 @@ public struct BackendClient: Sendable {
         return decoder
     }()
 
+    /// `{ "error": { "code": ... } }`
+    static func errorCode(_ data: Data) -> String? {
+        struct Envelope: Decodable { struct Inner: Decodable { var code: String? }; var error: Inner? }
+        return (try? JSONDecoder().decode(Envelope.self, from: data))?.error?.code
+    }
+
+    /// Retry-After in seconds (or an HTTP date), capped at an hour.
+    static func retryAfter(_ response: HTTPURLResponse, now: Date = Date()) -> TimeInterval? {
+        guard let value = response.value(forHTTPHeaderField: "Retry-After")?.trimmingCharacters(in: .whitespaces),
+              !value.isEmpty else { return nil }
+        if let seconds = TimeInterval(value) { return min(max(seconds, 0), 3_600) }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter.date(from: value).map { min(max($0.timeIntervalSince(now), 0), 3_600) }
+    }
+
     func makeRequest<Body: Encodable>(_ method: String, _ path: String, body: Body?, token: String?) throws -> URLRequest {
         guard let url = URL(string: path, relativeTo: baseURL) else { throw BackendError.invalidURL }
         var request = URLRequest(url: url, timeoutInterval: Self.requestTimeout)
@@ -213,8 +303,10 @@ public struct BackendClient: Sendable {
         return request
     }
 
-    private func send<Body: Encodable, Response: Decodable>(
-        _ method: String, _ path: String, body: Body?, token: String?
+    /// Internal on purpose: extensions in other files (drafts) use it.
+    /// `lenient`: a 2xx with an empty or unreadable body is fine (DELETE answers 202).
+    func send<Body: Encodable, Response: Decodable>(
+        _ method: String, _ path: String, body: Body?, token: String?, lenient: Bool = false
     ) async throws -> Response {
         let request = try makeRequest(method, path, body: body, token: token)
         let data: Data
@@ -225,8 +317,20 @@ public struct BackendClient: Sendable {
             throw BackendError.network(error.localizedDescription)
         }
         guard let http = response as? HTTPURLResponse else { throw BackendError.badResponse }
-        if http.statusCode == 401 || http.statusCode == 403 { throw BackendError.unauthorized }
+        if http.statusCode == 401 { throw BackendError.unauthorized }
+        if http.statusCode == 403 {
+            switch Self.errorCode(data) {
+            case "consent_required": throw BackendError.consentRequired
+            case "capture_paused": throw BackendError.capturePaused
+            default: throw BackendError.server(status: 403)
+            }
+        }
+        let retryAfter = Self.retryAfter(http)
+        if http.statusCode == 429 || (http.statusCode >= 500 && retryAfter != nil) {
+            throw BackendError.throttled(status: http.statusCode, retryAfter: retryAfter)
+        }
         guard (200..<300).contains(http.statusCode) else { throw BackendError.server(status: http.statusCode) }
+        if lenient, let empty = Empty() as? Response { return empty }
         if Response.self == Empty.self, data.isEmpty { return Empty() as! Response }
         do {
             return try Self.decoder.decode(Response.self, from: data)

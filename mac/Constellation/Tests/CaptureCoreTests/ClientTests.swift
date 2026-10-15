@@ -62,26 +62,27 @@ struct ClientMatcherTests {
 
 @Suite("Client list")
 struct ClientListTests {
-    @Test("Sync replaces changed clients, removes deleted ones, and keeps the cursor")
+    @Test("A full sync replaces the list; a later sync replaces changed clients and keeps inactive ones out of matching")
     func merge() {
         var list = ClientList()
-        list.merge(ClientsResponse(clients: [ClientMatcherTests.acme, ClientMatcherTests.globex], nextSince: "t1"))
+        #expect(list.cursor == nil)
+        list.merge(ClientsResponse(clients: [ClientMatcherTests.acme, ClientMatcherTests.globex], etag: "t1"), full: true)
         #expect(list.clients.map(\.id) == ["c_acme", "c_globex"])
-        #expect(list.since == "t1")
+        #expect(list.cursor == "t1")
 
         var renamed = ClientMatcherTests.acme
         renamed.name = "Acme Corporation"
         var removed = ClientMatcherTests.globex
-        removed.deleted = true
-        list.merge(ClientsResponse(clients: [renamed, removed], nextSince: "t2"))
-        #expect(list.clients.map(\.name) == ["Acme Corporation"])
-        #expect(list.since == "t2")
+        removed.active = false
+        list.merge(ClientsResponse(clients: [renamed, removed], etag: "t2"), full: false)
+        #expect(list.activeClients.map(\.name) == ["Acme Corporation"])
+        #expect(list.cursor == "t2")
         #expect(list.syncedAt != nil)
     }
 
     @Test("Missing optional fields decode as empty")
     func decodesMinimal() throws {
-        let json = #"{"clients":[{"id":"c1","name":"Solo"}],"next_since":null}"#
+        let json = #"{"clients":[{"id":"c1","name":"Solo"}],"etag":null}"#
         let response = try JSONDecoder().decode(ClientsResponse.self, from: Data(json.utf8))
         #expect(response.clients == [Client(id: "c1", name: "Solo")])
     }
@@ -101,7 +102,7 @@ struct ClientListTests {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appendingPathComponent("store.sqlite")
         let keys = MemoryStoreKey()
-        let list = ClientList(clients: [ClientMatcherTests.globex], since: "t9", syncedAt: Date(timeIntervalSince1970: 1_800_000_000))
+        let list = ClientList(clients: [ClientMatcherTests.globex], etag: "t9", syncedAt: Date(timeIntervalSince1970: 1_800_000_000))
         try RecordStore(url: url, keys: keys).saveClientList(list)
         #expect(try RecordStore(url: url, keys: keys).loadClientList() == list)
         #expect(try Data(contentsOf: url).range(of: Data("Globex".utf8)) == nil)
@@ -116,11 +117,11 @@ struct FetchClientsTests {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubProtocol.self]
         let client = BackendClient(baseURL: URL(string: "https://\(host)")!, session: URLSession(configuration: config))
-        StubProtocol.answer(host: host, status: 200, json: #"{"clients":[{"id":"c_acme","name":"Acme Corp","domains":["acme.com"]}],"next_since":"t2"}"#)
+        StubProtocol.answer(host: host, status: 200, json: #"{"clients":[{"id":"c_acme","name":"Acme Corp","domains":["acme.com"]}],"rules":[],"etag":"t2"}"#)
 
         let response = try await client.fetchClients(since: "2026-10-12T18:00:00Z", credentials: DeviceCredentials(deviceId: "d", token: "tok"))
         #expect(response.clients.first?.domains == ["acme.com"])
-        #expect(response.nextSince == "t2")
+        #expect(response.etag == "t2")
 
         let request = try #require(StubProtocol.requests(host: host).last)
         #expect(request.httpMethod == "GET")

@@ -1,0 +1,13 @@
+{
+  "name": "orion",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix server run dev",
+    "dev:web": "npm --prefix web run dev",
+    "test": "npm --prefix server test",
+    "typecheck": "cd server && npx tsc --noEmit && cd ../web && npx tsc --noEmit && cd ../extension && npx tsc --noEmit && cd ../codebase-agent && npx tsc --noEmit",
+    "ctx:sync": "npm --prefix codebase-agent run sync --",
+    "swarm": "npm --prefix stress run swarm --",
+    "ask": "npm --prefix stress run ask --"
+  }
+}
