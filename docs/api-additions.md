@@ -50,7 +50,7 @@ Links point at the web app: `${UI_ORIGIN}/invite/<token>` and `${UI_ORIGIN}/rese
 ## Changed behavior
 
 - `GET /api/sources/:id/image`: `403` unless the caller is the author, an admin, or the org sets `screenshotVisibility: "org"`.
-- `GET /api/sources/:id`: text stays org-wide; `hasImage` is false for callers who may not see the screenshot.
+- `GET /api/sources/:id`: text stays org-wide except `kind: "mac"` sources, which are `403` for anyone but the author and admins (see "Who sees what" in mac-v1.md); `hasImage` is false for callers who may not see the screenshot.
 - `POST /api/ingest/code`: `userId` must be the caller unless admin (attribution by git author still works for admins and CI tokens created by admins).
 - Picking another person ("viewing as") is admin-only on every route that takes `userId`.
 - Cookie-authenticated writes (POST, PATCH, DELETE) need an `Origin` in `UI_ORIGIN` (or, when the browser sends no Origin, `Sec-Fetch-Site: same-origin | same-site`), else `403`; a body with any `Content-Type` other than JSON answers `415`. A bodyless write may omit `Content-Type`. Bearer requests are exempt.

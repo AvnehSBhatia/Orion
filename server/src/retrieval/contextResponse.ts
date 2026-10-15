@@ -1,6 +1,7 @@
 import type { ContextResponse } from "@/contract/types";
 import type { Store } from "@/db/store";
 import type { Embedder } from "@/llm/embed";
+import { dropHidden, type Viewer } from "@/orgs/visibility";
 import { buildContext, findNodes } from "./context";
 import { isEmptyFilter, type NodeFilter } from "./filters";
 
@@ -14,9 +15,10 @@ export async function contextFor(
   embedder: Embedder,
   query: { userId: string; q?: string; k: number },
   filter: NodeFilter,
+  viewer: Viewer = null,
 ): Promise<ContextResponse> {
   if (isEmptyFilter(filter)) {
-    const ctx = await buildContext(store, embedder, { userId: query.userId, q: query.q ?? "", k: query.k });
+    const ctx = await buildContext(store, embedder, { userId: query.userId, q: query.q ?? "", k: query.k, viewer });
     return {
       nodes: ctx.items.map(({ why: _why, ...n }) => n),
       sources: ctx.sources.map(({ why: _why, ...s }) => s),
@@ -28,7 +30,7 @@ export async function contextFor(
     nodes: items.map(({ why: _why, ...n }) => n),
     sources: sourceIds.flatMap((id) => {
       const s = store.getSource(id);
-      return s ? [store.toPublicSource(s)] : [];
+      return s && dropHidden(store, viewer, [s]).length ? [store.toPublicSource(s)] : [];
     }),
   };
 }

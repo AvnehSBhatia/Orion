@@ -4,7 +4,8 @@ import { chatRequest } from "@/contract/schemas";
 import type { ChatResponse } from "@/contract/types";
 import { toPublicUser } from "@/db/store";
 import { getStore, requireUser } from "@/http/deps";
-import { preflight, route, scopedBody } from "@/http/route";
+import { preflight, principalOf, route, scopedBody } from "@/http/route";
+import { viewerOf } from "@/orgs/visibility";
 import { sseResponse } from "@/http/stream";
 import { assertBudget, withUsage } from "@/usage";
 
@@ -22,11 +23,12 @@ export const POST = route(
     const store = getStore(body.orgId);
     const user = toPublicUser(requireUser(store, body.userId));
     assertBudget(store);
+    const viewer = viewerOf(principalOf(req));
     // Model calls inside are billed to the org; the stream is made inside so its start() runs in that context.
     return withUsage(store, () => {
-      if (req.nextUrl.searchParams.get("stream") !== "1") return answerChat(store, user, body);
+      if (req.nextUrl.searchParams.get("stream") !== "1") return answerChat(store, user, body, undefined, undefined, viewer);
       return sseResponse(
-        async (send) => send("done", await answerChat(store, user, body, (text) => send("delta", { text }), (t) => send("timing", t))),
+        async (send) => send("done", await answerChat(store, user, body, (text) => send("delta", { text }), (t) => send("timing", t), viewer)),
         { fallbackError: "chat failed" },
       );
     });

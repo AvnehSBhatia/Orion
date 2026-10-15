@@ -103,3 +103,7 @@ Snippets and evidence quotes are cleared after `snippetRetentionDays` (org setti
 ## Org settings added
 
 `billingIncrementMin` (6 | 15, default 6), `snippetRetentionDays` (default 14), `macBrowserPageText` (default false). Shown in web Admin → Capture policy.
+
+## Who sees what
+
+The raw text of a Mac work block (an Orion document with `kind = "mac"`: window text, Mail bodies, window titles) is visible only to its author and org admins. Other members get `403` from `GET /api/sources/:id` and MCP `read_document`, never see it in search, context, feed, chat, briefs or `context_for_task` (filtered before it reaches the model), and see it in activity only as "Mac activity: <app>" metadata. Work items, statuses and summaries extracted from it stay org-wide; with auth off nothing is hidden.

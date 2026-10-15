@@ -6,17 +6,19 @@ import { buildContext, findNodes, findSources, publicClusters } from "@/retrieva
 import { feedFor } from "@/retrieval/feed";
 import { neighborhood } from "@/mcp/neighborhood";
 import { buildTaskContext, WRITE_TO } from "@/mcp/taskContext";
+import { isHidden, type Viewer } from "@/orgs/visibility";
 import { getEmbedder, getStore, requireUser } from "@/http/deps";
 
 const INSTRUCTIONS = `Orion holds the latest work context for one person in one org: what teammates captured from web pages and screenshots (Google Ads, HubSpot, docs, consoles), what they committed, and the work graph built from it (status, owners, blockers), ranked for this person.
 At the start of any task, call context_for_task with the task in the user's words and save the returned markdown to ${WRITE_TO}. Then drill in with read_document (full text of a source id), graph_neighborhood (what blocks or feeds an item), search_context, and whats_new.
 Cite sources by their ref (URL or repo@sha) when you rely on them. Everything here is read only.`;
 
+const HIDDEN = "only the author and admins can read Mac activity text";
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
 const json = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }] });
 
 /** Read-only MCP server for one org and one person, built per request (stateless Streamable HTTP). */
-export function mcpHandlerFor(orgId: string, userId: string) {
+export function mcpHandlerFor(orgId: string, userId: string, viewer: Viewer = null) {
   const store = getStore(orgId);
   const embedder = getEmbedder();
   requireUser(store, userId);
@@ -36,7 +38,7 @@ export function mcpHandlerFor(orgId: string, userId: string) {
           annotations: READ_ONLY,
         },
         async ({ task, k, sinceHours }) => {
-          const ctx = await buildTaskContext(store, embedder, { userId, task, k, sinceHours });
+          const ctx = await buildTaskContext(store, embedder, { userId, task, k, sinceHours, viewer });
           const meta = {
             write_to: ctx.writeTo,
             hint: `Save the markdown above to ${ctx.writeTo} at the repo root, overwriting it. It is a local file; do not commit it.`,
@@ -68,7 +70,7 @@ export function mcpHandlerFor(orgId: string, userId: string) {
         },
         async ({ query, limit, sinceHours }) => {
           const items = await findNodes(store, embedder, { userId, q: query, k: limit ?? 8 });
-          const sources = await findSources(store, embedder, { userId, q: query, k: limit ?? 5, sinceHours });
+          const sources = await findSources(store, embedder, { userId, q: query, k: limit ?? 5, sinceHours, viewer });
           return json({ items: items.map(({ readLinks: _l, sourceKind: _k, sourceRef: _r, ...n }) => n), sources });
         },
       );
@@ -82,7 +84,7 @@ export function mcpHandlerFor(orgId: string, userId: string) {
           inputSchema: z.object({ id: z.string().describe("A source id like src-81cd0e4490df, or a digest id like dg-...") }),
           annotations: READ_ONLY,
         },
-        async ({ id }) => json(store.readDocument(id) ?? { error: `unknown document ${id}` }),
+        async ({ id }) => json(isHidden(store, viewer, id) ? { error: HIDDEN } : (store.readDocument(id) ?? { error: `unknown document ${id}` })),
       );
 
       server.registerTool(
@@ -113,7 +115,7 @@ export function mcpHandlerFor(orgId: string, userId: string) {
           annotations: READ_ONLY,
         },
         async ({ query, limit }) => {
-          const ctx = await buildContext(store, embedder, { userId, q: query ?? "", k: limit ?? 16 });
+          const ctx = await buildContext(store, embedder, { userId, q: query ?? "", k: limit ?? 16, viewer });
           return json({
             items: ctx.items.map(({ readLinks: _l, sourceKind: _k, sourceRef: _r, ...n }) => n),
             sources: ctx.sources,
@@ -134,7 +136,7 @@ export function mcpHandlerFor(orgId: string, userId: string) {
           annotations: READ_ONLY,
         },
         async ({ sinceHours, limit }) =>
-          json({ items: await feedFor(store, embedder, { userId, sinceHours: sinceHours ?? 72, limit: limit ?? 15 }) }),
+          json({ items: await feedFor(store, embedder, { userId, sinceHours: sinceHours ?? 72, limit: limit ?? 15, viewer }) }),
       );
 
       server.registerTool(
@@ -171,7 +173,7 @@ export function mcpHandlerFor(orgId: string, userId: string) {
           annotations: READ_ONLY,
         },
         async ({ query, sinceHours, limit }) =>
-          json({ sources: await findSources(store, embedder, { userId, q: query, k: limit ?? 5, sinceHours }) }),
+          json({ sources: await findSources(store, embedder, { userId, q: query, k: limit ?? 5, sinceHours, viewer }) }),
       );
 
       server.registerTool(
@@ -183,7 +185,7 @@ export function mcpHandlerFor(orgId: string, userId: string) {
           inputSchema: z.object({ id: z.string() }),
           annotations: READ_ONLY,
         },
-        async ({ id }) => json(store.readDocument(id) ?? { error: `unknown source ${id}` }),
+        async ({ id }) => json(isHidden(store, viewer, id) ? { error: HIDDEN } : (store.readDocument(id) ?? { error: `unknown source ${id}` })),
       );
 
       server.registerTool(
@@ -215,7 +217,7 @@ export function mcpHandlerFor(orgId: string, userId: string) {
             .filter((e) => e.source === id || e.target === id)
             .map((e) => ({ from: label.get(e.source), relation: e.relation, to: label.get(e.target) }));
           const sources = store.sourceIdsForNode(id, 5).flatMap((sid) => {
-            const s = store.getSource(sid);
+            const s = isHidden(store, viewer, sid) ? null : store.getSource(sid);
             return s ? [store.toPublicSource(s)] : [];
           });
           return json({ item: node, links, sources });
