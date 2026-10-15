@@ -22,6 +22,12 @@ export type OrgSettings = {
   llmMonthlyBudgetUsd: number;
   /** The monitoring notice people must accept before capture starts. Bumping it asks everyone again. */
   consentVersion: number;
+  /** Mac time drafts round each entry's minutes up to this many minutes. */
+  billingIncrementMin: 6 | 15;
+  /** Mac work-block snippets and draft evidence quotes are cleared after this many days. 0 keeps them. */
+  snippetRetentionDays: number;
+  /** Macs may read page text in browsers (each person must also turn it on). Off: tab title and domain only. */
+  macBrowserPageText: boolean;
 };
 
 export const DEFAULT_ORG_SETTINGS: OrgSettings = {
@@ -33,6 +39,9 @@ export const DEFAULT_ORG_SETTINGS: OrgSettings = {
   screenshotVisibility: "author_and_admins",
   llmMonthlyBudgetUsd: 50,
   consentVersion: 1,
+  billingIncrementMin: 6,
+  snippetRetentionDays: 14,
+  macBrowserPageText: false,
 };
 
 function ensureTable(store: Store): void {
@@ -93,6 +102,9 @@ export const orgSettingsPatch = z
     screenshotVisibility: z.enum(["author_and_admins", "org"]),
     llmMonthlyBudgetUsd: z.number().min(0).max(1_000_000),
     consentVersion: z.number().int().min(1).max(1_000_000),
+    billingIncrementMin: z.union([z.literal(6), z.literal(15)]),
+    snippetRetentionDays: z.number().int().min(0).max(3650),
+    macBrowserPageText: z.boolean(),
   })
   .partial()
   .strict();

@@ -21,6 +21,11 @@ export type CompletionRequest = {
   response_format?: { type: "json_schema"; json_schema: { name: string; strict: true; schema: Record<string, unknown> } };
   /** Picks the timeout (chat 45s, extract 60s by default) and the usage bucket. Not sent to the provider. */
   purpose?: "chat" | "extract";
+  /**
+   * Zero data retention: routed only to providers that keep nothing (`provider.zdr`), and a failure logs the
+   * status alone, not the provider's error body. For text a person has not approved yet. Not sent as is.
+   */
+  zdr?: boolean;
 };
 
 /** OpenAI-compatible chat completions, the only shape callers depend on. */
@@ -37,18 +42,21 @@ function requireKey(): string {
   return key;
 }
 
-async function failed(res: Response): Promise<never> {
+async function failed(res: Response, zdr = false): Promise<never> {
   // Provider error bodies only: never the prompt or the model's output, which can hold captured page text.
-  logJson("error", "openrouter request failed", { status: res.status, detail: (await res.text().catch(() => "")).slice(0, 300) });
+  // A zero-retention call logs no body at all, since a provider may echo the prompt in its error.
+  const detail = zdr ? undefined : (await res.text().catch(() => "")).slice(0, 300);
+  logJson("error", "openrouter request failed", { status: res.status, ...(detail !== undefined && { detail }) });
   throw new HttpError(res.status === 429 ? 429 : 502, "model provider failed");
 }
 
 const headers = (key: string) => ({ Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "Orion" });
 
 /** The request as sent: our routing and privacy settings, usage accounting on, internal fields dropped. */
-function requestBody(req: CompletionRequest, extra: Record<string, unknown>): string {
-  const { purpose: _purpose, ...rest } = req;
-  return JSON.stringify({ ...extra, ...rest, provider: providerPrefs(), usage: { include: true } });
+export function requestBody(req: CompletionRequest, extra: Record<string, unknown>): string {
+  const { purpose: _purpose, zdr, ...rest } = req;
+  const provider = zdr ? { ...providerPrefs(), zdr: true, data_collection: "deny" } : providerPrefs();
+  return JSON.stringify({ ...extra, ...rest, provider, usage: { include: true } });
 }
 
 /** Models that rejected `reasoning: { enabled: false }`; requests to them omit it. */
@@ -72,7 +80,7 @@ export class OpenRouterClient implements LlmClient {
           // Reasoning off: hidden thinking ate the token budget and made replies slow or empty.
           body: requestBody(req, reasoningOff ? { reasoning: { enabled: false } } : {}),
         },
-        { purpose, label: purpose },
+        { purpose, label: purpose, quiet: req.zdr },
       );
     let { res } = await send(!reasoningRequired.has(req.model));
     // Some models refuse to run without reasoning; remember that and send it their way.
@@ -83,12 +91,12 @@ export class OpenRouterClient implements LlmClient {
         ({ res } = await send(false));
       }
     }
-    if (!res.ok) return failed(res);
+    if (!res.ok) return failed(res, req.zdr);
     const json = (await res.json()) as Completion & { error?: { message?: string }; usage?: unknown };
     const usage = readUsage(json.usage);
     if (usage) afterModelCall({ model: req.model, kind: purpose, ...usage });
     if (!json.choices?.length) {
-      logJson("error", "openrouter returned no choices", { model: req.model, detail: json.error?.message?.slice(0, 200) });
+      logJson("error", "openrouter returned no choices", { model: req.model, ...(!req.zdr && { detail: json.error?.message?.slice(0, 200) }) });
       throw new HttpError(502, "model provider failed");
     }
     return json;

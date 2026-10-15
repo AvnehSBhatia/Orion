@@ -24,7 +24,7 @@ export type Status = (typeof STATUSES)[number];
 export const RELATIONS = ["blocks", "feeds", "part_of", "governs", "influences"] as const;
 export type Relation = (typeof RELATIONS)[number];
 
-export const SOURCE_KINDS = ["extension", "code", "manual"] as const;
+export const SOURCE_KINDS = ["extension", "code", "manual", "mac"] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
 
 export const LAYOUTS = ["clusters", "timeline", "list"] as const;

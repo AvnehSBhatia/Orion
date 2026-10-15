@@ -11,12 +11,12 @@ import { STATUS_LABEL } from "@/lib/status";
 import { agoShort, useNow } from "@/lib/time";
 import { openSource } from "@/lib/viewer";
 import { cn } from "@/lib/utils";
-import { GitCommitHorizontal, Globe, Layers, PenLine } from "lucide-react";
+import { GitCommitHorizontal, Globe, Laptop, Layers, PenLine } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 
-const KIND_ICON = { extension: Globe, code: GitCommitHorizontal, manual: PenLine, digest: Layers } as const;
-const KIND_LABEL = { extension: "Capture", code: "Commit", manual: "Note", digest: "Digest" } as const;
+const KIND_ICON = { extension: Globe, code: GitCommitHorizontal, manual: PenLine, mac: Laptop, digest: Layers } as const;
+const KIND_LABEL = { extension: "Capture", code: "Commit", manual: "Note", mac: "Mac", digest: "Digest" } as const;
 
 export function ActivityFeed({
   sources,

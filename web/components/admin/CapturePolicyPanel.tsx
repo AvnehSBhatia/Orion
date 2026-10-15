@@ -8,7 +8,14 @@ import { type FormEvent, useEffect, useState } from "react";
 
 type Draft = Omit<OrgSettings, "excludedHosts"> & { excludedHosts: string };
 
-const toDraft = (s: OrgSettings): Draft => ({ ...s, excludedHosts: s.excludedHosts.join("\n") });
+// Servers from before the Mac settings send none of them: show the defaults.
+const toDraft = (s: OrgSettings): Draft => ({
+  ...s,
+  excludedHosts: s.excludedHosts.join("\n"),
+  billingIncrementMin: s.billingIncrementMin ?? 6,
+  snippetRetentionDays: s.snippetRetentionDays ?? 14,
+  macBrowserPageText: s.macBrowserPageText ?? false,
+});
 
 /** "https://www.Mail.google.com/inbox" → "mail.google.com". Blank and invalid lines are dropped. */
 function hosts(text: string) {
@@ -75,6 +82,9 @@ export function CapturePolicyPanel({ orgId }: { orgId: string }) {
       screenshotRetentionDays: num(draft.screenshotRetentionDays, 0, 3650),
       screenshotVisibility: draft.screenshotVisibility,
       llmMonthlyBudgetUsd: Math.max(0, Number(draft.llmMonthlyBudgetUsd) || 0),
+      billingIncrementMin: draft.billingIncrementMin === 15 ? 15 : 6,
+      snippetRetentionDays: num(draft.snippetRetentionDays, 0, 3650),
+      macBrowserPageText: draft.macBrowserPageText,
     });
   };
 
@@ -154,6 +164,44 @@ export function CapturePolicyPanel({ orgId }: { orgId: string }) {
               <span className={help}>Once reached, chat and dashboard requests pause until next month. 0 means no cap.</span>
             </label>
           </div>
+
+          <fieldset className="grid gap-5 border-t border-line pt-5">
+            <legend className="pr-2 text-[13px] font-medium text-muted">Mac app</legend>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <label className={label}>
+                Billing increment
+                <select className={field} value={draft.billingIncrementMin} onChange={(e) => set("billingIncrementMin", Number(e.target.value) === 15 ? 15 : 6)}>
+                  <option value={6}>6 minutes (a tenth of an hour)</option>
+                  <option value={15}>15 minutes (a quarter hour)</option>
+                </select>
+                <span className={help}>Each draft entry&apos;s time is rounded up to this.</span>
+              </label>
+              <label className={label}>
+                Keep Mac snippets (days)
+                <input
+                  className={field}
+                  type="number"
+                  min={0}
+                  max={3650}
+                  value={draft.snippetRetentionDays}
+                  onChange={(e) => set("snippetRetentionDays", Number(e.target.value))}
+                />
+                <span className={help}>Mac snippets and evidence quotes are cleared after this many days. Times, clients, and minutes stay. 0 keeps them.</span>
+              </label>
+            </div>
+            <label className="flex items-start gap-3 rounded-lg border border-line bg-bg p-3 text-[14px]">
+              <input
+                type="checkbox"
+                checked={draft.macBrowserPageText}
+                onChange={(e) => set("macBrowserPageText", e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-[#ededed]"
+              />
+              <span>
+                <span className="text-ink">Let Macs read page text in browsers</span>
+                <span className={help}>Off by default. Each person must also turn it on in the Mac app. Otherwise only the tab title and site are read.</span>
+              </span>
+            </label>
+          </fieldset>
 
           {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
           <div>

@@ -16,8 +16,21 @@ export function host(ref: string) {
   }
 }
 
-/** Hostname for URLs, repo-ish tail for everything else. */
+/** "Xcode" for a Mac app ref ("mac://Xcode"), null for anything else. */
+export function macApp(ref: string) {
+  const m = ref.match(/^mac:\/\/(.+)$/i);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]).replace(/\/+$/, "") || null;
+  } catch {
+    return m[1];
+  }
+}
+
+/** Hostname for URLs, the app for Mac refs, repo-ish tail for everything else. */
 export function shortRef(ref: string) {
+  const app = macApp(ref);
+  if (app !== null) return app;
   const h = host(ref);
   if (h !== null) return h;
   const clean = ref.replace(/^(git@|https?:\/\/)/, "").replace(/\.git$/, "");
@@ -36,6 +49,7 @@ export function refUrl(ref: string): string | null {
 export function sourceLabel(source: Pick<Source, "kind" | "ref">) {
   if (source.kind === "extension") return host(source.ref) ?? "Browser";
   if (source.kind === "code") return "Code";
+  if (source.kind === "mac") return macApp(source.ref) ?? host(source.ref) ?? "Mac";
   if (source.kind === "digest") return "Digest";
   return "Manual";
 }
@@ -44,6 +58,10 @@ export function sourceLabel(source: Pick<Source, "kind" | "ref">) {
 export function captureLine(source: Source) {
   const who = source.authorName ?? "Someone";
   if (source.kind === "code") return `${who} committed ${source.title}`;
+  if (source.kind === "mac") {
+    const where = macApp(source.ref) ?? source.ref.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
+    return `${who} worked in ${where || source.title} on their Mac`;
+  }
   if (source.kind === "extension") {
     const path = source.ref.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
     return `${who} captured ${path || source.title}`;
