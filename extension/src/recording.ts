@@ -7,6 +7,9 @@ export const DEFAULT_RECORDING: RecordingState = {
   sent: 0,
   lastSentAt: null,
   lastError: null,
+  stopReason: null,
+  queued: 0,
+  retryAt: null,
   captureWindowId: null,
   allowedTabIds: [],
 };

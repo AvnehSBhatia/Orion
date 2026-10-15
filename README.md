@@ -62,14 +62,46 @@ claude mcp add --transport http orion https://<host>/api/mcp --header "Authoriza
 
 `context_for_task` returns one markdown context file for the task at hand (relevant work, what changed recently and who changed it, key documents, blockers, next steps). The `orion-context` skill tells the agent to call it at the start of a task and save it to `.orion/context.md`. Full tool list: [docs/mcp.md](docs/mcp.md).
 
-## Deploy on one box
+## Deploy
 
-1. `npm ci && npm run build` in `server/` and in `web/` (set `NEXT_PUBLIC_ORION_API` to the backend URL before building the web app).
-2. `server/.env`: `OPENROUTER_API_KEY`, `COOKIE_SECURE=true`, `UI_ORIGIN=https://<web host>`, `TRUST_PROXY=true` behind a proxy, `EXTENSION_IDS`.
-3. Run `npm start` in `server/` (backend, :3001) and `cd web && npm start` (:3000) under a process manager, behind HTTPS. UI and API must be on the same site for the session cookie (for example app.example.com and api.example.com).
-4. Create the first admin with `server/scripts/account.ts`, then load the extension and sign in.
+Orion runs on one box: the API, the dashboard, and Caddy for automatic HTTPS. The dashboard is served at `app.<domain>` and the API at `api.<domain>`. Everything for deployment is in `deploy/`:
 
-Data lives in `server/data` (`DATA_DIR`) (SQLite per org plus `auth.db`); back that directory up.
+| Path | What |
+|---|---|
+| `deploy/docker-compose.yml` | Server, web, and Caddy. Data and models live on volumes. Start with `cp deploy/.env.example deploy/.env`, fill it in, then `docker compose -f deploy/docker-compose.yml up -d --build`. |
+| `deploy/setup-ubuntu.sh` | The same setup on a plain Ubuntu VPS without Docker. Installs Node 22, an `orion` user, swap sized by RAM, ufw, unattended-upgrades, Caddy, the systemd units, and the backup timer. |
+| `deploy/systemd/` | Units for the server, web, and backup timer, plus `orion-update.sh` for updates and rollbacks. |
+| `deploy/backup/orion-backup.sh` | Daily online SQLite backup (`server/scripts/backup.ts`) with an integrity check, local retention, and an offsite copy via rclone (S3, B2, or R2). |
+
+Box size depends on where embeddings run:
+
+- 1 GB: use `EMBED_PROVIDER=openrouter` and swap.
+- 2 GB: comfortable with `EMBED_PROVIDER=openrouter`.
+- 4 GB: needed to run EmbeddingGemma locally (`EMBED_PROVIDER=gemma`). The model takes about 1 GB once loaded; an image embed peaks near 2 GB more, so use 8 GB if you set `EMBED_SCREENSHOTS=always`. Run `npm run embed-models` in `server/` at deploy time to download it into a persistent `MODEL_CACHE_DIR`.
+
+Run one server process per `DATA_DIR`: retention (hourly) and extraction retries run inside it. Back up with `npm run backup` in `server/` (SQLite's online backup API, safe while the server runs; never `cp` a live database). Monitor `GET /api/health` (503 when a check fails).
+
+Create the first admin with `server/scripts/account.ts` inside the deployment.
+
+Further reading:
+
+- [docs/deploy.md](docs/deploy.md): step-by-step setup.
+- [docs/runbook.md](docs/runbook.md): updates and rollback, logs, health, backups and restore, key rotation, deletion requests, incidents.
+- [docs/launch-checklist.md](docs/launch-checklist.md): the manual steps before launch.
+- [docs/legal/](docs/legal/): the privacy and compliance drafts.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every PR and push:
+
+- server: vitest, `next typegen`, tsc, build
+- web: typegen, tsc, eslint, build
+- extension: tsc, build
+- codebase-agent: tests, tsc
+- `npm audit` on production dependencies
+- a build of both Docker images
+
+Dependabot opens weekly updates. `ctx-sync.yml` syncs commits to Orion when the `BACKEND_URL`, `ORION_ORG_ID`, and `ORION_TOKEN` secrets are set.
 
 ## API
 

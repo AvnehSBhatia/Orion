@@ -1,6 +1,6 @@
 import path from "node:path";
 import { config } from "@/config";
-import { withContext, type EmbedInput, type Embedder } from "./embed";
+import { withContext, type EmbedInput, type Embedder, type EmbedderStatus } from "./embed";
 
 function normalize(v: Float32Array): Float32Array {
   let sum = 0;
@@ -52,6 +52,7 @@ export function gemmaText(input: EmbedInput): string {
 export class GemmaEmbedder implements Embedder {
   readonly model: string;
   private loading: Promise<Loaded> | null = null;
+  private state: EmbedderStatus | "idle" = "idle";
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
@@ -61,11 +62,25 @@ export class GemmaEmbedder implements Embedder {
     this.model = `${modelId}:${dtype}+vision@768`;
   }
 
+  /** "loading" also before the first load starts: the model is not usable yet either way. */
+  status(): EmbedderStatus {
+    return this.state === "idle" ? "loading" : this.state;
+  }
+
   warm(): Promise<Loaded> {
-    return (this.loading ??= this.load().catch((err) => {
-      this.loading = null;
-      throw err;
-    }));
+    if (this.loading) return this.loading;
+    this.state = "loading";
+    return (this.loading = this.load().then(
+      (loaded) => {
+        this.state = "ready";
+        return loaded;
+      },
+      (err) => {
+        this.loading = null;
+        this.state = "error";
+        throw err;
+      },
+    ));
   }
 
   private async load(): Promise<Loaded> {

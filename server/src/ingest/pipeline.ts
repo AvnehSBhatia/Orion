@@ -8,7 +8,11 @@ import { HttpError } from "@/http/error";
 import { maintainInBackground } from "@/orgspace/maintain";
 import { recomputeUserVectors, refreshInBackground } from "@/orgspace/personVectors";
 import { config } from "@/config";
+import { logJson } from "@/jobs/log";
+import { getOrgSettings, isExcludedUrl } from "@/orgs/settings";
+import { withUsage } from "@/usage";
 import { pageDiff, pageOf, samePage, withChanges } from "./diff";
+import { markExtractionFailed } from "./extraction";
 import { prepareScreenshot, pruneImage, shrinkImage, type OcrFn } from "./image";
 
 export type IngestDeps = {
@@ -41,14 +45,29 @@ export function isAlwaysExcluded(path: string): boolean {
 
 const NOTHING: GraphUpdate = { nodes: [], edges: [] };
 
-/** Null when the model is unavailable: the document is then stored unjudged, since it may well be useful context. */
-async function extractOrNull(run: () => Promise<GraphUpdate>): Promise<GraphUpdate | null> {
+/**
+ * `update` is null when the model is unavailable (provider error, timeout, budget spent): the document is then
+ * stored unjudged, since it may well be useful context, and `error` says why so the source can be retried later.
+ */
+async function extractOrNull(run: () => Promise<GraphUpdate>): Promise<{ update: GraphUpdate | null; error?: HttpError }> {
   try {
-    return await run();
+    return { update: await run() };
   } catch (err) {
     if (!(err instanceof HttpError)) throw err;
-    console.warn(`Extraction skipped (${err.status}: ${err.message}). Storing the source without graph changes.`);
-    return null;
+    logJson("warn", "extraction skipped, storing the source without graph changes", { status: err.status, error: err.message });
+    return { update: null, error: err };
+  }
+}
+
+/** The URL as stored and sent to the model: query string and fragment removed (they carry tokens, ids, searches). */
+export function cleanCaptureUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    u.search = "";
+    u.hash = "";
+    return u.href;
+  } catch {
+    return url.split(/[?#]/)[0];
   }
 }
 
@@ -205,10 +224,22 @@ function repeatOf(
  * and the change block is kept at the top of the stored source text.
  * A page the model finds no work in is not stored at all (`notWork`), and is not re-judged while it stays the same.
  */
-export async function ingestCapture(
+export function ingestCapture(
+  deps: IngestDeps,
+  input: Omit<CaptureInput, "text"> & { html: string; screenshotB64: string; userId: string },
+  now = Date.now(),
+): Promise<CaptureResponse> {
+  // Defense in depth behind the route and the extension: capture off or an excluded site means nothing is kept.
+  const settings = getOrgSettings(deps.store);
+  if (!settings.captureEnabled || isExcludedUrl(settings, input.url)) return Promise.resolve({ nodesTouched: [], sourceId: null, imageStatus: "none" });
+  const body = { ...input, url: cleanCaptureUrl(input.url) };
+  return withUsage(deps.store, () => captureInContext(deps, body, now));
+}
+
+async function captureInContext(
   deps: IngestDeps,
   body: Omit<CaptureInput, "text"> & { html: string; screenshotB64: string; userId: string },
-  now = Date.now(),
+  now: number,
 ): Promise<CaptureResponse> {
   const text = htmlToText(body.html).slice(0, MAX_PAGE_TEXT);
   const title = body.title || body.url;
@@ -237,7 +268,7 @@ export async function ingestCapture(
   if (seenAsNotWork(deps.store, key, words, now)) return { nodesTouched: [], sourceId: null, imageStatus, notWork: true };
 
   const change = changeSince(deps.store, deps.store.lastSourceBy("extension", body.url, body.userId), text);
-  const update = await extractOrNull(() =>
+  const { update, error } = await extractOrNull(() =>
     deps.extractor.fromCapture(
       {
         url: body.url,
@@ -260,6 +291,7 @@ export async function ingestCapture(
     body.userId,
     new Date(now).toISOString(),
   );
+  if (error) markExtractionFailed(deps.store, res.sourceId, error, now);
   rememberPage(deps.store, res.sourceId, text);
   if (shot?.image && deps.background && !light) pruneInBackground(deps, res.sourceId, shot.image);
   return { ...res, imageStatus };
@@ -276,7 +308,15 @@ export function commitAuthor(store: Store, userId?: string, author?: { name: str
     .find((u) => u.name.toLowerCase() === name || u.id === slugify(author.name) || (!!local && u.id === slugify(local)))?.id;
 }
 
-export async function ingestCode(
+export function ingestCode(
+  deps: IngestDeps,
+  body: CodeInput & { userId?: string; author?: { name: string; email?: string } },
+  maxDiffChars: number,
+): Promise<CodeIngestResponse> {
+  return withUsage(deps.store, () => codeInContext(deps, body, maxDiffChars));
+}
+
+async function codeInContext(
   deps: IngestDeps,
   body: CodeInput & { userId?: string; author?: { name: string; email?: string } },
   maxDiffChars: number,
@@ -289,7 +329,7 @@ export async function ingestCode(
 
   const userId = commitAuthor(deps.store, body.userId, body.author);
   const about = aboutFor(deps.store, userId);
-  const update = await extractOrNull(() =>
+  const { update, error } = await extractOrNull(() =>
     deps.extractor.fromCode({ repo: body.repo, commitSha: body.commitSha, files, cards }, known(deps.store), about),
   );
   const short = body.commitSha.slice(0, 7);
@@ -299,7 +339,7 @@ export async function ingestCode(
     ...files.map((f) => `--- ${f.path}\n${f.diff}`),
   ].filter(Boolean);
   const fromCards = cards.length && (!update || isEmpty(update)) ? cardsToUpdate(cards, domainForRole(about.author?.role) ?? "engineering") : null;
-  return applyUpdate(
+  const res = await applyUpdate(
     deps,
     fromCards ?? update ?? NOTHING,
     {
@@ -311,4 +351,7 @@ export async function ingestCode(
     },
     userId,
   );
+  // Cards already gave the graph its changes; otherwise a provider failure is retried in the background.
+  if (error && !fromCards) markExtractionFailed(deps.store, res.sourceId, error);
+  return res;
 }

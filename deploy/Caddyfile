@@ -1,0 +1,49 @@
+# Orion reverse proxy. Caddy gets and renews the TLS certificates itself.
+# Needs ORION_DOMAIN and ACME_EMAIL in its environment. WEB_UPSTREAM / API_UPSTREAM default to the
+# docker-compose service names; the systemd setup points them at 127.0.0.1.
+{
+	email {$ACME_EMAIL}
+}
+
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+		-X-Powered-By
+	}
+}
+
+app.{$ORION_DOMAIN} {
+	import security_headers
+	header X-Frame-Options "DENY"
+	encode zstd gzip
+	reverse_proxy {$WEB_UPSTREAM:web:3000}
+	log {
+		output stdout
+		format json
+	}
+}
+
+api.{$ORION_DOMAIN} {
+	import security_headers
+	header X-Frame-Options "DENY"
+	# Captures carry a JPEG screenshot; anything bigger than this is refused before it reaches Node.
+	request_body {
+		max_size 4MB
+	}
+	encode zstd gzip
+	reverse_proxy {$API_UPSTREAM:server:3001} {
+		# Chat and MCP stream their answers; send bytes as they come.
+		flush_interval -1
+		transport http {
+			read_timeout 5m
+		}
+	}
+	log {
+		output stdout
+		format json
+	}
+}

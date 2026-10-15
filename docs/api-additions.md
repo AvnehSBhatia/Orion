@@ -8,7 +8,8 @@ The contract the server, web, and extension build against. Existing endpoints ar
 
 ## Session and consent
 
-- `GET /api/auth/me` → adds `email: string | null`, `consent: { required: boolean, version: number, acceptedAt: string | null }`.
+- `GET /api/auth/me` → adds `email: string | null`, `consent: { required: boolean, version: number, acceptedAt: string | null, notice: string }`. `notice` is the monitoring notice (markdown) to show at consent: `docs/legal/monitoring-notice.md` or `docs/legal/employee-monitoring-notice.md` when deployed (DRAFT banner stripped), else a short built-in text. `acceptedAt` is null until the current version is accepted.
+- `POST /api/auth/consent` answers `409` when `version` is not the org's current `consentVersion`.
 - `POST /api/auth/consent { version }` → `{ acceptedAt }`. Capture endpoints answer `403 { error: "consent required" }` until the caller accepted the org's current `consentVersion`.
 - `POST /api/auth/password { current, next }` → `204`; signs out the account's other sessions.
 
@@ -52,5 +53,8 @@ Links point at the web app: `${UI_ORIGIN}/invite/<token>` and `${UI_ORIGIN}/rese
 - `GET /api/sources/:id`: text stays org-wide; `hasImage` is false for callers who may not see the screenshot.
 - `POST /api/ingest/code`: `userId` must be the caller unless admin (attribution by git author still works for admins and CI tokens created by admins).
 - Picking another person ("viewing as") is admin-only on every route that takes `userId`.
-- Cookie-authenticated writes need `Content-Type: application/json` and an `Origin` in `UI_ORIGIN`; Bearer requests are exempt.
+- Cookie-authenticated writes (POST, PATCH, DELETE) need an `Origin` in `UI_ORIGIN` (or, when the browser sends no Origin, `Sec-Fetch-Site: same-origin | same-site`), else `403`; a body with any `Content-Type` other than JSON answers `415`. A bodyless write may omit `Content-Type`. Bearer requests are exempt.
+- Bodies over 256KB (4MB for `/api/ingest/capture`, 1MB for `/api/ingest/code`) answer `413` before parsing.
+- Every API response carries `X-Request-Id` (echoes a valid incoming one) and security headers.
+- Behind HTTPS (`COOKIE_SECURE=true`) the session cookie is `__Host-orion_session`; the old `orion_session` name is still accepted.
 - Over-limit requests answer `429 { error, retryAfterSec }` with a `Retry-After` header; over-budget model steps answer `402 { error: "monthly model budget reached" }` for chat and dashboard asks, and ingest stores the document without extraction.

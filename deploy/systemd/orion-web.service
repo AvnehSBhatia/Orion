@@ -1,0 +1,35 @@
+[Unit]
+Description=Orion web dashboard (web/, Next.js on 127.0.0.1:3000)
+After=network-online.target orion-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=orion
+Group=orion
+WorkingDirectory=/opt/orion/web
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3000
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=-/opt/orion/web/.next/cache
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orion-web
+
+[Install]
+WantedBy=multi-user.target

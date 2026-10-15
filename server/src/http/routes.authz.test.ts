@@ -15,6 +15,7 @@ import { AuthDb, setAuthDb } from "@/auth/db";
 import { LEGACY_SESSION_COOKIE } from "@/auth/request";
 import { createOrgStore, deleteOrgStore, getStore, orgExists } from "@/http/deps";
 import { saveOrgSettings } from "@/orgs/settings";
+import { recordUsage } from "@/usage";
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
 type Who = "anon" | "member" | "admin" | "otherAdmin";
@@ -418,6 +419,17 @@ describe("cross-cutting route behavior", () => {
     expect(getStore(ORG).getSource(sourceId)?.authorId).toBe("devon");
   });
 
+  it("answers 402 on chat and dashboard asks once the monthly model budget is spent", async () => {
+    const store = getStore(ORG);
+    saveOrgSettings(store, { llmMonthlyBudgetUsd: 0.01 });
+    recordUsage(store, { model: "m", kind: "chat", inputTokens: 1, outputTokens: 1, costUsd: 1 });
+    for (const key of ["POST /api/chat", "POST /api/dashboard/ask"]) {
+      const res = await invoke({ key }, "member", f, { body: { orgId: ORG, message: "what changed?" } });
+      expect(res.status, key).toBe(402);
+      expect(await res.json()).toEqual({ error: "monthly model budget reached" });
+    }
+  });
+
   it("rejects the tokens of a disabled account", async () => {
     getAuthDbFor().updateAccount("devon", { disabled: true });
     expect((await invoke({ key: "GET /api/activity" }, "member", f)).status).toBe(401);
@@ -425,7 +437,7 @@ describe("cross-cutting route behavior", () => {
 
   it("shows consent and email on /api/auth/me", async () => {
     const res = await invoke({ key: "GET /api/auth/me" }, "member", f);
-    expect(await res.json()).toMatchObject({ username: "devon", email: null, consent: { required: false, version: 1 } });
+    expect(await res.json()).toMatchObject({ username: "devon", email: null, consent: { required: false, version: 1, notice: expect.stringContaining("Orion") } });
   });
 });
 

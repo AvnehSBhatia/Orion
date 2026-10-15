@@ -8,24 +8,22 @@
     body { padding: 32px 16px; }
     main { max-width: 480px; margin: 0 auto; }
     h1 { font-size: 24px; }
+    h2 { font-size: 18px; font-weight: 600; margin: 40px 0 8px; }
     .brand { margin-bottom: 32px; }
+    .muted { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
     #status { margin-left: 16px; color: var(--muted); font-size: 16px; }
+    ul { list-style: none; padding: 0; margin: 0 0 16px; display: flex; flex-direction: column; gap: 8px; font-size: 16px; }
+    li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    li.empty { color: var(--muted); font-size: 14px; }
+    #block-form { display: flex; gap: 8px; align-items: center; }
+    #block-form input { margin: 0; }
+    #block-form button { flex: none; }
   </style>
 </head>
 <body>
   <main>
     <div class="brand">
-      <svg class="logo" viewBox="0 0 40 40" aria-hidden="true">
-        <line x1="6" y1="29" x2="15" y2="14" />
-        <line x1="15" y1="14" x2="26" y2="19" />
-        <line x1="26" y1="19" x2="34" y2="7" />
-        <line x1="26" y1="19" x2="31" y2="33" />
-        <circle cx="6" cy="29" r="2.5" fill="#E3C26B" />
-        <circle cx="15" cy="14" r="3" fill="#6EA8FF" />
-        <circle cx="26" cy="19" r="3.5" fill="#F2F4F8" />
-        <circle cx="34" cy="7" r="2.5" fill="#5EEAD4" />
-        <circle cx="31" cy="33" r="2.5" fill="#FF9F6E" />
-      </svg>
+      <img class="logo" src="icons/icon-128.png" alt="" width="40" height="40" />
       <h1>Orion settings</h1>
     </div>
     <form id="login">
@@ -45,11 +43,25 @@
       <input id="userId" required autocomplete="off" placeholder="for example, priya-pm" />
 
       <label for="backendUrl">Orion server URL</label>
-      <input id="backendUrl" type="url" required placeholder="http://localhost:3001" />
+      <input id="backendUrl" type="url" required />
+      <p class="muted">Must start with https://. Plain http:// only works for a server on this computer (localhost).</p>
 
       <button type="submit" class="secondary">Save</button>
       <span id="status" role="status"></span>
     </form>
+
+    <h2>Sites Orion never captures</h2>
+    <p class="muted">Tabs on these sites are skipped before anything is read from them. Subdomains are included. This list stays on this computer.</p>
+    <ul id="blocked"></ul>
+    <form id="block-form">
+      <label for="block-host" class="visually-hidden">Site to never capture</label>
+      <input id="block-host" placeholder="bank.example.com" autocomplete="off" autocapitalize="none" spellcheck="false" />
+      <button type="submit" class="secondary">Add</button>
+    </form>
+
+    <h2>Excluded by your organization</h2>
+    <p class="muted">Set by your Orion admin. Refreshed every few minutes while capturing.</p>
+    <ul id="org-excluded"></ul>
   </main>
   <script src="options.js"></script>
 </body>

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { consentState } from "@/auth/consent";
+import { monitoringNotice } from "@/auth/notice";
 import { config } from "@/config";
 import { getStore } from "@/http/deps";
 import { HttpError } from "@/http/error";
@@ -19,7 +20,7 @@ export const GET = route(
         admin: p.admin,
         kind: p.kind,
         email: p.email,
-        consent: consentState(p, getStore(p.orgId)),
+        consent: { ...consentState(p, getStore(p.orgId)), notice: monitoringNotice() },
         authDisabled: config.authDisabled,
       };
     }

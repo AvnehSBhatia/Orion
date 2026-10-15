@@ -243,6 +243,7 @@ export class LlmExtractor implements Extractor {
   async fromCapture(input: CaptureInput, known: KnownNode[], about?: ExtractContext): Promise<GraphUpdate> {
     const raw = await completeJson(this.llm, {
       model: this.model,
+      purpose: "extract",
       name: "build_update",
       schema: BUILD_UPDATE_SCHEMA,
       system: input.changes ? `${EXTRACT_PROMPT}\n${CHANGE_PROMPT}` : EXTRACT_PROMPT,
@@ -257,6 +258,7 @@ export class LlmExtractor implements Extractor {
     const files = input.files.map((f) => `--- ${f.path}\n${f.diff}`).join("\n\n");
     const raw = await completeJson(this.llm, {
       model: this.model,
+      purpose: "extract",
       name: "feature_cards",
       schema: FEATURE_CARDS_SCHEMA,
       system: CODE_PROMPT,

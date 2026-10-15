@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { config } from "@/config";
 import { HttpError } from "@/http/error";
+import { logJson } from "@/jobs/log";
 import { normalize } from "@/lib/vector";
+import { afterModelCall, readUsage } from "@/usage";
+import { fetchWithRetry, providerPrefs } from "./http";
 import { GemmaEmbedder } from "./gemma";
 
 /**
@@ -18,7 +21,11 @@ export interface Embedder {
   /** Stored alongside every vector so a model or dimension change triggers a re-embed. */
   readonly model: string;
   embed(inputs: EmbedInput[]): Promise<Float32Array[]>;
+  /** For /api/health: a local model is "loading" until its weights are in memory. Absent means always ready. */
+  status?(): EmbedderStatus;
 }
+
+export type EmbedderStatus = "ready" | "loading" | "error";
 
 export const query = (text: string, context: string | null = null): EmbedInput => ({ kind: "query", text, context });
 export const doc = (
@@ -40,7 +47,42 @@ function plainText(input: EmbedInput): string {
 }
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/embeddings";
-const BATCH = 64;
+/** Inputs per embeddings request. */
+export const EMBED_BATCH = 64;
+/** Request body bytes per embeddings request; OpenRouter rejects above 8MB, so stay well under. */
+export const EMBED_BATCH_BYTES = 6 * 1024 * 1024;
+
+/**
+ * Splits texts into consecutive batches of at most `maxCount` items and `maxBytes` of JSON-encoded input each.
+ * A single text over `maxBytes` is cut to fit (it would be rejected whole).
+ */
+export function chunkByBytes(texts: string[], maxCount = EMBED_BATCH, maxBytes = EMBED_BATCH_BYTES): string[][] {
+  const out: string[][] = [];
+  let batch: string[] = [];
+  let bytes = 0;
+  const overhead = 1024; // model id, dimensions, provider settings, brackets
+  for (let text of texts) {
+    let size = Buffer.byteLength(JSON.stringify(text)) + 1;
+    if (size + overhead > maxBytes) {
+      // Cut by characters until the encoded form fits; JSON escaping can grow a string, so measure again.
+      let keep = Math.floor(text.length * ((maxBytes - overhead) / size));
+      do {
+        text = text.slice(0, keep);
+        size = Buffer.byteLength(JSON.stringify(text)) + 1;
+        keep = Math.floor(keep * 0.9);
+      } while (size + overhead > maxBytes && keep > 0);
+    }
+    if (batch.length && (batch.length >= maxCount || bytes + size + overhead > maxBytes)) {
+      out.push(batch);
+      batch = [];
+      bytes = 0;
+    }
+    batch.push(text);
+    bytes += size;
+  }
+  if (batch.length) out.push(batch);
+  return out;
+}
 
 export class OpenRouterEmbedder implements Embedder {
   readonly model: string;
@@ -53,27 +95,38 @@ export class OpenRouterEmbedder implements Embedder {
     this.model = `${modelId}@${dimensions}`;
   }
 
+  status(): EmbedderStatus {
+    return "ready";
+  }
+
   async embed(inputs: EmbedInput[]): Promise<Float32Array[]> {
-    const texts = inputs.map(plainText);
     const out: Float32Array[] = [];
-    for (let i = 0; i < texts.length; i += BATCH) {
-      out.push(...(await this.embedBatch(texts.slice(i, i + BATCH))));
-    }
+    for (const batch of chunkByBytes(inputs.map(plainText))) out.push(...(await this.embedBatch(batch)));
     return out;
   }
 
   private async embedBatch(input: string[]): Promise<Float32Array[]> {
-    const res = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: this.modelId, input, dimensions: this.dimensions }),
-    });
+    const { res } = await fetchWithRetry(
+      OPENROUTER_URL,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: this.modelId, input, dimensions: this.dimensions, provider: providerPrefs() }),
+      },
+      { purpose: "embed", label: "embeddings" },
+    );
     if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`OpenRouter embeddings ${res.status}: ${body.slice(0, 500)}`);
+      logJson("error", "openrouter embeddings failed", { status: res.status, detail: (await res.text().catch(() => "")).slice(0, 300) });
       throw new HttpError(502, "embedding provider failed");
     }
-    const json = (await res.json()) as { data: { index: number; embedding: number[] }[] };
+    const json = (await res.json()) as { data?: { index: number; embedding: number[] }[]; usage?: unknown };
+    if (!json.data || json.data.length !== input.length) {
+      logJson("error", "openrouter embeddings returned the wrong count", { sent: input.length, got: json.data?.length ?? 0 });
+      throw new HttpError(502, "embedding provider failed");
+    }
+    // Recorded (embeddings are cheap and every feature needs them) but never blocked by the budget.
+    const usage = readUsage(json.usage);
+    if (usage) afterModelCall({ model: this.modelId, kind: "embed", ...usage });
     return [...json.data]
       .sort((a, b) => a.index - b.index)
       .map((d) => normalize(Float32Array.from(d.embedding.slice(0, this.dimensions))));

@@ -187,6 +187,17 @@ describe("account creation", () => {
   });
 });
 
+describe("monitoring notice", () => {
+  it("strips the draft banner, comments, and mock buttons, and falls back to a built-in text", async () => {
+    const { cleanNotice, monitoringNotice } = await import("./notice");
+    const md = "> **DRAFT — needs review.** x\n\n# Title\n\nBody.\n\n---\n\n[ ] I've read this\n\n**[ Accept and continue ]**\n\n<!-- notes -->";
+    expect(cleanNotice(md)).toBe("# Title\n\nBody.");
+    const notice = monitoringNotice();
+    expect(notice).toMatch(/^# /);
+    expect(notice).not.toContain("DRAFT");
+  });
+});
+
 describe("consent", () => {
   it("is required until the current version is accepted, and again after a bump", async () => {
     const db = AuthDb.open(":memory:");

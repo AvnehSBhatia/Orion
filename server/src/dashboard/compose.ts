@@ -6,6 +6,7 @@ import { readGraph } from "@/graph/view";
 import { completeJson, type LlmClient } from "@/llm/openrouter";
 import { heuristicDashboard } from "./heuristic";
 import { DASHBOARD_JSON_SCHEMA, WIDGET_GUIDE, sanitizeDashboard, withLiveWidgets } from "./widgets";
+import { BudgetExceededError } from "@/usage";
 
 const ROLE_PROMPT = `You design the home dashboard for one person in an organization, from their role in their own words.
 ${WIDGET_GUIDE}
@@ -61,6 +62,7 @@ export async function composeRoleDashboard(
     if (spec && spec.widgets.length >= 3) return withLiveWidgets(spec);
     console.error(`Role dashboard for ${user.id} came back unusable, using the heuristic`);
   } catch (err) {
+    if (err instanceof BudgetExceededError) throw err;
     console.error(`Role dashboard for ${user.id} failed, using the heuristic:`, err instanceof Error ? err.message : err);
   }
   return heuristicDashboard(user, graph, now);

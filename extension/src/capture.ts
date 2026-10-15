@@ -6,8 +6,10 @@
 // throttled. Closing this window ends every share and stops recording.
 
 import { grabAll, type SharedSource } from './capture/frames';
+import { blockReason, type BlockReason } from './lib/policy.ts';
+import { getLocal, onLocalChange } from './privacy';
 import { getRecording, onRecordingChange, patchRecording } from './recording';
-import type { BgRequest, BgResult, FrameRequest, RecordingState } from './types';
+import type { BgRequest, BgResult, ErrorCode, FrameRequest, RecordingState } from './types';
 
 // Largest stream resolution requested from Chrome.
 const MAX_WIDTH = 1920;
@@ -19,6 +21,8 @@ const sharedList = $('shared');
 const tabList = $('tabs');
 const toggleBtn = $<HTMLButtonElement>('toggle');
 const statusEl = $('status');
+const tabAccess = $('tab-access');
+const grantBtn = $<HTMLButtonElement>('grant-tabs');
 
 const shared = new Map<string, SharedSource>();
 const counts = { window: 0, screen: 0 };
@@ -102,32 +106,57 @@ function renderShared() {
   renderControls();
 }
 
-// Chrome tabs
+// Chrome tabs. Listing and capturing tabs needs Chrome's "all sites" access,
+// which is optional: it is asked for here, from a click, the first time
+// someone wants to share a tab. Tabs on sites the org excludes or the user
+// blocked are listed but cannot be ticked.
+
+const TAB_ACCESS: chrome.permissions.Permissions = { origins: ['<all_urls>'] };
+
+const BLOCK_COPY: Record<Exclude<BlockReason, 'not_web'>, string> = {
+  org_excluded: 'Excluded by your organization',
+  user_blocked: 'You never capture this site',
+};
 
 async function renderTabs() {
-  const [tabs, current] = await Promise.all([chrome.tabs.query({}), getRecording()]);
+  const hasAccess = await chrome.permissions.contains(TAB_ACCESS);
+  tabAccess.hidden = hasAccess;
+  if (!hasAccess) {
+    tabList.replaceChildren();
+    return;
+  }
+  const [tabs, current, local] = await Promise.all([chrome.tabs.query({}), getRecording(), getLocal()]);
   const allowed = new Set(current.allowedTabIds);
   const rows = tabs
     .filter((t) => t.id !== undefined && /^https?:/.test(t.url ?? ''))
     .map((t) => {
+      const reason = blockReason(t.url, local.policy, local.blockedHosts);
       const row = document.createElement('label');
       row.className = 'item';
       const box = document.createElement('input');
       box.type = 'checkbox';
-      box.checked = allowed.has(t.id!);
+      box.checked = !reason && allowed.has(t.id!);
+      box.disabled = !!reason;
       box.addEventListener('change', () => setTabAllowed(t.id!, box.checked));
       const name = document.createElement('span');
       name.className = 'name';
       name.textContent = t.title || t.url!;
       const host = document.createElement('span');
       host.className = 'host';
-      host.textContent = new URL(t.url!).hostname;
+      host.textContent = reason && reason !== 'not_web' ? BLOCK_COPY[reason] : new URL(t.url!).hostname;
+      if (reason) row.classList.add('blocked');
       row.append(box, name, host);
       return row;
     });
   tabList.replaceChildren(...rows);
   if (rows.length === 0) tabList.append(emptyNote('No open web pages.'));
 }
+
+grantBtn.addEventListener('click', async () => {
+  const granted = await chrome.permissions.request(TAB_ACCESS).catch(() => false);
+  if (!granted) setStatus('Without site access Orion can still capture windows and screens, but not tabs.');
+  renderTabs();
+});
 
 async function setTabAllowed(tabId: number, allowed: boolean) {
   const { allowedTabIds } = await getRecording();
@@ -141,6 +170,9 @@ chrome.tabs.onRemoved.addListener(() => renderTabs());
 chrome.tabs.onUpdated.addListener((_id, change) => {
   if (change.title || change.url) renderTabs();
 });
+chrome.permissions.onAdded.addListener(() => renderTabs());
+chrome.permissions.onRemoved.addListener(() => renderTabs());
+onLocalChange(() => renderTabs());
 
 // Start and stop
 
@@ -158,7 +190,7 @@ function renderControls() {
     setStatus(
       n === 0
         ? 'Nothing selected, so nothing is being sent.'
-        : `Capturing ${n} ${n === 1 ? 'source' : 'sources'} every 5 seconds. Stop from the Orion icon in your toolbar.`,
+        : `Capturing ${n} ${n === 1 ? 'source' : 'sources'}. Stop or pause from the Orion icon in your toolbar.`,
     );
   } else {
     setStatus(n === 0 ? 'Pick at least one window, screen, or tab.' : 'Press start when you are done choosing.');
@@ -175,8 +207,18 @@ toggleBtn.addEventListener('click', async () => {
     .sendMessage<BgRequest, BgResult<unknown>>({ type: state?.recording ? 'stop' : 'sources-start' })
     .catch(() => undefined)) as BgResult<unknown> | undefined;
   toggleBtn.disabled = false;
-  if (!res?.ok) setStatus('Could not start. Reload Orion in chrome://extensions, then try again.');
+  if (!res) return setStatus('Could not start. Reload Orion in chrome://extensions, then try again.');
+  if (!res.ok) setStatus(START_ERRORS[res.code] ?? 'Could not start. Open the Orion toolbar button for details.');
 });
+
+const START_ERRORS: Partial<Record<ErrorCode, string>> = {
+  consent: 'Accept the monitoring notice first: open the Orion toolbar button.',
+  signed_out: 'Your Orion sign-in ended. Sign in again in Orion settings.',
+  capture_disabled: 'Your organization has turned capturing off.',
+  insecure_url: 'The server URL must start with https://. Fix it in Orion settings.',
+  retrying: 'Could not reach Orion. Try again in a moment.',
+  no_user: 'Add your user id in Orion settings first.',
+};
 
 function emptyNote(text: string) {
   const p = document.createElement('p');
