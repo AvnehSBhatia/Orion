@@ -8,6 +8,8 @@ import Foundation
 
 public struct SummaryRequest: Codable, Sendable {
     public var blocks: [WorkBlockPayload]
+
+    public init(blocks: [WorkBlockPayload]) { self.blocks = blocks }
 }
 
 public struct SummaryResponse: Codable, Sendable, Equatable {

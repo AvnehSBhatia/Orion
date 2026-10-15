@@ -55,9 +55,23 @@ import SwiftUI
             openApps: { [weak self] in self?.open { $0.showApps() } },
             openWelcome: { [weak self] in self?.open { $0.showWelcome() } },
             openDebug: { [weak self] in self?.open { $0.showDebug() } },
-            deleteAll: { [weak self] in self?.engine.deleteAll() },
+            deleteAll: { [weak self] in self?.deleteEverything() },
             quit: { NSApp.terminate(nil) }
         ))
+    }
+
+    /// Asks Orion to delete this person's data too, then wipes this Mac whatever the answer.
+    private func deleteEverything() {
+        Task { @MainActor in
+            let notice = await sender.deleteRemote()
+            engine.deleteAll()
+            if let notice {
+                let alert = NSAlert()
+                alert.messageText = "Deleted on this Mac only"
+                alert.informativeText = notice
+                alert.runModal()
+            }
+        }
     }
 
     private func open(_ show: (MenuBarController) -> Void) {
@@ -142,7 +156,7 @@ import SwiftUI
         outbox.loadSample()
         sender.directory.apply(ClientsResponse(clients: [
             Client(id: "c_acme", name: "Acme Corp"), Client(id: "c_globex", name: "Globex"), Client(id: "c_initech", name: "Initech"),
-        ], nextSince: nil))
+        ]), full: true)
         for (index, app) in ["Mail", "Safari", "Terminal"].enumerated() {
             var snapshot = Snapshot(appBundleId: "com.example.\(app)", appName: app)
             snapshot.foundWindow = true

@@ -166,7 +166,7 @@ struct CaptureStatus: Equatable {
                 self?.scheduleReread()
             }
         case .contentChanged:
-            scheduler.throttle(contentKey(pid), every: Limits.debounce(Limits.contentDebounceSeconds)) { [weak self] in
+            scheduler.throttle(contentKey(pid), every: max(Limits.debounce(Limits.contentDebounceSeconds), TimeInterval(settings.policy.captureIntervalSec))) { [weak self] in
                 self?.capture(.contentChange)
             }
         }
@@ -187,7 +187,7 @@ struct CaptureStatus: Equatable {
     // MARK: Capture
 
     private func gate(_ app: NSRunningApplication?) -> SkipReason? {
-        guard let app else { return .notAllowed }
+        guard let app, settings.policy.captureEnabled else { return .notAllowed }
         return CaptureGate.check(
             captureOn: settings.captureOn, paused: settings.isPaused, systemAvailable: system.isAvailable,
             trusted: AXIsProcessTrusted(), bundleId: app.bundleIdentifier ?? "", allowed: settings.allowed
@@ -207,7 +207,8 @@ struct CaptureStatus: Equatable {
             turnOnElectronTree: AppInfo.kind(bundleId: bundleId, bundleURL: app.bundleURL) == .electron,
             rules: settings.rules,
             redaction: settings.redaction,
-            names: names
+            names: names,
+            readPageText: settings.readsBrowserPageText
         )
         Task { [weak self] in
             let snapshot = await WindowCapture.read(request) // off the main thread

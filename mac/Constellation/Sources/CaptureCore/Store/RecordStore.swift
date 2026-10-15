@@ -180,20 +180,22 @@ public final class RecordStore: @unchecked Sendable { // every database call run
     }
 
     /// Records in the Outbox with the given statuses, newest first (or oldest first, for sending).
-    public func outbox(_ statuses: [RecordStatus] = [.queued, .approved], limit: Int = 1_000, oldestFirst: Bool = false) throws -> [OutboxItem] {
+    public func outbox(_ statuses: [RecordStatus] = [.queued, .approved], limit: Int = 1_000, oldestFirst: Bool = false,
+                       sendable: Bool = false) throws -> [OutboxItem] {
         try queue.sync {
             let marks = statuses.map { _ in "?" }.joined(separator: ", ")
             return try query(
                 """
-                SELECT \(Self.recordColumns), queued_at, approved_at, sent_at, edited, sent_to
-                FROM records WHERE status IN (\(marks)) ORDER BY ended_at \(oldestFirst ? "ASC" : "DESC") LIMIT ?
+                SELECT \(Self.recordColumns), queued_at, approved_at, sent_at, edited, sent_to, rejected_reason, rejected_count
+                FROM records WHERE status IN (\(marks))\(sendable ? " AND rejected_count < \(OutboxItem.maxRejections)" : "") ORDER BY ended_at \(oldestFirst ? "ASC" : "DESC") LIMIT ?
                 """,
                 statuses.map { .text($0.rawValue) } + [.int(limit)]
             ) { row in
                 OutboxItem(
                     record: try decodeRecord(row),
                     queuedAt: row.optionalDate(9), approvedAt: row.optionalDate(10), sentAt: row.optionalDate(11),
-                    edited: row.int(12) != 0, sentTo: row.optionalText(13)
+                    edited: row.int(12) != 0, sentTo: row.optionalText(13),
+                    rejectedReason: row.optionalText(14), rejectedCount: row.int(15)
                 )
             }
         }
@@ -206,6 +208,20 @@ public final class RecordStore: @unchecked Sendable { // every database call run
             for id in ids {
                 try run("UPDATE records SET status = 'sent', sent_at = ?, sent_to = ? WHERE id = ? AND status = 'approved'",
                         [.real(now), .text(destination), .text(id.uuidString)])
+            }
+        }
+    }
+
+    /// The server did not accept these. The count goes up only when the reason is the
+    /// same as last time; a different reason starts again at 1.
+    public func markRejected(_ rejections: [(id: UUID, reason: String)]) throws {
+        try queue.sync {
+            for (id, reason) in rejections {
+                try run("""
+                UPDATE records SET rejected_count = CASE WHEN rejected_reason = ? THEN rejected_count + 1 ELSE 1 END,
+                                   rejected_reason = ?
+                WHERE id = ? AND status = 'approved'
+                """, [.text(reason), .text(reason), .text(id.uuidString)])
             }
         }
     }
@@ -242,7 +258,7 @@ public final class RecordStore: @unchecked Sendable { // every database call run
             sealed.text = text
             sealed.textHash = Segmenter.hash(text)
             try run(
-                "UPDATE records SET sealed = ?, text_chars = ?, redaction_count = ?, edited = 1 WHERE id = ?",
+                "UPDATE records SET sealed = ?, text_chars = ?, redaction_count = ?, edited = 1, rejected_count = 0, rejected_reason = NULL WHERE id = ?",
                 [.blob(try seal(sealed)), .int(text.count), .int(redactionCount), .text(id.uuidString)]
             )
         }
@@ -337,6 +353,14 @@ public final class RecordStore: @unchecked Sendable { // every database call run
             try exec("""
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, sealed BLOB NOT NULL);
             PRAGMA user_version = 4;
+            """)
+        }
+        if version < 5 {
+            // The server's reason for not accepting a block, and how often in a row.
+            try exec("""
+            ALTER TABLE records ADD COLUMN rejected_reason TEXT;
+            ALTER TABLE records ADD COLUMN rejected_count INTEGER NOT NULL DEFAULT 0;
+            PRAGMA user_version = 5;
             """)
         }
     }
