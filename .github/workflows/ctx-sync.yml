@@ -1,0 +1,41 @@
+name: Orion sync
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      BACKEND_URL: ${{ secrets.BACKEND_URL }}
+      ORION_ORG_ID: ${{ secrets.ORION_ORG_ID }}
+      ORION_TOKEN: ${{ secrets.ORION_TOKEN }}
+    steps:
+      - name: Check backend is configured
+        id: check
+        run: |
+          if [ -z "$BACKEND_URL" ]; then
+            echo "BACKEND_URL secret is not set, skipping sync."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          node-version: 22
+
+      - name: Install
+        if: steps.check.outputs.skip != 'true'
+        run: npm ci --prefix codebase-agent
+
+      - name: Sync changes to Orion
+        if: steps.check.outputs.skip != 'true'
+        run: npm run ctx:sync
+        env:
+          CTX_BASE_SHA: ${{ github.event.before }}

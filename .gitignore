@@ -1,0 +1,52 @@
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+
+.env
+.env*.local
+
+data/
+.cache/
+*.traineddata
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+.DS_Store
+
+# brag renders and the local brag skill checkout
+brag-output/
+brag-output-*/
+.agents/skills/brag-slim/
+.claude/skills/brag-slim
+skills-lock.json
+
+# stay on this machine
+demo/src/features/secret-pricing-engine/
+demo/src/features/unreleased-voice-mode/
+
+# stress labs and scratch
+stress/
+data-stress/
+test.txt
+
+# one-off probe scripts
+server/scripts/probe-*.ts
+
+# Orion codebase agent sync state
+.ctx-last-sha
+.ctx-cards.json
+codebase-agent/mock/out/
+
+# agent private (git treats these as harmless patterns that match nothing; the codebase agent never sends them)
++./demo/src/features/secret-pricing-engine/
++./demo/src/features/unreleased-voice-mode/
+
+# Context files written by coding agents from the Orion MCP server
+.orion/
+
+# Rust build output
+server/target/
+server/*/target/

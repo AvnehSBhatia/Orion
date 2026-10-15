@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Orion backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=15m
+# Run at boot if the box was off at the scheduled time.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
