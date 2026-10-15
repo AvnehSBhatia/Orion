@@ -186,8 +186,19 @@ public struct ClientMatcher: Sendable {
     public static let margin = 25
 
     private struct Pattern: @unchecked Sendable { // NSRegularExpression is immutable and thread safe
-        let literal: String // checked with a case-insensitive substring search first
+        let literal: String
+        let lowered: String // checked with a plain substring search on lowercased text before the regex runs
         let regex: NSRegularExpression
+    }
+
+    /// A text searched by many patterns: lowercased once, kept as NSString so the substring checks stay cheap.
+    private struct Haystack {
+        let text: NSString
+        let lowered: NSString
+        init(_ s: String) {
+            text = s as NSString
+            lowered = s.lowercased() as NSString
+        }
     }
 
     private struct Prepared: Sendable {
@@ -207,11 +218,11 @@ public struct ClientMatcher: Sendable {
                     let escaped = NSRegularExpression.escapedPattern(for: code)
                     let pattern = code.hasSuffix("-") ? #"(?<![A-Za-z0-9])"# + escaped + #"\d+\b"#
                         : #"(?<![A-Za-z0-9])"# + escaped + #"(?![A-Za-z0-9])"#
-                    return (try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])).map { Pattern(literal: code, regex: $0) }
+                    return (try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])).map { Pattern(literal: code, lowered: code.lowercased(), regex: $0) }
                 },
                 names: client.names.filter { $0.count >= 3 }.compactMap { name in
                     let pattern = #"(?<![\p{L}\p{N}])"# + NSRegularExpression.escapedPattern(for: name) + #"(?![\p{L}\p{N}])"#
-                    return (try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])).map { Pattern(literal: name, regex: $0) }
+                    return (try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])).map { Pattern(literal: name, lowered: name.lowercased(), regex: $0) }
                 },
                 rules: rules.filter { $0.clientId == client.id }.map { $0.pattern.trimmingCharacters(in: .whitespaces).lowercased() }
                     .filter { $0.count >= 3 }
@@ -226,6 +237,7 @@ public struct ClientMatcher: Sendable {
         let lowerTitle = title.lowercased()
         let titleHosts = Self.hosts(in: title)
         let textHosts = Self.hosts(in: text)
+        let titleH = Haystack(title), pathH = Haystack(path), pathWordsH = Haystack(pathWords), textH = Haystack(text)
 
         var scored: [(ClientMatch)] = []
         for entry in prepared {
@@ -244,18 +256,18 @@ public struct ClientMatcher: Sendable {
             }
             if let host, let d = domain([host]) { best([(Self.domainOfPage, "domain \(d)", .domain)]) }
             best([
-                Self.first(entry.codes, in: title, returnMatch: true).map { (Self.codeInTitle, "project code \($0)", .code) },
-                Self.first(entry.names, in: title).map { (Self.nameInTitle, "name \($0)", .alias) },
+                Self.first(entry.codes, in: titleH, returnMatch: true).map { (Self.codeInTitle, "project code \($0)", .code) },
+                Self.first(entry.names, in: titleH).map { (Self.nameInTitle, "name \($0)", .alias) },
                 domain(titleHosts).map { (Self.domainInTitle, "domain \($0)", .domain) },
             ])
             best([
-                Self.first(entry.codes, in: path, returnMatch: true).map { (Self.codeInPath, "project code \($0)", .code) },
-                Self.first(entry.names, in: pathWords).map { (Self.nameInPath, "name \($0)", .alias) },
+                Self.first(entry.codes, in: pathH, returnMatch: true).map { (Self.codeInPath, "project code \($0)", .code) },
+                Self.first(entry.names, in: pathWordsH).map { (Self.nameInPath, "name \($0)", .alias) },
             ])
             best([
-                Self.first(entry.codes, in: text, returnMatch: true).map { (Self.codeInText, "project code \($0)", .code) },
+                Self.first(entry.codes, in: textH, returnMatch: true).map { (Self.codeInText, "project code \($0)", .code) },
                 domain(textHosts).map { (Self.domainInText, "domain \($0)", .domain) },
-                Self.first(entry.names, in: text).map { (Self.nameInText, "name \($0)", .alias) },
+                Self.first(entry.names, in: textH).map { (Self.nameInText, "name \($0)", .alias) },
             ])
             if total > 0, let reason = reasons.max(by: { $0.0 < $1.0 }) {
                 scored.append(ClientMatch(client: client, reason: reason.1, score: total, method: reason.2))
@@ -284,23 +296,23 @@ public struct ClientMatcher: Sendable {
     }
 
     /// The first pattern found: the matched text for codes ("ACM-12" for "ACM-"), the name for names.
-    private static func first(_ patterns: [Pattern], in text: String, returnMatch: Bool = false) -> String? {
-        guard !text.isEmpty else { return nil }
-        for pattern in patterns where text.range(of: pattern.literal, options: .caseInsensitive) != nil {
-            let range = NSRange(location: 0, length: (text as NSString).length)
-            guard let found = pattern.regex.firstMatch(in: text, range: range) else { continue }
-            return returnMatch ? (text as NSString).substring(with: found.range) : pattern.literal
+    private static func first(_ patterns: [Pattern], in text: Haystack, returnMatch: Bool = false) -> String? {
+        guard text.text.length > 0 else { return nil }
+        for pattern in patterns where text.lowered.range(of: pattern.lowered, options: .literal).location != NSNotFound {
+            let range = NSRange(location: 0, length: text.text.length)
+            guard let found = pattern.regex.firstMatch(in: text.text as String, range: range) else { continue }
+            return returnMatch ? text.text.substring(with: found.range) : pattern.literal
         }
         return nil
     }
 
     /// The first project code found, e.g. "ACM-12" for the prefix "ACM-". For tests.
     static func code(_ client: Client, in text: String) -> String? {
-        ClientMatcher(clients: [client]).prepared.first.flatMap { first($0.codes, in: text, returnMatch: true) }
+        ClientMatcher(clients: [client]).prepared.first.flatMap { first($0.codes, in: Haystack(text), returnMatch: true) }
     }
 
     /// The name or alias found as whole words, ignoring case. For tests.
     static func name(_ client: Client, in text: String) -> String? {
-        ClientMatcher(clients: [client]).prepared.first.flatMap { first($0.names, in: text) }
+        ClientMatcher(clients: [client]).prepared.first.flatMap { first($0.names, in: Haystack(text)) }
     }
 }

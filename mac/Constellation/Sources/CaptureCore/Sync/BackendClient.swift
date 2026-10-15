@@ -177,9 +177,20 @@ public struct BackendClient: Sendable {
     // MARK: Endpoints
 
     /// POST /v1/devices/register
+    /// The register answer: `device_token`, while the Keychain copy keeps its older `token` key.
+    private struct RegisterResponse: Decodable {
+        var deviceId: String
+        var deviceToken: String
+        enum CodingKeys: String, CodingKey {
+            case deviceId = "device_id"
+            case deviceToken = "device_token"
+        }
+    }
+
     public func register(_ registration: DeviceRegistration) async throws -> DeviceCredentials {
         do {
-            return try await send("POST", "/v1/devices/register", body: registration, token: nil)
+            let r: RegisterResponse = try await send("POST", "/v1/devices/register", body: registration, token: nil)
+            return DeviceCredentials(deviceId: r.deviceId, token: r.deviceToken)
         } catch BackendError.unauthorized {
             throw BackendError.badCode
         }

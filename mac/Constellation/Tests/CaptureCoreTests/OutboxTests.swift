@@ -143,14 +143,16 @@ struct OutboxTests {
     @Test("The payload holds exactly these fields")
     func payloadFields() throws {
         let r = record("hello", domainPath: "github.com/acme/app")
-        let data = try WorkBlockPayload.encoder().encode(WorkBlockPayload(r, clientId: "client-1"))
+        let match = BlockMatch(clientId: "client-1", method: .domain, confidence: 1)
+        let data = try WorkBlockPayload.encoder().encode(WorkBlockPayload(r, match: match))
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(Set(object.keys) == [
-            "id", "started_at", "ended_at", "app_bundle_id", "app_name", "window_title", "domain_path", "text",
-            "redaction_count", "client_id",
+            "local_id", "started_at", "ended_at", "app_bundle_id", "app_name", "window_title", "domain_path",
+            "matched_client_id", "match_method", "match_confidence", "snippet", "text_hash", "redaction_count",
         ])
-        #expect(object["text"] as? String == "hello")
-        #expect(object["client_id"] as? String == "client-1")
+        #expect(object["snippet"] as? String == "hello")
+        #expect(object["matched_client_id"] as? String == "client-1")
+        #expect(object["match_method"] as? String == "domain")
     }
 }
 
