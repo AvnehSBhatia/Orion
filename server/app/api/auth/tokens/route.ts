@@ -1,11 +1,9 @@
 import type { NextRequest } from "next/server";
-import { z } from "zod";
 import { getAuthDb } from "@/auth/db";
-import { preflight, requirePrincipal, route } from "@/http/route";
+import { createApiToken, createTokenRequest } from "@/auth/tokens";
+import { preflight, readJson, requirePrincipal, route } from "@/http/route";
 
 export const runtime = "nodejs";
-
-const createToken = z.object({ label: z.string().trim().min(1).max(80).default("api token") });
 
 /** Your tokens (sessions and API tokens), without the secrets. */
 export const GET = route(async (req: NextRequest) => ({ tokens: getAuthDb().listTokens(requirePrincipal(req).username) }), { public: true });
@@ -14,9 +12,8 @@ export const GET = route(async (req: NextRequest) => ({ tokens: getAuthDb().list
 export const POST = route(
   async (req: NextRequest) => {
     const p = requirePrincipal(req);
-    const { label } = createToken.parse(await req.json().catch(() => ({})));
-    const { token, info } = getAuthDb().issueToken(p.username, "api", label);
-    return { token, ...info, orgId: p.orgId, userId: p.userId };
+    const { label } = createTokenRequest.parse(await readJson(req, {}));
+    return createApiToken(getAuthDb(), p, label);
   },
   { public: true },
 );

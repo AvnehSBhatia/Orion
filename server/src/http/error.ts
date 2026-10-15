@@ -4,6 +4,10 @@ export class HttpError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Extra fields for the JSON body, like `{ retryAfterSec }` on a 429. */
+    readonly extra?: Record<string, unknown>,
+    /** Extra response headers, like `Retry-After`. */
+    readonly headers?: Record<string, string>,
   ) {
     super(message);
   }
@@ -13,3 +17,7 @@ export class HttpError extends Error {
     return v instanceof Error && v.name === "HttpError" && typeof (v as { status?: unknown }).status === "number";
   }
 }
+
+/** 429 with `{ error, retryAfterSec }` and a Retry-After header. */
+export const tooManyRequests = (retryAfterSec: number, message = "too many requests, slow down") =>
+  new HttpError(429, message, { retryAfterSec }, { "Retry-After": String(retryAfterSec) });

@@ -84,11 +84,23 @@ export const config = {
   get trustProxy(): boolean {
     return process.env.TRUST_PROXY === "true";
   },
-  /** Chrome extension ids allowed by CORS. Empty: any extension. */
+  /** Chrome extension ids allowed by CORS. Empty: no extension while auth is on (any with AUTH_DISABLED=true). Required in production. */
   get extensionIds(): string[] {
     return (process.env.EXTENSION_IDS || "")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
+  },
+  /** One JSON line per API request on stdout. On unless LOG_REQUESTS=false (and off under vitest). */
+  get logRequests(): boolean {
+    return process.env.LOG_REQUESTS !== "false" && !process.env.VITEST;
+  },
+  /** Per-token and per-IP rate limits on API routes. RATE_LIMIT=false turns them off (benchmarks, load tests). */
+  get rateLimit(): boolean {
+    return process.env.RATE_LIMIT !== "false";
+  },
+  /** Where links in invites and password resets point (the first UI_ORIGIN). */
+  get appUrl(): string {
+    return (this.uiOrigins[0] ?? "http://localhost:3000").replace(/\/+$/, "");
   },
 };

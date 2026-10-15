@@ -64,6 +64,18 @@ export function createOrgStore(org: Org): Store {
   return store;
 }
 
+/** Closes the org's handle and deletes its SQLite file (with the WAL and shared-memory files). */
+export function deleteOrgStore(orgId: string): void {
+  if (!orgExists(orgId)) throw new HttpError(404, `unknown orgId "${orgId}"`);
+  const store = cache.stores.get(orgId);
+  cache.stores.delete(orgId);
+  try {
+    (store as { db: { close(): void } } | undefined)?.db.close();
+  } catch {}
+  const file = orgDbPath(orgId);
+  for (const f of [file, `${file}-wal`, `${file}-shm`]) fs.rmSync(f, { force: true });
+}
+
 function summarize(id: string): OrgSummary {
   const store = openStore(id);
   const org = store.getOrg();

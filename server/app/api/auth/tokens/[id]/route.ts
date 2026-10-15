@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { getAuthDb } from "@/auth/db";
-import { HttpError } from "@/http/error";
+import { revokeTokenAs } from "@/auth/tokens";
 import { preflight, requirePrincipal, route } from "@/http/route";
 
 export const runtime = "nodejs";
@@ -9,13 +9,7 @@ export const runtime = "nodejs";
 export const DELETE = route(
   async (req: NextRequest, ctx: RouteContext<"/api/auth/tokens/[id]">) => {
     const p = requirePrincipal(req);
-    const { id } = await ctx.params;
-    const db = getAuthDb();
-    const t = db.tokenById(id);
-    const owner = t ? db.getAccount(t.username) : null;
-    const allowed = t && (t.username === p.username || (p.admin && owner?.orgId === p.orgId));
-    if (!t || !allowed) throw new HttpError(404, `unknown token "${id}"`);
-    db.revokeToken(id);
+    revokeTokenAs(getAuthDb(), p, (await ctx.params).id);
     return { ok: true };
   },
   { public: true },
