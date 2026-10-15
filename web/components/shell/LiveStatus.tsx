@@ -62,3 +62,19 @@ export function LiveStatus({
     </span>
   );
 }
+
+/** The strip under the header while polls fail: says the data on screen is old, and how old. */
+export function ConnectionBanner({ connection, lastOk }: { connection: Exclude<Connection, "live">; lastOk: number | null }) {
+  const now = useNow(1000);
+  return (
+    <div
+      role="status"
+      className="absolute inset-x-0 top-14 z-[15] flex h-[33px] items-center justify-center gap-2 border-b border-line bg-panel px-4 text-[13px] text-muted"
+    >
+      <span className="size-1.5 animate-pulse rounded-full bg-faint" />
+      {connection === "down"
+        ? "Can't reach Orion. Retrying…"
+        : `Reconnecting… Showing data from ${lastOk ? ago(new Date(lastOk).toISOString(), now) : "earlier"}.`}
+    </div>
+  );
+}

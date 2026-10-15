@@ -22,14 +22,14 @@ import { friendlyError } from "@/lib/errors";
 import { api } from "@/lib/api/client";
 import { toStars } from "@/lib/stars";
 import { INTRO_SEEN_KEY, readStored, writeStored } from "@/lib/storage";
-import { ago, useNow } from "@/lib/time";
+import { useNow } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { CircleAlert, Megaphone, TrendingUp } from "lucide-react";
 import { type ComposerControl, DemoCaption, noteDemoSent, scrollToCard, useDemo, useDemoKeys } from "orion-demo";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AccountMenu, accountLinks } from "./AccountMenu";
 import { APP_VARS, BEATS, HERO_VARS, type Phase, useIntroScroll } from "./intro";
-import { type Connection, LiveStatus } from "./LiveStatus";
+import { ConnectionBanner, type Connection, LiveStatus } from "./LiveStatus";
 import { MobileMenu, Nav, type View } from "./Nav";
 import { Onboarding } from "./Onboarding";
 import { Picker } from "./Picker";
@@ -406,23 +406,16 @@ export function AppShell() {
           </span>
         </header>
 
-        {phase === "app" && connection !== "live" && (
-          <div
-            role="status"
-            className="absolute inset-x-0 top-14 z-[15] flex items-center justify-center gap-2 border-b border-line bg-panel px-4 py-1.5 text-[13px] text-muted"
-          >
-            <span className="size-1.5 animate-pulse rounded-full bg-faint" />
-            {connection === "down"
-              ? "Can't reach Orion. Retrying…"
-              : `Reconnecting… Showing what was there ${ws.lastOk ? ago(new Date(ws.lastOk).toISOString(), minute) : "earlier"}.`}
-          </div>
-        )}
+        {phase === "app" && connection !== "live" && <ConnectionBanner connection={connection} lastOk={ws.lastOk} />}
 
         <main
           id="main"
           tabIndex={-1}
-          className="absolute inset-x-0 top-14 outline-none"
-          style={{ bottom: phase === "app" ? 0 : "calc(var(--dock, 200px) + 32px)" }}
+          className="absolute inset-x-0 outline-none"
+          style={{
+            top: phase === "app" && connection !== "live" ? 89 : 56,
+            bottom: phase === "app" ? 0 : "calc(var(--dock, 200px) + 32px)",
+          }}
           inert={phase !== "app"}
         >
           {ws.unreachable && !graph ? (

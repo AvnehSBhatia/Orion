@@ -23,7 +23,7 @@ export function SecondaryButton({ className, ...props }: ComponentProps<"button"
   return (
     <button
       {...props}
-      className={cn("h-9 rounded-md border border-line-strong px-3 text-[13px] text-ink transition-colors hover:bg-raised disabled:opacity-50", className)}
+      className={cn("h-9 rounded-md border border-line-strong px-3 text-[13px] whitespace-nowrap text-ink transition-colors hover:bg-raised disabled:opacity-50", className)}
     />
   );
 }
