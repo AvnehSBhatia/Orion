@@ -199,7 +199,11 @@ function MacPanel() {
                 <CopyButton text={code.code} label="Copy the code" />
               </div>
               <p className="mt-2 text-[12px] text-faint">Expires in {left}</p>
-              <p className="mt-3 text-[14px] text-muted">Open Constellation on your Mac, choose Connect, and enter this code. It works once, for 15 minutes.</p>
+              <ol className="mt-3 list-decimal space-y-1 pl-5 text-[14px] text-muted">
+                <li>Open Constellation on your Mac.</li>
+                <li>Go to Outbox and choose Connect.</li>
+                <li>Paste this code. It works once, for 15 minutes.</li>
+              </ol>
             </>
           ) : (
             <p className="text-[14px] text-muted">This code expired. Make a new one.</p>
