@@ -128,7 +128,7 @@ Response `200`:
 - Mail window titles are `Subject — Sender`. Browser blocks have only `window_title` and `domain_path`, no text.
 - Errors: `401`/`403` as everywhere; anything else shows "Couldn't get a summary" and the app tries again after a minute.
 
-The mock returns a plain list of what was worked on, ending in "(Mock summary…)".
+The mock is a working reference: with `ANTHROPIC_API_KEY` set it asks Claude (`claude-opus-5-5`, or `CLAUDE_MODEL`) with the prompt in `mock-backend/server.mjs` (`SUMMARY_PROMPT`), in the second person ("You read Apple's sign-in alert…"); without a key it returns a plain list of titles.
 
 ## GET /v1/clients?since=
 

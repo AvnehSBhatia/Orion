@@ -3,6 +3,8 @@
 // mac/BACKEND_CONTRACT.md.
 //
 //   node mac/mock-backend/server.mjs          (port 8787, or PORT=...)
+//   ANTHROPIC_API_KEY=... node mac/mock-backend/server.mjs
+//                                             (Outbox summaries written by Claude)
 //
 // Everything received is saved under mac/mock-backend/data/ (git ignored) so
 // you can look at exactly what arrived.
@@ -22,6 +24,10 @@ const BLOCKS_FILE = new URL('work-blocks.jsonl', DATA);
 const CLIENTS_FILE = new URL('./clients.json', import.meta.url); // edit it to try your own clients
 const REVIEWS_FILE = new URL('reviews.json', DATA);
 const MAX_BODY = 5_000_000;
+// Outbox summaries: Claude when a key is set, otherwise a plain list of titles.
+const AI_KEY = process.env.ANTHROPIC_API_KEY;
+const AI_MODEL = process.env.CLAUDE_MODEL ?? 'claude-opus-5-5';
+const AI_URL = process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com';
 
 const BLOCK_FIELDS = {
   id: 'string', started_at: 'string', ended_at: 'string', app_bundle_id: 'string', app_name: 'string',
@@ -145,8 +151,47 @@ function checkBlock(block) {
   return null;
 }
 
+const SUMMARY_PROMPT = `You summarize a stretch of someone's computer work so they can check it before it is saved.
+You get the work blocks from that stretch: times, app, window title (for email, "Subject — Sender"), web address, and the text that was on screen.
+Write 1 to 3 short sentences in the second person and past tense ("You replied to...", "You reviewed..."): what they actually did, with the specific subjects, clients, documents, and sites.
+Use only what is in the blocks. Do not guess at intent or add filler. Reading an email is "You read", not "You replied", unless the text shows a reply.
+Keep markers like [EMAIL], [PHONE], [ADDRESS], [Person 1] exactly as written and never guess what they hide.
+Under 350 characters. Reply with the summary only.`;
+
+const clip = (text, max) => (text.length > max ? `${text.slice(0, max)}…` : text);
+
+// One stretch of work as plain text for the model, capped so a long batch stays small.
+function blocksForAI(list) {
+  return list.slice(0, 40).map((block, index) => [
+    `Block ${index + 1}: ${time(block.started_at)}–${time(block.ended_at)}, ${block.app_name}`,
+    `Title: ${block.window_title || '(none)'}`,
+    block.domain_path ? `Address: ${block.domain_path}` : null,
+    block.text ? `Text:\n${clip(block.text, 1500)}` : null,
+  ].filter(Boolean).join('\n')).join('\n\n');
+}
+
+// Claude's summary. Nothing is saved; errors say only the status.
+async function aiSummary(list) {
+  const response = await fetch(`${AI_URL}/v1/messages`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': AI_KEY, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({
+      model: AI_MODEL,
+      max_tokens: 300,
+      system: SUMMARY_PROMPT,
+      messages: [{ role: 'user', content: blocksForAI(list) }],
+    }),
+    signal: AbortSignal.timeout(15_000), // the app gives up at 20 s
+  });
+  if (!response.ok) throw new Error(`the AI service answered ${response.status}`);
+  const data = await response.json();
+  const text = (data.content ?? []).filter((part) => part.type === 'text').map((part) => part.text).join('').trim();
+  if (!text) throw new Error('the AI service returned no text');
+  return text;
+}
+
 // "Read “Subject” from Sender. Viewed “Pricing” on initech.com." One phrase per
-// distinct thing, in order. A stand-in for the real AI summary.
+// distinct thing, in order. Used when no AI key is set.
 function mockSummary(list) {
   const phrases = [];
   for (const block of list) {
@@ -164,7 +209,7 @@ function mockSummary(list) {
   }
   const shown = phrases.slice(0, 4).join('. ');
   const more = phrases.length > 4 ? ` And ${phrases.length - 4} more.` : '.';
-  return `${shown}${more} (Mock summary: the real backend's AI writes this.)`;
+  return `${shown}${more} (Not an AI summary: start the mock with ANTHROPIC_API_KEY set for one.)`;
 }
 
 const time = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -232,8 +277,18 @@ async function handle(req, res) {
       const problem = checkBlock(block);
       if (problem) return send(res, 400, { error: `block ${block?.id ?? ''}: ${problem}` });
     }
-    console.log(`summary for ${device.device_id}: ${body.blocks.length} blocks (not stored)`);
-    return send(res, 200, { summary: mockSummary(body.blocks) });
+    if (!AI_KEY) {
+      console.log(`summary for ${device.device_id}: ${body.blocks.length} blocks, plain list (no ANTHROPIC_API_KEY), not stored`);
+      return send(res, 200, { summary: mockSummary(body.blocks) });
+    }
+    try {
+      const summary = await aiSummary(body.blocks);
+      console.log(`summary for ${device.device_id}: ${body.blocks.length} blocks, written by ${AI_MODEL}, not stored`);
+      return send(res, 200, { summary });
+    } catch (error) {
+      console.log(`summary for ${device.device_id}: failed (${error.message})`);
+      return send(res, 502, { error: `Couldn't reach the AI: ${error.message}` });
+    }
   }
 
   if (route === 'GET /v1/clients') {
@@ -301,4 +356,5 @@ createServer((req, res) => {
   handle(req, res).catch((error) => send(res, 400, { error: String(error.message ?? error) }));
 }).listen(PORT, () => {
   console.log(`Constellation mock backend on http://localhost:${PORT} (${devices.size} known devices). Data in ${DATA.pathname}`);
+  console.log(AI_KEY ? `Outbox summaries: written by ${AI_MODEL}.` : 'Outbox summaries: plain lists. Set ANTHROPIC_API_KEY for AI summaries.');
 });
