@@ -1,6 +1,7 @@
 // Retention: what an org keeps and for how long. Run hourly by the background scheduler, one org at a time.
 import type { Store } from "@/db/store";
 import { clearOldSnippets } from "@/mac/drafts";
+import { clearOldMacDocText } from "@/mac/workBlocks";
 import { getOrgSettings } from "@/orgs/settings";
 
 const DAY = 86_400_000;
@@ -117,6 +118,8 @@ export function runRetention(store: Store, now = Date.now()): RetentionReport {
   const screenshotsExpired = expireScreenshots(store, settings.screenshotRetentionDays, now);
   const screenshotsEvicted = capScreenshots(store);
   clearOldSnippets(store, settings.snippetRetentionDays, now);
+  // The Orion document made from each Mac block holds the same text, so it goes at the same time.
+  if (settings.snippetRetentionDays > 0) clearOldMacDocText(store, new Date(now - settings.snippetRetentionDays * 86_400_000).toISOString());
   const vacuum = documents || digests || screenshotsExpired || screenshotsEvicted ? reclaimSpace(store) : "none";
   return { documentsDeleted: documents, screenshotsExpired, screenshotsEvicted, digestsDeleted: digests, vacuum, ms: Math.round(performance.now() - t) };
 }

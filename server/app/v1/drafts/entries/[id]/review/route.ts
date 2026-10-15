@@ -5,7 +5,7 @@ import { pathId, v1Route } from "@/mac/http";
 
 export const runtime = "nodejs";
 
-export const POST = v1Route(async (req, ctx: RouteContext<"/v1/drafts/entries/[id]/review">, p) => {
+export const POST = v1Route(async (req, ctx: { params: Promise<{ id: string }> }, p) => {
   const { id } = await ctx.params;
   const body = reviewRequest.parse(await readJson(req));
   return { entry: reviewEntry(getStore(p.orgId), p.userId, pathId(id), body) };
