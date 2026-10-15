@@ -2,12 +2,9 @@
 
 Production work is tracked in [production-checklist.md](production-checklist.md). This file covers the unfinished cleanup.
 
-## Server cleanup (folders renamed and store split are done)
+## Server cleanup
 
-1. Thin the routes: move logic into `server/src/`. Activity people aggregation; chat `quickContext`, context budget, SSE (a shared `http/stream.ts` for SSE and NDJSON); context filtered-sources branch; dashboard POST save/reset; users POST role-change dashboard drop (`upsertPerson` in `orgs/people.ts`); orgs POST/PATCH (`orgs/profile.ts`); signup; tokens DELETE; source image content-type check.
-2. Comments: `contract/types.ts` "spec section 1", `graph/gaps.ts` "original spec", `graph/projection.ts` "swarm". Drop `export` from unused exports.
-3. Write `server/src/README.md`: folder map, the life of a capture, the life of a question.
-4. Root `README.md` layout row still says "steering, digests"; update it to the new folders (`orgspace/`, `retrieval/`, `digests/`, `dashboard/`, `chat/`, `http/`, `mcp/`).
+Done: routes are thin (logic in `server/src/`, SSE and NDJSON through `http/stream.ts`), stale comments fixed, `server/src/README.md` written, root README layout updated. Still open: drop `export` from exports nothing imports.
 
 ## Web cleanup (not started in the repo)
 

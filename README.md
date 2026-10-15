@@ -14,7 +14,7 @@ web dashboard (:3000) ◀────────┘        │            └�
 
 | Path | What it is |
 |---|---|
-| `server/` | Backend (Next.js API). Routes in `server/app/api/**/route.ts`, logic in `server/src/` (ingest, graph, steering, digests, MCP, auth). Tests next to the code (`*.test.ts`). |
+| `server/` | Backend (Next.js API). Routes in `server/app/api/**/route.ts`, logic in `server/src/` (`http/`, `auth/`, `orgs/`, `ingest/`, `orgspace/`, `retrieval/`, `digests/`, `dashboard/`, `chat/`, `mcp/`; map in [`server/src/README.md`](server/src/README.md)). Tests next to the code (`*.test.ts`). |
 | `web/` | Dashboard UI (Next.js). |
 | `extension/` | Chrome extension that captures the tabs, windows, and screens a person picks. |
 | `codebase-agent/` | Turns commits into feature cards; respects `+.` private paths in `.gitignore`. Also runs in CI (`.github/workflows/ctx-sync.yml`). |

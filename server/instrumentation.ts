@@ -4,7 +4,13 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs" || process.env.NEXT_PHASE === "phase-production-build") return;
   const { validateConfig } = await import("./src/http/configCheck");
-  validateConfig();
+  try {
+    validateConfig();
+  } catch (err) {
+    // Next would keep listening and answer 500 to everything; stop the process so the supervisor shows the reason.
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
   const { startBackgroundJobs } = await import("./src/jobs/start");
   startBackgroundJobs();
 }

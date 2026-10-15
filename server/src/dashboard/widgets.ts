@@ -102,7 +102,7 @@ export function sanitizeDashboard(
   };
 }
 
-/** Every role dashboard shows the swarm: one activity widget and one constellation or map. */
+/** Every role dashboard shows live work: one activity widget and one constellation or map. */
 export function withLiveWidgets(spec: DashboardSpec): DashboardSpec {
   const widgets = [...spec.widgets];
   const has = (...kinds: Widget["kind"][]) => widgets.some((w) => kinds.includes(w.kind));
