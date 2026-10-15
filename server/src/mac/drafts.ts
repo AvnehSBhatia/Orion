@@ -158,27 +158,46 @@ function assignBlocks(store: Store, draft: DraftRow, userId: string, tz: string,
   });
 }
 
-/** Writes the model's line for entries whose evidence changed since the last one. */
-async function writeNarratives(deps: DraftDeps, draft: DraftRow): Promise<void> {
+/** Narratives being written, by entry id and evidence key, so a draft polled again doesn't ask the model twice. */
+const writing = new Map<string, Promise<void>>();
+
+/** How long a draft request waits for the model before answering with the lines it has; the rest land next refresh. */
+export const NARRATIVE_WAIT_MS = 1500;
+
+/** Writes the model's line for entries whose evidence changed since the last one, all entries at once. */
+async function writeNarratives(deps: DraftDeps, draft: DraftRow, waitMs = NARRATIVE_WAIT_MS): Promise<void> {
   const { store } = deps;
   const rows = store.db.prepare("SELECT * FROM mac_entries WHERE draft_id = ? AND status IN ('proposed', 'accepted')").all(draft.id) as EntryRow[];
+  const jobs: Promise<void>[] = [];
   for (const e of rows) {
     const blocks = entryBlocks(store, e.id);
     const key = evidenceKey(blocks);
     if (e.narrative_key === key) continue;
-    const name = clientName(store, e.client_id);
-    const out = await withUsage(store, () =>
-      writeNarrative(deps.llm, deps.model, name, blocks.map((b) => ({ id: b.local_id, title: `${b.app_name}: ${b.window_title}`, snippet: b.snippet }))),
-    );
-    store.transaction(() => {
-      // Skip if another request moved the evidence meanwhile, or the person edited the entry.
-      const cur = store.db.prepare("SELECT narrative_key, status FROM mac_entries WHERE id = ?").get(e.id) as { narrative_key: string | null; status: string } | undefined;
-      if (!cur || cur.narrative_key !== e.narrative_key || cur.status === "edited" || cur.status === "rejected") return;
-      store.db.prepare("UPDATE mac_entries SET narrative = ?, narrative_key = ? WHERE id = ?").run(out.narrative, key, e.id);
-      const setQuote = store.db.prepare("UPDATE mac_evidence SET quote = ? WHERE entry_id = ? AND block_id = ?");
-      for (const b of blocks) setQuote.run(out.quotes[b.local_id] ?? null, e.id, b.id);
-    });
+    const id = `${e.id}|${key}`;
+    let job = writing.get(id);
+    if (!job) {
+      const name = clientName(store, e.client_id);
+      job = withUsage(store, () =>
+        writeNarrative(deps.llm, deps.model, name, blocks.map((b) => ({ id: b.local_id, title: `${b.app_name}: ${b.window_title}`, snippet: b.snippet }))),
+      )
+        .then((out) =>
+          store.transaction(() => {
+            // Skip if another request moved the evidence meanwhile, or the person edited the entry.
+            const cur = store.db.prepare("SELECT narrative_key, status FROM mac_entries WHERE id = ?").get(e.id) as { narrative_key: string | null; status: string } | undefined;
+            if (!cur || cur.narrative_key !== e.narrative_key || cur.status === "edited" || cur.status === "rejected") return;
+            store.db.prepare("UPDATE mac_entries SET narrative = ?, narrative_key = ? WHERE id = ?").run(out.narrative, key, e.id);
+            const setQuote = store.db.prepare("UPDATE mac_evidence SET quote = ? WHERE entry_id = ? AND block_id = ?");
+            for (const b of blocks) setQuote.run(out.quotes[b.local_id] ?? null, e.id, b.id);
+          }),
+        )
+        .catch(() => {}) // writeNarrative already falls back to the stub; a failed write leaves the old line
+        .finally(() => writing.delete(id));
+      writing.set(id, job);
+    }
+    jobs.push(job);
   }
+  if (!jobs.length) return;
+  await Promise.race([Promise.all(jobs), new Promise((r) => setTimeout(r, waitMs))]);
 }
 
 /** GET /v1/drafts/today: the person's draft for the local day in `tz` (UTC when missing or unknown), built or refreshed from their blocks. */
