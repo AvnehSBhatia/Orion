@@ -37,3 +37,16 @@ export function validateConfig(env: NodeJS.ProcessEnv = process.env): ConfigRepo
   if (report.errors.length) throw new Error(`Refusing to start in production:\n- ${report.errors.join("\n- ")}`);
   return report;
 }
+
+/**
+ * validateConfig, but a failure ends the process: Next would otherwise keep listening and answer 500 to
+ * everything. Lives here (Node-only) rather than in instrumentation.ts, which Next also compiles for Edge.
+ */
+export function validateConfigOrExit(): void {
+  try {
+    validateConfig();
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
+}
