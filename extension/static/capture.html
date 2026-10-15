@@ -26,6 +26,8 @@
     .item .host { color: var(--muted); font-size: 14px; }
     .item input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
     label.item { cursor: pointer; }
+    label.item.blocked { cursor: default; opacity: 0.55; }
+    .access { padding: 16px; margin-bottom: 8px; }
     .empty { color: var(--muted); font-size: 14px; margin: 0; }
     /* Keep start and stop visible however long the tab list gets. */
     .footer {
@@ -56,7 +58,7 @@
     </svg>
     <h1>Choose what Orion can see</h1>
   </div>
-  <p class="muted intro">Only what you pick here is captured, every 5 seconds. Nothing else is read.</p>
+  <p class="muted intro">Only what you pick here is captured. Nothing else is read.</p>
 
   <h2>Windows and screens</h2>
   <p class="muted">Chrome only lists windows that are open on screen. To add a minimized app, restore it first. You can minimize it again after adding it.</p>
@@ -64,7 +66,11 @@
   <button id="add" class="secondary">Add a window or screen</button>
 
   <h2>Chrome tabs</h2>
-  <p class="muted">A ticked tab is captured, page text included, while it is the tab showing in its window.</p>
+  <p class="muted">A ticked tab is captured, page text included, while it is the tab showing in its window. Addresses are sent without query strings, and passwords, card numbers, and similar fields are never copied.</p>
+  <div id="tab-access" class="card access" hidden>
+    <p class="muted">To list and capture tabs, Chrome needs to let Orion read the sites you tick. Orion only ever reads the tabs you tick here.</p>
+    <button id="grant-tabs" class="secondary">Allow tab capture</button>
+  </div>
   <div id="tabs" class="list"></div>
 
   <div class="footer">
