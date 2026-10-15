@@ -21,6 +21,7 @@ web dashboard (:3000) ◀────────┘        │            └�
 | `.agents/skills/orion-context/` | Skill that teaches coding agents to pull context and write feature cards. |
 | `server/scripts/` | `account.ts` (accounts and tokens), `seed.ts` (demo org), `bench.ts`, `bench-embed.ts`, `eval.ts` (cost and accuracy). |
 | `demo/` | Tiny fake product for the codebase agent demo. |
+| `mac/` | Constellation Time, the native macOS capture app (Swift). Its backend contract is in [`mac/BACKEND_CONTRACT.md`](mac/BACKEND_CONTRACT.md). |
 
 ## Run it locally
 
