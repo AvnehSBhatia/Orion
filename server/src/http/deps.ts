@@ -25,6 +25,11 @@ export function orgDbPath(orgId: string): string {
 /** The file is the truth: an org whose .db was deleted is gone, even if a handle to it is still cached. */
 export const orgExists = (orgId: string) => orgId === DEFAULT_ORG || fs.existsSync(orgDbPath(orgId));
 
+const storeMethods = Object.entries(Object.getOwnPropertyDescriptors(Store.prototype))
+  .filter(([k, d]) => k !== "constructor" && typeof d.value === "function")
+  .map(([k]) => k);
+const hasStoreMethods = (store: object) => storeMethods.every((k) => typeof (store as Record<string, unknown>)[k] === "function");
+
 function openStore(orgId: string): Store {
   let store = cache.stores.get(orgId);
   // The file was deleted under us (a fresh demo start): drop the stale handle and open a new file.
@@ -35,11 +40,10 @@ function openStore(orgId: string): Store {
     cache.stores.delete(orgId);
     store = undefined;
   }
-  // After a dev hot reload a cached handle is an instance of the old Store class and lacks new methods.
-  if (store && !(store instanceof Store)) {
-    (store as { db: { close(): void } }).db.close();
-    store = undefined;
-  }
+  // After a dev hot reload a cached handle can be an old Store that lacks new methods: open a fresh one. Not by
+  // `instanceof`: a production build can hold two copies of the class (separate route chunks), and closing a handle
+  // another chunk still uses broke requests ("The database connection is not open"). The old handle is left open.
+  if (store && !hasStoreMethods(store)) store = undefined;
   if (!store) {
     store = Store.open(orgDbPath(orgId));
     if (orgId === DEFAULT_ORG) {
