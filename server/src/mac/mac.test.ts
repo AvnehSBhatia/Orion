@@ -8,7 +8,7 @@ import { deleteMacData } from "./mydata";
 import { registerDevice } from "./devices";
 import { acceptConsent, assertMayCapture } from "./policy";
 import { summarize, titlesSummary } from "./summaries";
-import { submitWorkBlocks } from "./workBlocks";
+import { clearOldMacDocText, submitWorkBlocks } from "./workBlocks";
 import { saveOrgSettings as updateSettings } from "@/orgs/settings";
 
 const T0 = "2026-10-14T10:00:00.000Z";
@@ -170,6 +170,23 @@ describe("work blocks", () => {
   function principalFor(): Principal {
     return principal();
   }
+});
+
+describe("clearOldMacDocText", () => {
+  it("blanks old Mac document text only, keeping title and other documents", () => {
+    const store = memoryStore();
+    store.saveUser({ id: "devon", name: "Devon", role: "x", teamDescription: "" });
+    const d = testDeps(store);
+    submitWorkBlocks(d, "devon", [block()], new Date("2026-09-01T00:00:00.000Z"));
+    submitWorkBlocks(d, "devon", [block({ local_id: "new" })], new Date("2026-10-14T00:00:00.000Z"));
+    store.db.prepare("INSERT INTO sources (id, kind, ref, title, text, author_id, created_at) VALUES ('o', 'capture', 'r', 't', 'keep', 'devon', ?)").run(T0);
+    expect(clearOldMacDocText(store, "2026-10-01T00:00:00.000Z")).toBe(1);
+    const rows = store.db.prepare("SELECT title, text, kind FROM sources").all() as { title: string; text: string; kind: string }[];
+    expect(rows.filter((r) => r.kind === "mac" && r.text === "")).toHaveLength(1);
+    expect(rows.filter((r) => r.kind === "mac" && r.text !== "")).toHaveLength(1);
+    expect(rows.find((r) => r.kind === "mac")!.title).toBe("Re: pricing");
+    expect(rows.find((r) => r.kind === "capture")!.text).toBe("keep");
+  });
 });
 
 describe("summaries", () => {

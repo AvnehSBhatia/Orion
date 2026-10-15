@@ -143,3 +143,14 @@ export function submitWorkBlocks(deps: IngestDeps, userId: string, blocks: unkno
   if (stored && bg) maintainInBackground(store, deps.embedder, bg.llm, bg.model);
   return out;
 }
+
+/**
+ * Retention for the Orion documents made from Mac blocks: blanks the text of those created before `cutoffIso`
+ * (title, time and graph changes stay). Returns how many documents were cleared.
+ */
+export function clearOldMacDocText(store: Store, cutoffIso: string): number {
+  ensureMacTables(store);
+  return store.db
+    .prepare(`UPDATE sources SET text = '' WHERE text <> '' AND id IN (SELECT source_id FROM mac_work_blocks WHERE source_id IS NOT NULL AND created_at < ?)`)
+    .run(cutoffIso).changes;
+}
