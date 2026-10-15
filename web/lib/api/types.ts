@@ -43,7 +43,8 @@ export type ImageStatus = "none" | "text_only" | "kept" | "pruned";
 export type SourceDetail = { source: Source; text: string; ocrText: string; imageStatus: ImageStatus };
 
 export type User = { id: string; name: string; role: string; teamDescription: string };
-export type OrgSummary = { id: string; name: string; description: string; members: number };
+export type OrgProfile = { id: string; name: string; description: string; websites: string[]; context: string; createdAt: string };
+export type OrgSummary ={ id: string; name: string; description: string; members: number };
 
 export type ViewCommand = {
   focusNodeIds: string[];

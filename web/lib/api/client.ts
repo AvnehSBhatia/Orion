@@ -19,6 +19,7 @@ import type {
   InviteLookup,
   LoginResponse,
   Me,
+  OrgProfile,
   OrgSettings,
   OrgSummary,
   SourceDetail,
@@ -193,6 +194,16 @@ export const api = {
       patch<{ settings: OrgSettings }>(`/api/orgs/${seg(orgId)}/settings`, change),
     usage: (orgId: string) => request<Usage>(`/api/orgs/${seg(orgId)}/usage`),
   },
+  org: {
+    get: (orgId: string) => request<{ org: OrgProfile; users: User[] }>(`/api/orgs/${seg(orgId)}`),
+    update: (orgId: string, change: Partial<Pick<OrgProfile, "name" | "description" | "websites" | "context">>) =>
+      patch<{ org: OrgProfile; users: User[] }>(`/api/orgs/${seg(orgId)}`, change),
+  },
+  me: {
+    /** Removes the caller's own captured documents and screenshots. */
+    deleteCaptures: () => del<{ deleted: number }>("/api/me/captures"),
+  },
+  health: () => request<{ ok: boolean; version?: string }>("/api/health"),
   audit: (limit = 100) => request<{ events: AuditEvent[] }>("/api/audit", { query: { limit } }),
   users: (orgId: string) => request<{ users: User[] }>("/api/users", { query: { orgId } }),
   graph: (orgId: string) => request<GraphResponse>("/api/graph", { query: { orgId } }),
