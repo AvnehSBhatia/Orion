@@ -10,7 +10,7 @@ All JSON. Errors are `{ "error": { "code": "...", "message": "..." } }` on `/v1`
 - **B. match_confidence:** stored and shown, not used to flag yet. The app sends `min(score, 100) / 100`, and `0` with `match_method: "none"` when nothing matched.
 - **C. Finalize:** the employee finalizes with "Done for Today" in Today's Draft (`POST /v1/drafts/{id}/finalize`, then the CSV from `/v1/drafts/{id}/export`). Admins can also export firm-wide.
 - **D. Outbox summaries:** kept. The server calls the model through OpenRouter with zero-data-retention routing (`provider: { zdr: true, data_collection: "deny" }`), stores nothing and logs nothing from the request. Written confirmation of zero retention from the provider is still a launch item (`docs/launch-checklist.md`).
-- **Screenshots and page text (Orion additions, decided by the Orion owner):** the Mac app can attach a window screenshot to a work block, and read page text in browsers. Both are **org policy** (`/v1/policy`) and a **personal switch** on the Mac, both on by default for screenshots and off by default for browser page text. A screenshot is taken only of a window that would be captured anyway (app turned on, not private, not excluded, no blocked word), is stored encrypted on the Mac, is shown in the Outbox next to the item, and is sent only when the item is approved. Redaction cannot reach inside an image, which the Outbox says next to the thumbnail.
+- **No screenshots.** The Mac app reads on-screen text through the Accessibility API (window titles and visible text, Mail's open email, browser tab titles and domain plus path) and never takes screenshots or records the screen. **Browser page text** is an Orion addition: off by default, turned on only by an org admin (`/v1/policy`) and then by the person on their Mac; it goes through the same redaction and link cutting.
 
 ## Device registration
 
@@ -30,7 +30,6 @@ All JSON. Errors are `{ "error": { "code": "...", "message": "..." } }` on `/v1`
   "capture_enabled": true,
   "excluded_hosts": ["mail.google.com"],
   "capture_interval_sec": 5,
-  "screenshots": true,
   "browser_page_text": false,
   "consent": { "required": true, "version": 1, "notice": "markdown of the org's monitoring notice" }
 }
@@ -52,13 +51,12 @@ The app polls it on connect and every 5 minutes. `capture_enabled: false` stops 
 
 `POST /v1/work-blocks { batch_hash, blocks }`, up to 500 blocks, idempotent on `local_id`.
 
-Block: `{ local_id, started_at, ended_at, app_bundle_id, app_name, window_title, domain_path, matched_client_id, match_method, match_confidence, snippet, text_hash, redaction_count, screenshot_jpeg_b64? }`
+Block: `{ local_id, started_at, ended_at, app_bundle_id, app_name, window_title, domain_path, matched_client_id, match_method, match_confidence, snippet, text_hash, redaction_count }`
 
 - `batch_hash`: SHA-256 hex of the sorted `local_id`s joined by `\n`.
 - `snippet`: the redacted record text cut to 1,500 characters. `text_hash`: SHA-256 hex of the full local text.
 - `match_method`: `domain`, `code`, `alias` (strongest signal), `manual` (the person changed the client), or `none`.
-- `screenshot_jpeg_b64`: optional, JPEG at most 1600 px on the long side, at most 1.5 MB decoded; sent only when policy and the person allow it. The server drops it (stores the block without it) when the org has screenshots off.
-- Request body cap 32 MB; the app sends at most 50 blocks and at most 16 MB per request when screenshots are attached.
+- Request body cap 8 MB.
 
 Response `200`:
 
@@ -73,7 +71,7 @@ Response `200`:
 
 ## Outbox summaries
 
-`POST /v1/summaries { blocks }` (blocks in the work-block shape, screenshots not sent) → `200 { summary }`: one to three sentences, second person, past tense ("You read Apple's sign-in alert, then checked Initech's pricing page."), markers like `[PHONE]` kept as is, under 600 characters. Nothing is stored or logged. Without a model key, or over the monthly budget, it returns a plain list of titles.
+`POST /v1/summaries { blocks }` (blocks in the work-block shape) → `200 { summary }`: one to three sentences, second person, past tense ("You read Apple's sign-in alert, then checked Initech's pricing page."), markers like `[PHONE]` kept as is, under 600 characters. Nothing is stored or logged. Without a model key, or over the monthly budget, it returns a plain list of titles.
 
 ## Today's draft
 
@@ -100,8 +98,8 @@ Admin: `GET /v1/owner/export.csv?from&to` (accepted and edited entries for every
 
 `DELETE /v1/me/data` → `202 { request_id }`; the person's work blocks, drafts, entries, baseline, and the Orion documents made from their blocks are removed right away (the 24 h in the spec is the upper bound).
 
-Snippets and evidence quotes are cleared after `snippetRetentionDays` (org setting, default 14); screenshots follow `screenshotRetentionDays`; times, clients, minutes and narratives stay until `retentionDays`.
+Snippets and evidence quotes are cleared after `snippetRetentionDays` (org setting, default 14); times, clients, minutes and narratives stay until `retentionDays`.
 
 ## Org settings added
 
-`billingIncrementMin` (6 | 15, default 6), `snippetRetentionDays` (default 14), `macScreenshots` (default true), `macBrowserPageText` (default false). Shown in web Admin → Capture policy.
+`billingIncrementMin` (6 | 15, default 6), `snippetRetentionDays` (default 14), `macBrowserPageText` (default false). Shown in web Admin → Capture policy.
