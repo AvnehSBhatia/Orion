@@ -10,6 +10,19 @@ const PORT = Number(process.env.PORT ?? 3001);
 const OUT = new URL('./out/', import.meta.url);
 const MAX_BODY_BYTES = 10_000_000;
 
+// MOCK_FAIL=429|500|401|402|403 makes every capture fail that way, to try the
+// extension's backoff, sign-in, and consent handling.
+const MOCK_FAIL = process.env.MOCK_FAIL ?? '';
+// MOCK_CONSENT=1 asks for the monitoring notice before the first capture.
+const CONSENT_REQUIRED = process.env.MOCK_CONSENT === '1';
+// MOCK_EXCLUDED=mail.google.com,bank.com and MOCK_INTERVAL=10 shape the capture policy.
+const POLICY = {
+  captureEnabled: process.env.MOCK_CAPTURE_ENABLED !== '0',
+  excludedHosts: (process.env.MOCK_EXCLUDED ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  captureIntervalSec: Number(process.env.MOCK_INTERVAL ?? 5),
+};
+let consentAt = null;
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -38,6 +51,33 @@ createServer(async (req, res) => {
       'Access-Control-Allow-Headers': 'Content-Type',
     });
     return res.end();
+  }
+
+  // Capture policy and consent, so the extension's start flow can run against the mock.
+  if (req.method === 'GET' && req.url === '/api/capture/policy') {
+    return json(res, 200, { ...POLICY, consent: { required: CONSENT_REQUIRED && !consentAt, version: 1 } });
+  }
+  if (req.method === 'GET' && req.url === '/api/auth/me') {
+    return json(res, 200, {
+      userId: 'mock-user',
+      consent: { required: CONSENT_REQUIRED, version: 1, acceptedAt: consentAt },
+    });
+  }
+  if (req.method === 'POST' && req.url === '/api/auth/consent') {
+    consentAt = new Date().toISOString();
+    console.log('consent accepted');
+    return json(res, 200, { acceptedAt: consentAt });
+  }
+
+  if (req.method === 'POST' && req.url === '/api/ingest/capture' && MOCK_FAIL) {
+    const status = Number(MOCK_FAIL);
+    console.log(`answering ${status} (MOCK_FAIL)`);
+    if (status === 429) {
+      res.setHeader('Retry-After', '20');
+      return json(res, 429, { error: 'too many requests', retryAfterSec: 20 });
+    }
+    const errors = { 401: 'unauthorized', 402: 'monthly model budget reached', 403: 'consent required' };
+    return json(res, status, { error: errors[status] ?? 'mock failure' });
   }
 
   if (req.method !== 'POST' || req.url !== '/api/ingest/capture') {

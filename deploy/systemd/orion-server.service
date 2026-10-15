@@ -1,0 +1,44 @@
+[Unit]
+Description=Orion API (server/, Next.js on 127.0.0.1:3001)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=orion
+Group=orion
+WorkingDirectory=/opt/orion/server
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+Environment=DATA_DIR=/var/lib/orion/data
+Environment=MODEL_CACHE_DIR=/var/lib/orion/models
+EnvironmentFile=/etc/orion/orion.env
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3001
+# One process only: SQLite handles, the rate limiter and background jobs live in this process.
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+# An OOM kill (local EmbeddingGemma on a small box) restarts the service instead of leaving it down.
+OOMPolicy=stop
+# MemoryMax=3G
+
+# Hardening
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/orion
+ReadWritePaths=-/opt/orion/server/.next/cache
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orion-server
+
+[Install]
+WantedBy=multi-user.target

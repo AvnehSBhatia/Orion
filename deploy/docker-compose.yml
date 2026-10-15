@@ -1,0 +1,86 @@
+# Orion on one box with Docker: Caddy (automatic HTTPS) in front of the web app and the API.
+#   cp deploy/.env.example deploy/.env   # fill it in
+#   docker compose -f deploy/docker-compose.yml up -d --build
+# app.<ORION_DOMAIN> -> web:3000, api.<ORION_DOMAIN> -> server:3001. Both are on the same site, so the
+# session cookie set by the API is sent from the dashboard.
+name: orion
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/server.Dockerfile
+    image: orion-server:${ORION_VERSION:-latest}
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATA_DIR: /data
+      MODEL_CACHE_DIR: /models
+      COOKIE_SECURE: "true"
+      TRUST_PROXY: "true"
+      AUTH_DISABLED: "false"
+      UI_ORIGIN: https://app.${ORION_DOMAIN:?set ORION_DOMAIN in deploy/.env}
+    volumes:
+      - orion-data:/data
+      - orion-models:/models
+      # Host directory that scripts/backup.ts writes into; deploy/backup/orion-backup.sh ships it offsite.
+      # Create it first: mkdir -p deploy/backups && sudo chown 1000:1000 deploy/backups && chmod 700 deploy/backups
+      - ${BACKUP_HOST_DIR:-./backups}:/backups
+    expose:
+      - "3001"
+    # Local EmbeddingGemma peaks around 2GB during an image embed. Docker restarts the container if it is OOM-killed.
+    mem_limit: ${SERVER_MEM_LIMIT:-3g}
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        NEXT_PUBLIC_ORION_API: https://api.${ORION_DOMAIN}
+    image: orion-web:${ORION_VERSION:-latest}
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+    expose:
+      - "3000"
+    depends_on:
+      - server
+    mem_limit: ${WEB_MEM_LIMIT:-512m}
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ORION_DOMAIN: ${ORION_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in deploy/.env}
+      WEB_UPSTREAM: web:3000
+      API_UPSTREAM: server:3001
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+      - server
+    logging:
+      driver: json-file
+      options: { max-size: "20m", max-file: "5" }
+
+volumes:
+  orion-data:
+  orion-models:
+  caddy-data:
+  caddy-config:

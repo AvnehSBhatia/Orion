@@ -1,0 +1,24 @@
+[Unit]
+Description=Orion backup (online SQLite copy + offsite sync)
+After=network-online.target orion-server.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=orion
+Group=orion
+WorkingDirectory=/opt/orion/server
+Environment=DATA_DIR=/var/lib/orion/data
+Environment=BACKUP_DIR=/var/lib/orion/backups
+Environment=ORION_ENV_FILE=/etc/orion/orion.env
+EnvironmentFile=-/etc/orion/backup.env
+ExecStart=/opt/orion/deploy/backup/orion-backup.sh
+Nice=10
+IOSchedulingClass=idle
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/orion
+SyslogIdentifier=orion-backup
