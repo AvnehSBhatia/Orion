@@ -1,0 +1,427 @@
+openapi: 3.1.0
+info:
+  title: Constellation Time API
+  version: 1.0.0
+  description: |
+    Shared contract for the Mac app and the backend. Change it only when both owners agree.
+    Every endpoint is HTTPS JSON. Device calls send `Authorization: Bearer <device_token>`
+    except `POST /v1/devices/register` and `GET /v1/health`.
+    Errors use `{ "error": { "code": "...", "message": "..." } }`.
+    Owner calls send `Authorization: Bearer <owner_token>` or a Supabase JWT
+    (`SUPABASE_JWT_SECRET`, HS256, `email` and `org_id` claims).
+    The daily draft is a stub until zero-data-retention is confirmed: it groups records
+    and does not send text to a model. Narratives from the stub contain no captured text.
+servers:
+  - url: http://localhost:3000
+    description: Local
+security:
+  - deviceToken: []
+paths:
+  /v1/health:
+    get:
+      operationId: health
+      security: []
+      summary: Liveness and database check
+      responses:
+        '200':
+          description: API and database are up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, db]
+                properties:
+                  ok: { type: boolean, const: true }
+                  db: { type: string, const: up }
+        '503':
+          description: Database unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /v1/devices/register:
+    post:
+      operationId: registerDevice
+      security: []
+      summary: Exchange a short-lived auth code for a device token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, auth_code]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+                auth_code: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        '200':
+          description: Device registered. The token is returned once.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device_id, device_token]
+                properties:
+                  device_id: { type: string, format: uuid }
+                  device_token: { type: string }
+        '400':
+          description: Missing or invalid body
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Auth code is invalid, used, or expired
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /v1/clients:
+    get:
+      operationId: listClients
+      summary: Client list and alias rules for on-device matching
+      parameters:
+        - in: query
+          name: since
+          schema: { type: string, format: date-time }
+          required: false
+      responses:
+        '200':
+          description: Clients and rules changed since the given time. `etag` is the list version.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [clients, rules, etag]
+                properties:
+                  clients:
+                    type: array
+                    items: { $ref: '#/components/schemas/Client' }
+                  rules:
+                    type: array
+                    items: { $ref: '#/components/schemas/AliasRule' }
+                  etag: { type: string }
+  /v1/work-blocks:
+    post:
+      operationId: submitWorkBlocks
+      summary: Submit Outbox-approved work blocks. Idempotent on local_id.
+      description: |
+        Maximum 500 blocks. Each snippet is at most 1,500 characters.
+        A Mac activity record may hold 4,000 characters locally; the app sends this capped snippet
+        plus text_hash of the local text, app_bundle_id, and domain_path.
+        A snippet that matches an email, card number, or API-key shape is rejected with 422.
+        The server logs the pattern type only, never the text.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batch_hash, blocks]
+              properties:
+                batch_hash: { type: string }
+                blocks:
+                  type: array
+                  maxItems: 500
+                  items: { $ref: '#/components/schemas/WorkBlockInput' }
+      responses:
+        '200':
+          description: Batch stored. Duplicates of a known local_id are counted, not inserted again.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [accepted, duplicate]
+                properties:
+                  accepted: { type: integer, minimum: 0 }
+                  duplicate: { type: integer, minimum: 0 }
+        '422':
+          description: A snippet failed the redaction guard
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /v1/drafts/today:
+    get:
+      operationId: todayDraft
+      summary: The person's daily draft
+      responses:
+        '200':
+          description: Today's draft. Entries the model could not match stay proposed with unmatched true.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Draft' }
+  /v1/drafts/entries/{id}/review:
+    post:
+      operationId: reviewEntry
+      summary: Accept, edit, or reject one draft entry
+      description: An edit that changes client_id creates a user-scoped alias rule.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [accept, edit, reject] }
+                minutes: { type: integer, minimum: 0 }
+                client_id: { type: string, format: uuid }
+                narrative: { type: string }
+                started_at: { type: string, format: date-time }
+                ended_at: { type: string, format: date-time }
+      responses:
+        '200':
+          description: Updated entry
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [entry]
+                properties:
+                  entry: { $ref: '#/components/schemas/DraftEntry' }
+  /v1/drafts/{id}/finalize:
+    post:
+      operationId: finalizeDraft
+      summary: Mark the draft reviewed and count exported entries
+      description: In v1, exported means a CSV download or a successful billing-tool push.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Number of entries exported
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [exported]
+                properties:
+                  exported: { type: integer, minimum: 0 }
+  /v1/baseline:
+    post:
+      operationId: submitBaseline
+      summary: Store the person's own timesheet for one day
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [day, entries]
+              properties:
+                day: { type: string, format: date }
+                entries:
+                  type: array
+                  items:
+                    type: object
+                    required: [minutes]
+                    properties:
+                      client_id: { type: string, format: uuid, nullable: true }
+                      minutes: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Baseline stored
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [day, entries]
+                properties:
+                  day: { type: string, format: date }
+                  entries: { type: integer, minimum: 0 }
+  /v1/me/metrics:
+    get:
+      operationId: myMetrics
+      summary: Recovered minutes, acceptance, edit rate, and active days for this person
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: One row per day. recovered_minutes is null when that day has no baseline.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [days, active_in_window]
+                properties:
+                  active_in_window: { type: boolean }
+                  days:
+                    type: array
+                    items:
+                      type: object
+                      required: [day, recovered_minutes, acceptance_rate, edit_rate, active]
+                      properties:
+                        day: { type: string, format: date }
+                        recovered_minutes: { type: integer, nullable: true }
+                        acceptance_rate: { type: number, nullable: true }
+                        edit_rate: { type: number, nullable: true }
+                        active: { type: boolean }
+  /v1/drafts/{id}/export:
+    get:
+      operationId: exportDraft
+      summary: Download the CSV produced by finalize
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: CSV of accepted and edited entries. Snippets are not included.
+          content:
+            text/csv:
+              schema: { type: string }
+        '409':
+          description: The draft has not been finalized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /v1/owner/clients:
+    post:
+      operationId: createClient
+      security:
+        - ownerToken: []
+      summary: Add a firm client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                aliases: { type: array, items: { type: string } }
+                domains: { type: array, items: { type: string } }
+                project_codes: { type: array, items: { type: string } }
+      responses:
+        '201':
+          description: Client created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Client' }
+  /v1/owner/alias-rules/{id}/accept:
+    post:
+      operationId: acceptAliasRule
+      security:
+        - ownerToken: []
+      summary: Copy a user alias rule into an org-wide rule
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Org-wide rule
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AliasRule' }
+  /v1/me/data:
+    delete:
+      operationId: deleteMyData
+      summary: Request deletion of this person's captured data
+      responses:
+        '202':
+          description: Deletion accepted. Work blocks, drafts, entries, and events are removed within 24 hours.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [request_id]
+                properties:
+                  request_id: { type: string, format: uuid }
+components:
+  securitySchemes:
+    deviceToken:
+      type: http
+      scheme: bearer
+    ownerToken:
+      type: http
+      scheme: bearer
+      description: Owner token or Supabase HS256 JWT. Not a device token.
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+    Client:
+      type: object
+      required: [id, name, aliases, domains, project_codes, active]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        aliases: { type: array, items: { type: string } }
+        domains: { type: array, items: { type: string } }
+        project_codes: { type: array, items: { type: string } }
+        active: { type: boolean }
+    AliasRule:
+      type: object
+      required: [id, pattern, client_id]
+      properties:
+        id: { type: string, format: uuid }
+        pattern: { type: string }
+        client_id: { type: string, format: uuid }
+    WorkBlockInput:
+      type: object
+      required: [local_id, started_at, ended_at, app_name, window_title, match_method, match_confidence, snippet]
+      properties:
+        local_id: { type: string }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+        app_bundle_id: { type: string, nullable: true }
+        app_name: { type: string }
+        window_title: { type: string }
+        domain_path: { type: string, nullable: true, description: "Browser domain and path, as stored by the Mac app." }
+        matched_client_id: { type: string, format: uuid, nullable: true }
+        match_method: { type: string, enum: [alias, domain, code, manual, none] }
+        match_confidence: { type: number, minimum: 0, maximum: 1 }
+        snippet: { type: string, maxLength: 1500 }
+        text_hash: { type: string, nullable: true }
+        redaction_count: { type: integer, minimum: 0 }
+    Evidence:
+      type: object
+      required: [work_block_id, quote]
+      properties:
+        work_block_id: { type: string, format: uuid }
+        quote: { type: string }
+    DraftEntry:
+      type: object
+      required: [id, started_at, ended_at, minutes, narrative, evidence, unmatched, status]
+      properties:
+        id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid, nullable: true }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time }
+        minutes: { type: integer, minimum: 0 }
+        narrative: { type: string }
+        evidence:
+          type: array
+          items: { $ref: '#/components/schemas/Evidence' }
+        unmatched: { type: boolean }
+        status: { type: string, enum: [proposed, accepted, edited, rejected] }
+    Draft:
+      type: object
+      required: [draft_id, day, entries]
+      properties:
+        draft_id: { type: string, format: uuid }
+        day: { type: string, format: date }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/DraftEntry' }
