@@ -2,8 +2,10 @@
 
 import { AuditPanel } from "@/components/admin/AuditPanel";
 import { CapturePolicyPanel } from "@/components/admin/CapturePolicyPanel";
+import { ClientsPanel } from "@/components/admin/ClientsPanel";
 import { OrgProfilePanel } from "@/components/admin/OrgProfilePanel";
 import { PeoplePanel } from "@/components/admin/PeoplePanel";
+import { TimePanel } from "@/components/admin/TimePanel";
 import { UsagePanel } from "@/components/admin/UsagePanel";
 import { useSession } from "@/components/auth/session";
 import { PageFrame } from "@/components/settings/PageFrame";
@@ -13,6 +15,8 @@ import { useEffect, useState } from "react";
 const TABS = [
   { id: "people", label: "People" },
   { id: "capture", label: "Capture policy" },
+  { id: "clients", label: "Clients" },
+  { id: "time", label: "Time" },
   { id: "usage", label: "Usage" },
   { id: "audit", label: "Audit log" },
   { id: "profile", label: "Org profile" },
@@ -50,9 +54,11 @@ export function AdminPage() {
   }
   const orgId = me.orgId ?? "";
   return (
-    <PageFrame title="Admin" description="People, capture policy, usage, and the audit log for your org." sections={TABS} current={tab} onSection={choose}>
+    <PageFrame title="Admin" description="People, capture policy, clients and time, usage, and the audit log for your org." sections={TABS} current={tab} onSection={choose}>
       {tab === "people" && <PeoplePanel self={me.username ?? ""} />}
       {tab === "capture" && <CapturePolicyPanel orgId={orgId} />}
+      {tab === "clients" && <ClientsPanel />}
+      {tab === "time" && <TimePanel />}
       {tab === "usage" && <UsagePanel orgId={orgId} />}
       {tab === "audit" && <AuditPanel />}
       {tab === "profile" && <OrgProfilePanel orgId={orgId} />}

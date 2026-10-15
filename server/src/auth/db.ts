@@ -2,9 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { config } from "@/config";
+import { randomInt, randomUUID } from "node:crypto";
 import { hashPassword, newId, newRawToken, sha256 } from "./crypto";
 
-export type TokenKind = "session" | "api";
+/** session: the web app's cookie. api: MCP, the extension, CI. device: a connected Mac, valid only on /v1. */
+export type TokenKind = "session" | "api" | "device";
 
 export type Account = {
   username: string;
@@ -37,6 +39,10 @@ export type Invite = {
 };
 
 export const SESSION_DAYS = 30;
+/** How long a "Connect your Mac" code works. */
+export const DEVICE_CODE_MINUTES = 15;
+/** Letters and digits a person cannot misread: no 0/O, no 1/I. */
+const DEVICE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const INVITE_DAYS = 7;
 export const RESET_HOURS = 24;
 const DAY = 86_400_000;
@@ -91,6 +97,37 @@ function addColumns(db: Database.Database, table: string, cols: Record<string, s
   for (const [name, type] of Object.entries(cols)) if (!have.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
 }
 
+/**
+ * Files made before device tokens existed have a CHECK that refuses kind 'device'. SQLite cannot alter a CHECK,
+ * so the table is rebuilt once, in one transaction, keeping every row (nothing references tokens).
+ */
+function allowDeviceTokens(db: Database.Database): void {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tokens'").get() as { sql: string } | undefined;
+  if (!row || row.sql.includes("'device'")) return;
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE tokens_new (
+        id TEXT PRIMARY KEY,
+        hash TEXT NOT NULL UNIQUE,
+        username TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('session', 'api', 'device')),
+        label TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        expires_at TEXT,
+        last_used_at TEXT
+      );
+      INSERT INTO tokens_new (id, hash, username, kind, label, created_at, expires_at, last_used_at)
+        SELECT id, hash, username, kind, label, created_at, expires_at, last_used_at FROM tokens;
+      DROP TABLE tokens;
+      ALTER TABLE tokens_new RENAME TO tokens;
+      CREATE INDEX IF NOT EXISTS tokens_username ON tokens(username);
+    `);
+  })();
+}
+
+/** "k7qf-2m9d", "K7QF2M9D" and " k7qf 2m9d " are the same code. */
+export const normalizeDeviceCode = (code: string) => code.toUpperCase().replace(/[\s-]/g, "");
+
 /** Accounts, token hashes, invites, reset links, and the audit log, in their own SQLite file apart from the org data. */
 export class AuthDb {
   constructor(readonly db: Database.Database) {
@@ -110,13 +147,20 @@ export class AuthDb {
         id TEXT PRIMARY KEY,
         hash TEXT NOT NULL UNIQUE,
         username TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
-        kind TEXT NOT NULL CHECK (kind IN ('session', 'api')),
+        kind TEXT NOT NULL CHECK (kind IN ('session', 'api', 'device')),
         label TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         expires_at TEXT,
         last_used_at TEXT
       );
       CREATE INDEX IF NOT EXISTS tokens_username ON tokens(username);
+      CREATE TABLE IF NOT EXISTS device_codes (
+        hash TEXT PRIMARY KEY,
+        username TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT
+      );
       CREATE TABLE IF NOT EXISTS invites (
         id TEXT PRIMARY KEY,
         hash TEXT NOT NULL UNIQUE,
@@ -155,6 +199,7 @@ export class AuthDb {
       consent_version: "INTEGER NOT NULL DEFAULT 0",
       consent_at: "TEXT",
     });
+    allowDeviceTokens(db);
   }
 
   static open(file: string): AuthDb {
@@ -247,7 +292,8 @@ export class AuthDb {
   /** Returns the raw token; only its hash is stored. Sessions expire after 30 days, API tokens never. */
   issueToken(username: string, kind: TokenKind, label = ""): { token: string; info: TokenInfo } {
     const raw = newRawToken();
-    const id = newId();
+    // A device's token id is its device_id, a UUID as the Mac contract says.
+    const id = kind === "device" ? randomUUID() : newId();
     const now = new Date();
     const expires = kind === "session" ? new Date(now.getTime() + SESSION_DAYS * DAY).toISOString() : null;
     this.db
@@ -290,11 +336,40 @@ export class AuthDb {
     return this.db.prepare("DELETE FROM tokens WHERE id = ?").run(id).changes > 0;
   }
 
-  /** Deletes expired sessions, reset links, and unused invites. */
+  /** Deletes expired sessions, reset links, device codes, and unused invites. */
   sweep(now = Date.now()): void {
     const at = new Date(now).toISOString();
     this.db.prepare("DELETE FROM tokens WHERE expires_at IS NOT NULL AND expires_at <= ?").run(at);
     this.db.prepare("DELETE FROM resets WHERE expires_at <= ?").run(at);
+    this.db.prepare("DELETE FROM device_codes WHERE expires_at <= ?").run(at);
+  }
+
+  // "Connect your Mac" codes
+
+  /** A one-time code like "K7QF-2M9D" for 15 minutes. Only its hash is stored. */
+  createDeviceCode(username: string, now = Date.now()): { code: string; expiresAt: string } {
+    const chars = Array.from({ length: 8 }, () => DEVICE_CODE_ALPHABET[randomInt(DEVICE_CODE_ALPHABET.length)]).join("");
+    const expiresAt = new Date(now + DEVICE_CODE_MINUTES * 60_000).toISOString();
+    this.db
+      .prepare("INSERT INTO device_codes (hash, username, created_at, expires_at) VALUES (?, ?, ?, ?)")
+      .run(sha256(chars), normalizeUsername(username), new Date(now).toISOString(), expiresAt);
+    return { code: `${chars.slice(0, 4)}-${chars.slice(4)}`, expiresAt };
+  }
+
+  /** Spends a device code: the account that made it, or null when unknown, used, expired, or the account is disabled. */
+  consumeDeviceCode(code: string, now = Date.now()): Account | null {
+    const norm = normalizeDeviceCode(code);
+    if (!/^[A-Z0-9]{8}$/.test(norm)) return null;
+    const at = new Date(now).toISOString();
+    const hash = sha256(norm);
+    const r = this.db.prepare("SELECT username FROM device_codes WHERE hash = ? AND used_at IS NULL AND expires_at > ?").get(hash, at) as
+      | { username: string }
+      | undefined;
+    if (!r) return null;
+    // The guarded UPDATE leaves one winner when two registrations race with the same code.
+    if (this.db.prepare("UPDATE device_codes SET used_at = ? WHERE hash = ? AND used_at IS NULL").run(at, hash).changes === 0) return null;
+    const a = this.getAccount(r.username);
+    return a && !a.disabled ? a : null;
   }
 
   // Invites

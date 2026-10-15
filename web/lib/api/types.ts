@@ -16,7 +16,7 @@ export type PublicNode = {
   owner: string | null;
   status: Status;
   sellable: boolean;
-  sourceKind: "extension" | "code" | "manual";
+  sourceKind: "extension" | "code" | "manual" | "mac";
   sourceRef: string;
   updatedAt: string;
 };
@@ -27,7 +27,7 @@ export type GraphResponse = { nodes: PublicNode[]; edges: Edge[]; gaps: Gap[] };
 export type SourceChange = { nodeId: string; label: string; change: "created" | "updated"; statusFrom: Status | null; statusTo: Status };
 export type Source = {
   id: string;
-  kind: "extension" | "code" | "manual" | "digest";
+  kind: "extension" | "code" | "manual" | "mac" | "digest";
   ref: string;
   title: string;
   excerpt: string;
@@ -194,7 +194,8 @@ export type InviteLookup = { orgName: string; expiresAt: string };
 
 export type TokenInfo = {
   id: string;
-  kind: "session" | "api";
+  /** "device": a connected Mac; `label` is its model name. */
+  kind: "session" | "api" | "device";
   label: string;
   createdAt: string;
   expiresAt: string | null;
@@ -212,6 +213,12 @@ export type OrgSettings = {
   screenshotVisibility: "author_and_admins" | "org";
   llmMonthlyBudgetUsd: number;
   consentVersion: number;
+  /** Mac drafts round each entry up to this many minutes. */
+  billingIncrementMin: 6 | 15;
+  /** Mac snippets and evidence quotes are cleared after this many days. */
+  snippetRetentionDays: number;
+  /** Macs may read page text in browsers (each person must also turn it on). */
+  macBrowserPageText: boolean;
 };
 
 export type Usage = {
@@ -222,3 +229,27 @@ export type Usage = {
 };
 
 export type AuditEvent = { at: string; actor: string; action: string; target: string | null; detail: string | null };
+
+/** POST /api/auth/device-codes: a one-time code for connecting a Mac, valid 15 minutes. */
+export type DeviceCode = { code: string; expiresAt: string };
+
+// ---- Mac time tracking (/v1, snake_case like docs/mac-v1.md) --------------------------
+
+export type MacClient = { id: string; name: string; aliases: string[]; domains: string[]; project_codes: string[]; active: boolean };
+export type MacClientInput = Partial<Omit<MacClient, "id">>;
+export type ClientImportResult = { created: number; updated: number; errors: { line: number; message: string }[] };
+
+export type AdminAliasRule = {
+  id: string;
+  pattern: string;
+  client_id: string;
+  client_name: string;
+  user_id: string | null;
+  user_name: string | null;
+  scope: "user" | "org";
+  status: "pending" | "accepted";
+  created_at: string;
+};
+export type AliasRule = { id: string; pattern: string; client_id: string };
+
+export type PilotPerson = { user_id: string; name: string; accepted: number; edited: number; rejected: number; active_days: number };

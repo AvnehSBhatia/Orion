@@ -120,6 +120,7 @@ const CASES: Case[] = [
   { key: "POST /api/auth/reset", call: (f) => ({ body: { token: f.resetToken, password: "brandnew1" } }), anon: 204, otherOrg: "skip" },
   // Closed unless ALLOW_SIGNUP=true.
   { key: "POST /api/auth/signup", call: () => ({ body: { username: "x1", password: "password1", orgName: "X" } }), anon: 403, otherOrg: "skip", member: 403, admin: 403 },
+  { key: "POST /api/auth/device-codes", otherOrg: "skip", member: 200 },
   { key: "GET /api/auth/tokens", otherOrg: "skip", member: 200 },
   { key: "POST /api/auth/tokens", call: () => ({ body: { label: "ci" } }), otherOrg: "skip", member: 200 },
   { key: "DELETE /api/auth/tokens/[id]", call: (f) => ({ params: { id: f.memberTokenId } }), otherOrg: 404, member: 200 },

@@ -4,6 +4,9 @@
 import { toHistory } from "@/lib/chat";
 import type {
   Account,
+  AdminAliasRule,
+  AliasRule,
+  ClientImportResult,
   ActivityResponse,
   AuditEvent,
   BriefResponse,
@@ -13,15 +16,19 @@ import type {
   CreatedToken,
   DashboardResponse,
   DashboardSpec,
+  DeviceCode,
   EmbeddingsResponse,
   GraphResponse,
   Invite,
   InviteLookup,
   LoginResponse,
+  MacClient,
+  MacClientInput,
   Me,
   OrgProfile,
   OrgSettings,
   OrgSummary,
+  PilotPerson,
   SourceDetail,
   TokenInfo,
   Usage,
@@ -81,10 +88,12 @@ async function send(path: string, { method = "GET", body, query, signal }: Optio
 }
 
 async function fail(res: Response, path: string): Promise<never> {
-  const body = (await res.json().catch(() => ({}))) as { error?: string; retryAfterSec?: number };
+  // /api answers { error: "..." }; /v1 answers { error: { code, message } }.
+  const body = (await res.json().catch(() => ({}))) as { error?: string | { code?: string; message?: string }; retryAfterSec?: number };
   const header = Number(res.headers.get("retry-after"));
   const retry = body.retryAfterSec ?? (Number.isFinite(header) && header > 0 ? header : null);
-  throw new ApiError(body.error || `${path} returned ${res.status}`, res.status, retry);
+  const message = typeof body.error === "string" ? body.error : body.error?.message;
+  throw new ApiError(message || `${path} returned ${res.status}`, res.status, retry);
 }
 
 /** JSON in, JSON out. 204 resolves to undefined. */
@@ -93,6 +102,20 @@ export async function request<T>(path: string, options: Options = {}): Promise<T
   if (!res.ok) return fail(res, path);
   if (res.status === 204) return undefined as T;
   return (await res.json().catch(() => ({}))) as T;
+}
+
+/** A file (CSV) from the server, saved by the browser under `filename`. */
+export async function download(path: string, filename: string, query?: Query): Promise<void> {
+  const res = await send(path, { query });
+  if (!res.ok) return fail(res, path);
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** POSTs `body` and returns a reader over the streamed response, after the same error handling as `request`. */
@@ -186,6 +209,19 @@ export const api = {
     list: () => request<{ tokens: TokenInfo[] }>("/api/auth/tokens"),
     create: (label: string) => post<CreatedToken>("/api/auth/tokens", { label }),
     revoke: (id: string) => del<{ ok: true }>(`/api/auth/tokens/${seg(id)}`),
+  },
+  /** A one-time code the Mac app exchanges for its device token (POST /v1/devices/register). */
+  deviceCode: () => post<DeviceCode>("/api/auth/device-codes"),
+  /** Admin side of the Mac app's time tracking (docs/mac-v1.md). */
+  owner: {
+    clients: () => request<{ clients: MacClient[] }>("/v1/owner/clients"),
+    createClient: (body: MacClientInput & { name: string }) => post<MacClient>("/v1/owner/clients", body),
+    updateClient: (id: string, change: MacClientInput) => patch<MacClient>(`/v1/owner/clients/${seg(id)}`, change),
+    importClients: (csv: string) => post<ClientImportResult>("/v1/owner/clients/import", { csv }),
+    aliasRules: () => request<{ rules: AdminAliasRule[] }>("/v1/owner/alias-rules"),
+    acceptRule: (id: string) => post<AliasRule>(`/v1/owner/alias-rules/${seg(id)}/accept`),
+    pilot: (from: string, to: string) => request<{ people: PilotPerson[] }>("/v1/owner/pilot", { query: { from, to } }),
+    exportCsv: (from: string, to: string) => download("/v1/owner/export.csv", `orion-time-${from}-to-${to}.csv`, { from, to }),
   },
   orgs: {
     list: () => request<{ orgs: OrgSummary[] }>("/api/orgs"),

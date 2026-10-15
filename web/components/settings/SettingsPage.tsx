@@ -2,17 +2,18 @@
 
 import { useSession } from "@/components/auth/session";
 import { PageFrame } from "@/components/settings/PageFrame";
-import { CopyField } from "@/components/ui/CopyButton";
+import { CopyButton, CopyField } from "@/components/ui/CopyButton";
 import { field, FieldError, Notice, Panel, PrimaryButton, SecondaryButton } from "@/components/ui/form";
 import { API, api, statusOf } from "@/lib/api/client";
-import type { CreatedToken, TokenInfo } from "@/lib/api/types";
+import type { CreatedToken, DeviceCode, TokenInfo } from "@/lib/api/types";
 import { settingsError } from "@/lib/notLive";
-import { ago, shortDate } from "@/lib/time";
+import { ago, shortDate, useNow } from "@/lib/time";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 const SECTIONS = [
   { id: "account", label: "Account" },
   { id: "password", label: "Password" },
+  { id: "mac", label: "Connect your Mac" },
   { id: "claude-code", label: "Connect Claude Code" },
   { id: "data", label: "Your data" },
 ];
@@ -22,6 +23,7 @@ export function SettingsPage() {
     <PageFrame title="Settings" description="Your account, password, and connections." sections={SECTIONS}>
       <AccountPanel />
       <PasswordPanel />
+      <MacPanel />
       <ClaudeCodePanel />
       <DataPanel />
     </PageFrame>
@@ -118,6 +120,121 @@ function PasswordPanel() {
           </PrimaryButton>
         </div>
       </form>
+    </Panel>
+  );
+}
+
+/** "14:32" until `iso`, or null once it has passed. */
+function countdown(iso: string, now: number) {
+  const left = Math.floor((Date.parse(iso) - now) / 1000);
+  if (!(left > 0)) return null;
+  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+}
+
+function MacPanel() {
+  const [macs, setMacs] = useState<TokenInfo[] | null>(null);
+  const [code, setCode] = useState<DeviceCode | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const now = useNow(1000);
+
+  const load = useCallback(async () => {
+    try {
+      const { tokens } = await api.tokens.list();
+      setMacs(tokens.filter((t) => t.kind === "device"));
+    } catch (err) {
+      setError(settingsError(err, "list your Macs"));
+      setMacs([]);
+    }
+  }, []);
+  useEffect(() => {
+    const t = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(t);
+  }, [load]);
+
+  const make = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      setCode(await api.deviceCode());
+    } catch (err) {
+      setError(settingsError(err, "make a code"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async (mac: TokenInfo) => {
+    if (!window.confirm(`Disconnect "${mac.label || "Mac"}"? It stops sending work right away and has to be connected again with a new code.`)) return;
+    try {
+      await api.tokens.revoke(mac.id);
+      await load();
+    } catch (err) {
+      setError(settingsError(err, "disconnect this Mac"));
+    }
+  };
+
+  const left = code ? countdown(code.expiresAt, now) : null;
+
+  return (
+    <Panel
+      id="mac"
+      title="Connect your Mac"
+      description="The Constellation app on your Mac sends the work you approve in its Outbox to Orion. Make a code here and enter it in the app."
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <PrimaryButton type="button" onClick={make} disabled={busy}>
+          {busy ? "Making…" : code && left ? "Make a new code" : "Make a code"}
+        </PrimaryButton>
+      </div>
+
+      {code && (
+        <div className="mt-5 rounded-xl border border-ink/40 bg-bg p-4" role="status">
+          {left ? (
+            <>
+              <div className="flex flex-wrap items-center gap-3">
+                <code className="font-mono text-[32px] font-semibold tracking-[0.12em] text-ink select-all" aria-label={`Code ${code.code.split("").join(" ")}`}>
+                  {code.code}
+                </code>
+                <CopyButton text={code.code} label="Copy the code" />
+              </div>
+              <p className="mt-2 text-[12px] text-faint">Expires in {left}</p>
+              <p className="mt-3 text-[14px] text-muted">Open Constellation on your Mac, choose Connect, and enter this code. It works once, for 15 minutes.</p>
+            </>
+          ) : (
+            <p className="text-[14px] text-muted">This code expired. Make a new one.</p>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-4">
+          <Notice kind="error">{error}</Notice>
+        </div>
+      )}
+
+      <h3 className="mt-6 text-[13px] font-medium text-muted">Connected Macs</h3>
+      {macs === null ? (
+        <div className="mt-2 h-12 animate-pulse rounded-lg bg-raised" aria-label="Loading Macs" />
+      ) : macs.length === 0 ? (
+        <p className="mt-2 text-[14px] text-faint">No Mac connected yet.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
+          {macs.map((m) => (
+            <li key={m.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] text-ink">{m.label || "Mac"}</p>
+                <p className="text-[12px] text-faint">
+                  Connected {ago(m.createdAt)} · {m.lastUsedAt ? `last sent ${ago(m.lastUsedAt)}` : "nothing sent yet"}
+                </p>
+              </div>
+              <SecondaryButton type="button" onClick={() => revoke(m)}>
+                Revoke
+              </SecondaryButton>
+            </li>
+          ))}
+        </ul>
+      )}
     </Panel>
   );
 }

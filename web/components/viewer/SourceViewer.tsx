@@ -171,7 +171,7 @@ function SourceBody({ orgId, detail }: { orgId: string; detail: SourceDetail }) 
     <article>
       <h2 className="text-[18px] leading-snug font-medium text-ink">{source.title || shortRef(source.ref)}</h2>
       <p className="mt-1 text-[13px] text-muted">
-        {[source.authorName, since(source.createdAt), source.kind === "extension" ? "Page" : source.kind === "code" ? "Commit" : source.kind].filter(Boolean).join(" · ")}
+        {[source.authorName, since(source.createdAt), source.kind === "extension" ? "Page" : source.kind === "code" ? "Commit" : source.kind === "mac" ? "Mac" : source.kind].filter(Boolean).join(" · ")}
       </p>
       <p className="mt-2 flex flex-wrap items-center gap-2 font-mono text-[11.5px] text-faint">
         <span className="max-w-full truncate">{source.ref}</span>

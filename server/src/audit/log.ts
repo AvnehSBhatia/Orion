@@ -14,6 +14,13 @@ export const AUDIT_ACTIONS = [
   "invite_accepted",
   "settings_changed",
   "data_deleted",
+  "device_code_created",
+  "device_registered",
+  "consent_accepted",
+  "client_changed",
+  "alias_rule_accepted",
+  "draft_finalized",
+  "time_exported",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

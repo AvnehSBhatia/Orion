@@ -13,6 +13,15 @@ import { HttpError } from "@/http/error";
 export function deleteCapturesBy(store: Store, userId: string): number {
   return store.transaction(() => {
     const ids = (store.db.prepare("SELECT id FROM sources WHERE author_id = ?").all(userId) as { id: string }[]).map((r) => r.id);
+    deleteSources(store, ids);
+    store.db.prepare("DELETE FROM touches WHERE user_id = ?").run(userId);
+    return ids.length;
+  });
+}
+
+/** Removes these documents and everything derived from them (changes, summaries, facets, digests built from them). */
+export function deleteSources(store: Store, ids: string[]): void {
+  store.transaction(() => {
     if (ids.length) {
       const gone = new Set(ids);
       const digests = store.db.prepare("SELECT id, members FROM digests").all() as { id: string; members: string }[];
@@ -29,8 +38,6 @@ export function deleteCapturesBy(store: Store, userId: string): number {
         source.run(id);
       }
     }
-    store.db.prepare("DELETE FROM touches WHERE user_id = ?").run(userId);
-    return ids.length;
   });
 }
 

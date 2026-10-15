@@ -45,10 +45,21 @@ export function rawToken(req: Request): string | null {
 /** True when the request authenticates with a cookie (and so needs CSRF checks), not a bearer token. */
 export const usesCookie = (req: Request) => !bearerToken(req) && !!cookieToken(req);
 
-/** The signed-in account, or null. Disabled accounts and expired tokens are null. */
+/** Paths a Mac's device token may call: the /v1 API (GET /api/health is public anyway). */
+export function deviceMayCall(req: Request): boolean {
+  try {
+    const { pathname } = new URL(req.url);
+    return pathname === "/v1" || pathname.startsWith("/v1/");
+  } catch {
+    return false;
+  }
+}
+
+/** The signed-in account, or null. Disabled accounts, expired tokens, and device tokens off /v1 are null. */
 export function authenticate(req: Request): Principal | null {
   const raw = rawToken(req);
-  return raw ? getAuthDb().resolveToken(raw) : null;
+  const p = raw ? getAuthDb().resolveToken(raw) : null;
+  return p && p.kind === "device" && !deviceMayCall(req) ? null : p;
 }
 
 const attrs = (maxAge: number) => ["Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${maxAge}`, ...(config.cookieSecure ? ["Secure"] : [])];

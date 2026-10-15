@@ -103,6 +103,8 @@ export type RetryOpts = {
   /** For logs: "chat", "embeddings". */
   label: string;
   timeoutMs?: number;
+  /** Log statuses only, never the provider's error body (zero-retention calls: a provider may echo the prompt). */
+  quiet?: boolean;
   /**
    * Reads the body inside the same timeout and retry loop (a stream reset mid-body is retried too). Throw
    * `NoRetry` to stop retrying, for example once streamed text has been shown.
@@ -146,7 +148,7 @@ export async function fetchWithRetry(
       const detail = (await res.text().catch(() => "")).slice(0, 300);
       const after = retryAfterMs(res.headers.get("retry-after"));
       if (last || (after !== null && after > llmEnv.maxRetryAfterMs)) {
-        logJson("error", "openrouter request failed", { call: opts.label, status: res.status, attempts: attempt + 1, detail });
+        logJson("error", "openrouter request failed", { call: opts.label, status: res.status, attempts: attempt + 1, ...(!opts.quiet && { detail }) });
         throw res.status === 429 ? new HttpError(429, "model provider is rate limited") : providerFailed(opts.label);
       }
       wait = after ?? backoffMs(attempt);
