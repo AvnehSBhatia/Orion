@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { OrgSettings } from "@/orgs/settings";
 
 /** Shown when the notice file is not deployed next to the server. */
 export const BUILT_IN_NOTICE = `# Before you start: what Orion records
@@ -40,4 +41,31 @@ export function monitoringNotice(): string {
     }
   }
   return (cached = BUILT_IN_NOTICE);
+}
+
+const days = (n: number) => (n > 0 ? `${n} day${n === 1 ? "" : "s"}` : "until deleted");
+
+/**
+ * The notice for one org: the page already shows the title, so the leading heading goes, and the template's
+ * placeholders are filled from the org's name and settings. Policy wording an org must write itself
+ * (what Orion is not used for, a contact) gets a neutral default until counsel edits the file.
+ */
+export function noticeFor(org: { name: string } | null, settings: OrgSettings, notice = monitoringNotice()): string {
+  const company = org?.name || "Your organization";
+  const excluded = settings.excludedHosts.length ? settings.excludedHosts.join(", ") : "none set by your admin yet";
+  const visible =
+    settings.screenshotVisibility === "org"
+      ? `visible to everyone in ${company}`
+      : `visible only to you and ${company}'s Orion admins`;
+  return notice
+    .replace(/^#\s+[^\n]*\n+/, "")
+    .replace(/visible only to you and \[Company\]'s Orion admins \[unless changed:[^\]]*\]/g, visible)
+    .replace(/\[Company\]/g, company)
+    .replace(/at most every \[5\] seconds/g, `at most every ${settings.captureIntervalSec} seconds`)
+    .replace(/\[14\] days/g, days(settings.screenshotRetentionDays))
+    .replace(/\[90\] days/g, days(settings.retentionDays))
+    .replace(/\[list, e\.g\.[^\]]*\]/g, excluded)
+    .replace(/\[measure productivity[^\]]*\]\s*—\s*\[edit to match your policy\]/g, "measure productivity or make disciplinary decisions")
+    .replace(/\[link to privacy policy\]/g, "[Privacy policy](/privacy)")
+    .replace(/\[contact name \/ email\]|\[contact\]/g, "your Orion admin");
 }

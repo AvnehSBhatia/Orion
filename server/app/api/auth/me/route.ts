@@ -1,10 +1,11 @@
 import type { NextRequest } from "next/server";
 import { consentState } from "@/auth/consent";
-import { monitoringNotice } from "@/auth/notice";
+import { noticeFor } from "@/auth/notice";
 import { config } from "@/config";
 import { getStore } from "@/http/deps";
 import { HttpError } from "@/http/error";
 import { optionalPrincipal, preflight, route } from "@/http/route";
+import { getOrgSettings } from "@/orgs/settings";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,7 @@ export const GET = route(
   async (req: NextRequest) => {
     const p = optionalPrincipal(req);
     if (p) {
+      const store = getStore(p.orgId);
       return {
         username: p.username,
         orgId: p.orgId,
@@ -20,7 +22,7 @@ export const GET = route(
         admin: p.admin,
         kind: p.kind,
         email: p.email,
-        consent: { ...consentState(p, getStore(p.orgId)), notice: monitoringNotice() },
+        consent: { ...consentState(p, store), notice: noticeFor(store.getOrg(), getOrgSettings(store)) },
         authDisabled: config.authDisabled,
       };
     }

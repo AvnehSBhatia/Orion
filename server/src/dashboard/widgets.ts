@@ -64,7 +64,21 @@ export const WIDGET_GUIDE = `Widget kinds:
 - activity: live stream of what people capture and commit. people: who is active right now.
 - constellation: 3D cloud of every node and document by meaning. map: the star map of work and how it connects.
 - gaps: work with no owner and other risks. note: a short text you write (text).
+Titles are for the reader, not for us: say "work items", "updates", "people"; never "node", "source", "embedding", or "cluster".
 Layout is a 4-column grid: sm 1 column, md 2, lg 3, full 4. Put four sm kpis on the first row, then the big views. Fill rows to 4 columns.`;
+
+const JARGON: [RegExp, string][] = [
+  [/\bnodes\b/gi, "work items"],
+  [/\bnode\b/gi, "work item"],
+  [/\bsources\b/gi, "updates"],
+  [/\bsource\b/gi, "update"],
+];
+
+/** Plain words for titles people read: the model and older saved specs sometimes say "At risk nodes". */
+export function readable(text: string): string {
+  const out = JARGON.reduce((t, [re, word]) => t.replace(re, word), plain(text));
+  return out.charAt(0).toUpperCase() + out.slice(1);
+}
 
 /** Drops node ids that are not allowed, then fixes up whatever the filter has left. */
 function cleanFilter(f: WidgetFilter | null, allowedIds: Pick<ReadonlySet<string>, "has"> | null): WidgetFilter | null {
@@ -89,11 +103,11 @@ export function sanitizeDashboard(
   if (!parsed.success || !parsed.data.widgets.length) return null;
   const d = parsed.data;
   return {
-    title: plain(d.title),
-    subtitle: plain(d.subtitle),
+    title: readable(d.title),
+    subtitle: readable(d.subtitle),
     widgets: d.widgets.map((w) => ({
       ...w,
-      title: plain(w.title),
+      title: readable(w.title),
       text: w.text ? plain(w.text) : null,
       filter: cleanFilter(w.filter, allowedIds),
     })),

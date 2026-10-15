@@ -111,7 +111,7 @@ export function heuristicDashboard(
       title: "Research lens",
       subtitle: "How the work clusters by meaning, what is new, and where the open questions are.",
       widgets: [
-        kpi("total_nodes", "Nodes"),
+        kpi("total_nodes", "Work items"),
         kpi("sources_total", "Documents"),
         kpi("sources_last_hour", "New this hour"),
         kpi("gaps", "Open gaps"),
