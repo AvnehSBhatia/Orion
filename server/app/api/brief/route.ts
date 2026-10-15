@@ -5,6 +5,7 @@ import { toPublicUser } from "@/db/store";
 import { getEmbedder, getLlm, getStore, requireUser } from "@/http/deps";
 import { preflight, route, scopedQuery } from "@/http/route";
 import { briefFor, cachedBrief, hasModelKey } from "@/retrieval/brief";
+import { withUsage } from "@/usage";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,7 @@ export const GET = route(async (req: NextRequest): Promise<BriefResponse> => {
   const q = briefQuery.parse(scopedQuery(req, { user: true }));
   const store = getStore(q.orgId);
   const user = toPublicUser(requireUser(store, q.userId));
-  return cachedBrief(`${q.orgId}:${user.id}`, () => briefFor(store, getEmbedder(), user, { llm: hasModelKey() ? getLlm() : null }));
+  return withUsage(store, () => cachedBrief(`${q.orgId}:${user.id}`, () => briefFor(store, getEmbedder(), user, { llm: hasModelKey() ? getLlm() : null })));
 });
 
 export const OPTIONS = preflight;

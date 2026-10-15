@@ -12,6 +12,7 @@ import { draftDashboard, enforceOnly, keepsFilters } from "./draft";
 import { heuristicDashboard } from "./heuristic";
 import { parseAsk, uniq, type AskIntent } from "./parse";
 import { DASHBOARD_JSON_SCHEMA, WIDGET_GUIDE, sanitizeDashboard } from "./widgets";
+import { BudgetExceededError } from "@/usage";
 
 const ASK_SCHEMA = {
   type: "object",
@@ -136,6 +137,7 @@ export async function askDashboard(
     if (intent.only) spec = enforceOnly(spec);
     return spec;
   } catch (err) {
+    if (err instanceof BudgetExceededError) throw err;
     console.error(`Dashboard ask for ${user.id} failed:`, err instanceof Error ? err.message : err);
     return draft;
   } finally {

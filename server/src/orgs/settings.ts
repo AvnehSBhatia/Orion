@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { Store } from "@/db/store";
 
 /**
@@ -56,6 +57,45 @@ export function saveOrgSettings(store: Store, patch: Partial<OrgSettings>): OrgS
   });
   return getOrgSettings(store);
 }
+
+/** "https://www.Mail.Google.com/inbox" → "mail.google.com". null when nothing host-like is left. */
+export function normalizeHost(input: string): string | null {
+  let s = input.trim().toLowerCase();
+  if (!s) return null;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//.test(s)) s = `https://${s}`;
+  try {
+    const host = new URL(s).hostname.replace(/^www\./, "").replace(/\.$/, "");
+    return (/^[a-z0-9.-]+$/.test(host) && host.includes(".")) || host === "localhost" ? host : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A partial OrgSettings as an admin sends it (PATCH /api/orgs/:orgId/settings). Unknown keys are refused. */
+export const orgSettingsPatch = z
+  .object({
+    captureEnabled: z.boolean(),
+    excludedHosts: z
+      .array(z.string().max(253))
+      .max(500)
+      .transform((hosts, ctx) => {
+        const out = new Set<string>();
+        for (const h of hosts) {
+          const n = normalizeHost(h);
+          if (!n) ctx.addIssue({ code: "custom", message: `"${h}" is not a hostname` });
+          else out.add(n);
+        }
+        return [...out];
+      }),
+    captureIntervalSec: z.number().int().min(1).max(3600),
+    retentionDays: z.number().int().min(0).max(3650),
+    screenshotRetentionDays: z.number().int().min(0).max(3650),
+    screenshotVisibility: z.enum(["author_and_admins", "org"]),
+    llmMonthlyBudgetUsd: z.number().min(0).max(1_000_000),
+    consentVersion: z.number().int().min(1).max(1_000_000),
+  })
+  .partial()
+  .strict();
 
 /** "https://www.Mail.google.com/x" and "mail.google.com" both match an excluded "mail.google.com" (subdomains too). */
 export function isExcludedUrl(settings: Pick<OrgSettings, "excludedHosts">, url: string): boolean {

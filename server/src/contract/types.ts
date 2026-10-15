@@ -1,4 +1,4 @@
-// Orion shared contract (spec section 1).
+// Orion shared contract: the request and response shapes of the API.
 // Standalone on purpose: the extension, codebase agent, and UI can copy this file as is.
 
 export const NODE_TYPES = [

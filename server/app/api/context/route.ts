@@ -2,42 +2,22 @@ import type { NextRequest } from "next/server";
 import { contextQuery } from "@/contract/schemas";
 import type { ContextResponse } from "@/contract/types";
 import { getEmbedder, getStore, requireUser } from "@/http/deps";
-import { preflight, route, scopedQuery } from "@/http/route";
-import { buildContext, findNodes } from "@/retrieval/context";
-import { filterParams, isEmptyFilter } from "@/retrieval/filters";
+import { preflight, principalOf, route, scopedQuery } from "@/http/route";
+import { maskImages } from "@/orgs/visibility";
+import { contextFor } from "@/retrieval/contextResponse";
+import { filterParams } from "@/retrieval/filters";
 
 export const runtime = "nodejs";
 
-/**
- * Without filters: the same context the built-in assistant gets (for you, best for `q`, latest,
- * neighbors, and the documents behind them). With filters: only matching nodes, ranked for the person,
- * plus the newest document behind each.
- */
+/** The context for a person (see `retrieval/contextResponse.ts`), optionally filtered. Another person takes an admin. */
 export const GET = route(async (req: NextRequest): Promise<ContextResponse> => {
   const params = scopedQuery(req, { user: true });
   const query = contextQuery.parse(params);
   const filter = filterParams.parse(params);
   const store = getStore(query.orgId);
-  const embedder = getEmbedder();
   requireUser(store, query.userId);
-
-  if (isEmptyFilter(filter)) {
-    const ctx = await buildContext(store, embedder, { userId: query.userId, q: query.q ?? "", k: query.k });
-    return {
-      nodes: ctx.items.map(({ why: _why, ...n }) => n),
-      sources: ctx.sources.map(({ why: _why, ...s }) => s),
-    };
-  }
-
-  const items = await findNodes(store, embedder, { userId: query.userId, q: query.q, k: query.k, filter });
-  const sourceIds = [...new Set(items.flatMap((n) => store.sourceIdsForNode(n.id, 1)))];
-  return {
-    nodes: items.map(({ why: _why, ...n }) => n),
-    sources: sourceIds.flatMap((id) => {
-      const s = store.getSource(id);
-      return s ? [store.toPublicSource(s)] : [];
-    }),
-  };
+  const out = await contextFor(store, getEmbedder(), query, filter);
+  return { ...out, sources: maskImages(principalOf(req), store, out.sources) };
 });
 
 export const OPTIONS = preflight;

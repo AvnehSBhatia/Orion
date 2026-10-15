@@ -4,7 +4,7 @@ import type { Edge, Gap, NodeType, PublicNode } from "@/contract/types";
 const OWNERLESS_OK: ReadonlySet<NodeType> = new Set(["stakeholder", "supplier"]);
 
 /**
- * Deterministic gap rules, mapped from the original spec onto the new domains:
+ * Deterministic gap rules:
  * - no_owner: open work with nobody responsible.
  * - single_threaded_deal: an open deal linked to fewer than two stakeholders.
  */

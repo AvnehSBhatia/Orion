@@ -112,7 +112,7 @@ const g = globalThis as unknown as {
 };
 const cache = (g.__orionProj ??= new Map());
 const warmAxes = (g.__orionAxes ??= new Map());
-/** While data streams in (the swarm), reproject at most this often; polls in between get the last projection. */
+/** While captures stream in, reproject at most this often; polls in between get the last projection. */
 const FRESH_MS = 2_000;
 
 /** Every node and document with a vector, newest first, projected to 3D. Cached per org until the data changes. */

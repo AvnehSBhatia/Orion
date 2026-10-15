@@ -1,7 +1,14 @@
 import { config } from "@/config";
 import { SESSION_DAYS, getAuthDb, type Principal } from "./db";
 
-export const SESSION_COOKIE = "orion_session";
+/** The cookie name over plain HTTP (local dev), and before the `__Host-` name existed. */
+export const LEGACY_SESSION_COOKIE = "orion_session";
+/** Behind HTTPS: `__Host-` makes the browser refuse it unless Secure, Path=/, and no Domain. */
+export const SECURE_SESSION_COOKIE = "__Host-orion_session";
+/** Kept for callers that predate the Secure name. */
+export const SESSION_COOKIE = LEGACY_SESSION_COOKIE;
+
+export const sessionCookieName = () => (config.cookieSecure ? SECURE_SESSION_COOKIE : LEGACY_SESSION_COOKIE);
 
 function cookieValue(req: Request, name: string): string | null {
   const header = req.headers.get("cookie");
@@ -11,7 +18,7 @@ function cookieValue(req: Request, name: string): string | null {
     if (i < 0) continue;
     if (part.slice(0, i).trim() === name) {
       try {
-        return decodeURIComponent(part.slice(i + 1).trim());
+        return decodeURIComponent(part.slice(i + 1).trim()) || null;
       } catch {
         return null;
       }
@@ -20,26 +27,40 @@ function cookieValue(req: Request, name: string): string | null {
   return null;
 }
 
-/** The raw token: `Authorization: Bearer <token>` first, else the session cookie. */
-export function rawToken(req: Request): string | null {
-  const auth = req.headers.get("authorization");
-  const m = auth?.match(/^Bearer\s+(\S+)\s*$/i);
-  if (m) return m[1];
-  return cookieValue(req, SESSION_COOKIE);
+export function bearerToken(req: Request): string | null {
+  const m = req.headers.get("authorization")?.match(/^Bearer\s+(\S+)\s*$/i);
+  return m ? m[1] : null;
 }
 
-/** The signed-in account, or null. */
+/** The session cookie, under the current name or the old one (accepted during the switch to `__Host-`). */
+export function cookieToken(req: Request): string | null {
+  return cookieValue(req, SECURE_SESSION_COOKIE) ?? cookieValue(req, LEGACY_SESSION_COOKIE);
+}
+
+/** The raw token: `Authorization: Bearer <token>` first, else the session cookie. */
+export function rawToken(req: Request): string | null {
+  return bearerToken(req) ?? cookieToken(req);
+}
+
+/** True when the request authenticates with a cookie (and so needs CSRF checks), not a bearer token. */
+export const usesCookie = (req: Request) => !bearerToken(req) && !!cookieToken(req);
+
+/** The signed-in account, or null. Disabled accounts and expired tokens are null. */
 export function authenticate(req: Request): Principal | null {
   const raw = rawToken(req);
   return raw ? getAuthDb().resolveToken(raw) : null;
 }
 
+const attrs = (maxAge: number) => ["Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${maxAge}`, ...(config.cookieSecure ? ["Secure"] : [])];
+
 export function sessionCookie(token: string): string {
-  return [`${SESSION_COOKIE}=${token}`, "Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${SESSION_DAYS * 86_400}`, ...(config.cookieSecure ? ["Secure"] : [])].join("; ");
+  return [`${sessionCookieName()}=${token}`, ...attrs(SESSION_DAYS * 86_400)].join("; ");
 }
 
-export function clearedSessionCookie(): string {
-  return [`${SESSION_COOKIE}=`, "Path=/", "HttpOnly", "SameSite=Lax", "Max-Age=0", ...(config.cookieSecure ? ["Secure"] : [])].join("; ");
+/** Clears both names, so a cookie set before the switch to `__Host-` goes too. */
+export function clearedSessionCookies(): string[] {
+  const names = config.cookieSecure ? [SECURE_SESSION_COOKIE, LEGACY_SESSION_COOKIE] : [LEGACY_SESSION_COOKIE];
+  return names.map((n) => [`${n}=`, ...attrs(0)].join("; "));
 }
 
 /** The client IP for rate limiting. X-Forwarded-For only counts when TRUST_PROXY=true, since clients can forge it. */

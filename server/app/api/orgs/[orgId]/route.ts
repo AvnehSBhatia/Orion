@@ -1,44 +1,42 @@
 import type { NextRequest } from "next/server";
+import { z } from "zod";
+import { getAuthDb } from "@/auth/db";
 import { orgId as orgIdSchema, updateOrgRequest } from "@/contract/schemas";
 import type { OrgResponse } from "@/contract/types";
-import { toPublicUser, type Store } from "@/db/store";
 import { getStore } from "@/http/deps";
-import { HttpError } from "@/http/error";
-import { adminOnly, preflight, route, sameOrg } from "@/http/route";
+import { adminOnly, preflight, principalOf, readJson, route, sameOrg } from "@/http/route";
+import { deleteOrg } from "@/orgs/deletion";
+import { orgResponse, updateOrgProfile } from "@/orgs/profile";
 
 export const runtime = "nodejs";
 
-function orgOf(store: Store, id: string) {
-  const org = store.getOrg();
-  if (!org) throw new HttpError(404, `org "${id}" has no profile yet. PATCH it with a name and description.`);
-  return org;
-}
+const orgParam = async (req: NextRequest, ctx: RouteContext<"/api/orgs/[orgId]">) => {
+  const id = orgIdSchema.parse((await ctx.params).orgId);
+  sameOrg(req, id);
+  return id;
+};
 
 export const GET = route(async (req: NextRequest, ctx: RouteContext<"/api/orgs/[orgId]">): Promise<OrgResponse> => {
-  const id = orgIdSchema.parse((await ctx.params).orgId);
-  sameOrg(req, id);
-  const store = getStore(id);
-  return { org: orgOf(store, id), users: store.listUsers().map(toPublicUser) };
+  const id = await orgParam(req, ctx);
+  return orgResponse(getStore(id), id);
 });
 
-/** Change the profile. The model reads it on the next capture; existing documents are not re-read. */
+/** Change the profile (admin). The model reads it on the next capture; existing documents are not re-read. */
 export const PATCH = route(async (req: NextRequest, ctx: RouteContext<"/api/orgs/[orgId]">): Promise<OrgResponse> => {
-  const id = orgIdSchema.parse((await ctx.params).orgId);
-  sameOrg(req, id);
+  const id = await orgParam(req, ctx);
   adminOnly(req);
-  const store = getStore(id);
-  const patch = updateOrgRequest.parse(await req.json());
-  const current = store.getOrg();
-  if (!current && (!patch.name || !patch.description)) throw new HttpError(400, "this org has no profile yet; send name and description");
-  store.saveOrg({
-    id,
-    name: patch.name ?? current!.name,
-    description: patch.description ?? current!.description,
-    websites: patch.websites ?? current?.websites ?? [],
-    context: patch.context ?? current?.context ?? "",
-    createdAt: current?.createdAt ?? new Date().toISOString(),
-  });
-  return { org: store.getOrg()!, users: store.listUsers().map(toPublicUser) };
+  return updateOrgProfile(getStore(id), id, updateOrgRequest.parse(await readJson(req)));
+});
+
+const deleteOrgRequest = z.object({ confirm: z.string() });
+
+/** Delete the org (admin): its data file and every account in it. The body must repeat the id: `{ confirm: "<orgId>" }`. */
+export const DELETE = route(async (req: NextRequest, ctx: RouteContext<"/api/orgs/[orgId]">) => {
+  const id = await orgParam(req, ctx);
+  adminOnly(req);
+  const { confirm } = deleteOrgRequest.parse(await readJson(req, {}));
+  deleteOrg(getAuthDb(), principalOf(req), id, confirm);
+  return new Response(null, { status: 204 });
 });
 
 export const OPTIONS = preflight;
