@@ -99,6 +99,14 @@ struct ShellView: View {
             ForEach(ShellPlace.allCases) { place in
                 sidebarRow(place)
             }
+            if needsSetup, settings.guideDismissed {
+                Button("Show setup steps") { settings.guideDismissed = false }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.accent)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 6)
+            }
 
             Spacer(minLength: Theme.Space.l)
             captureControl
@@ -220,7 +228,25 @@ struct ShellView: View {
         }
     }
 
+    /// Permission, connection, or apps still missing. The path stays until those are done.
+    private var needsSetup: Bool {
+        !engine.status.trusted || !sender.isConnected || settings.allowed.isEmpty
+    }
+
+    private var showsGuide: Bool { needsSetup && !settings.guideDismissed }
+
     private var detail: some View {
+        VStack(spacing: 0) {
+            if showsGuide {
+                setupGuide
+                    .padding(.horizontal, Theme.pageInset)
+                    .padding(.top, 14)
+            }
+            pageStack
+        }
+    }
+
+    private var pageStack: some View {
         ZStack {
             page(.today) {
                 DraftView(
@@ -230,6 +256,7 @@ struct ShellView: View {
                     batchesWaiting: outbox.toReviewCount,
                     connected: sender.isConnected,
                     appsChosen: !settings.allowed.isEmpty,
+                    guideVisible: showsGuide,
                     onOutbox: { navigation.place = .outbox },
                     onApps: { navigation.place = .apps },
                     onSettings: { navigation.place = .settings },
@@ -244,6 +271,7 @@ struct ShellView: View {
                     sender: sender,
                     embedded: true,
                     draftPending: drafts.pendingCount,
+                    guideVisible: showsGuide,
                     openSettings: { navigation.place = .settings },
                     openToday: { navigation.place = .today }
                 )
@@ -263,6 +291,87 @@ struct ShellView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private struct GuideStep: Identifiable {
+        let id: Int
+        let title: String
+        let detail: String
+        let done: Bool
+        let current: Bool
+        let place: ShellPlace?
+    }
+
+    private var guideSteps: [GuideStep] {
+        let trusted = engine.status.trusted
+        let connected = sender.isConnected
+        let apps = !settings.allowed.isEmpty
+        let current = !trusted ? 1 : (!connected ? 2 : (!apps ? 3 : 4))
+        return [
+            GuideStep(id: 1, title: "Allow reading", detail: "Accessibility", done: trusted, current: current == 1, place: nil),
+            GuideStep(id: 2, title: "Connect", detail: "This Mac", done: connected, current: current == 2, place: .settings),
+            GuideStep(id: 3, title: "Choose apps", detail: "What gets read", done: apps, current: current == 3, place: .apps),
+            GuideStep(id: 4, title: "Review Outbox", detail: "Then Today", done: false, current: current == 4, place: .outbox),
+        ]
+    }
+
+    private var setupGuide: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Start here")
+                    .font(Theme.Typo.sectionHeader)
+                    .kerning(1.1)
+                    .foregroundStyle(Theme.textTertiary)
+                    .textCase(.uppercase)
+                Spacer()
+                Button("Hide") { settings.guideDismissed = true }
+                    .buttonStyle(LinkButtonStyle(color: Theme.textTertiary))
+            }
+            HStack(alignment: .stretch, spacing: 8) {
+                ForEach(guideSteps) { step in
+                    Button {
+                        if let place = step.place {
+                            navigation.place = place
+                        } else {
+                            showWelcome()
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            ZStack {
+                                Circle().fill(step.done ? Theme.success.opacity(0.22) : (step.current ? Theme.accent : Theme.buttonFill))
+                                if step.done {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(Theme.success)
+                                } else {
+                                    Text("\(step.id)")
+                                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(step.current ? Theme.onAccent : Theme.textSecondary)
+                                }
+                            }
+                            .frame(width: 18, height: 18)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(step.title)
+                                    .font(.system(size: 13, weight: step.current ? .semibold : .regular))
+                                    .foregroundStyle(Theme.textPrimary)
+                                    .lineLimit(1)
+                                Text(step.detail)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Theme.textTertiary)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 10)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .background(step.current ? Theme.selectedNav : Theme.cardFill, in: RoundedRectangle(cornerRadius: 8))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(step.current ? Theme.accent.opacity(0.7) : Theme.border, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .help(step.title)
+                }
+            }
+        }
     }
 
     private func page<V: View>(_ place: ShellPlace, @ViewBuilder _ view: () -> V) -> some View {

@@ -53,8 +53,8 @@ enum Theme {
     static let cardRadius: CGFloat = 12
     static let controlRadius: CGFloat = 8
     static let windowPadding: CGFloat = 24
-    static let pageInset: CGFloat = 48
-    static let pageTop: CGFloat = 30
+    static let pageInset: CGFloat = 32
+    static let pageTop: CGFloat = 20
     static let contentMaxWidth: CGFloat = 680
     static let sidebarWidth: CGFloat = 232
     /// Room for the traffic lights, since content runs under the transparent title bar.
@@ -62,7 +62,7 @@ enum Theme {
 
     // MARK: Type
     enum Typo {
-        static let windowTitle = Font.system(size: 32, weight: .regular)
+        static let windowTitle = Font.system(size: 28, weight: .regular)
         static let sheetTitle = Font.system(size: 22, weight: .regular)
         static let sectionHeader = Font.system(size: 10, weight: .medium, design: .monospaced)
         static let body = Font.system(size: 13)

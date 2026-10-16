@@ -10,6 +10,8 @@ struct DraftView: View {
     var batchesWaiting = 0
     var connected = true
     var appsChosen = true
+    /// The window already shows the setup path, so this page does not repeat it.
+    var guideVisible = false
     var onOutbox: () -> Void = {}
     var onApps: () -> Void = {}
     var onSettings: () -> Void = {}
@@ -36,7 +38,7 @@ struct DraftView: View {
                     StatusPill(icon: "star", text: pendingLabel, color: model.pendingCount > 0 ? Theme.warning : Theme.success)
                 }
             }
-            if let error = model.error {
+            if let error = model.error, !(guideVisible && !connected) {
                 Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
             }
         } content: {
@@ -119,7 +121,7 @@ struct DraftView: View {
                     .foregroundStyle(Theme.warning)
                     .textCase(.uppercase)
                 OrbitalIllustration()
-                    .frame(maxWidth: 264, minHeight: 140, maxHeight: 160)
+                    .frame(maxWidth: 180, minHeight: 88, maxHeight: 100)
                 Text("A little space for your day.")
                     .font(.system(size: 16))
                 Text("Today’s timesheet will appear here once this Mac is connected.")
@@ -139,7 +141,7 @@ struct DraftView: View {
             GlassCard {
                 VStack(spacing: Theme.Space.m) {
                     OrbitalIllustration()
-                        .frame(maxWidth: 220, minHeight: 120, maxHeight: 140)
+                        .frame(maxWidth: 160, minHeight: 80, maxHeight: 96)
                     Text("Nothing on today's timesheet yet")
                         .font(Theme.Typo.bodyStrong)
                     Text(emptyMessage)
@@ -188,13 +190,13 @@ struct DraftView: View {
                 button: "Review in Outbox",
                 action: onOutbox
             )
-        } else if !connected {
+        } else if !connected, !guideVisible {
             NextStepBanner(
                 message: "Connect this Mac. Until you do, today's timesheet cannot arrive.",
                 button: "Connect",
                 action: onSettings
             )
-        } else if !appsChosen {
+        } else if !appsChosen, !guideVisible {
             NextStepBanner(
                 message: "Turn on the apps you work in. Nothing else on this Mac is read.",
                 button: "Choose apps",

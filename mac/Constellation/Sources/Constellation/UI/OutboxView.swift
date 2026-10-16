@@ -9,6 +9,8 @@ struct OutboxView: View {
     @ObservedObject var sender: Sender
     var embedded = false
     var draftPending = 0
+    /// The window already shows the setup path, so this page does not repeat it.
+    var guideVisible = false
     var openSettings: () -> Void = {}
     var openToday: () -> Void = {}
     @State private var editing: OutboxItem?
@@ -35,16 +37,6 @@ struct OutboxView: View {
                 ConnectionCard(sender: sender, settings: settings, directory: sender.directory)
             }
             stageCards
-            if !sender.isConnected, model.toReview.isEmpty, model.approved.isEmpty, model.sent.isEmpty {
-                VStack(spacing: Theme.Space.s) {
-                    OrbitalIllustration().frame(maxWidth: 180, minHeight: 100, maxHeight: 120)
-                    Text("Nothing leaves without a connection.")
-                        .font(Theme.Typo.subtitle)
-                        .foregroundStyle(Theme.textSecondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Space.s)
-            }
             if embedded, sender.isConnected { connectionStatus }
             if !model.available {
                 Label("The encrypted store is unavailable, so there is nothing to show.", systemImage: "exclamationmark.triangle.fill")
@@ -132,47 +124,35 @@ struct OutboxView: View {
 
     private var stageCards: some View {
         HStack(alignment: .top, spacing: Theme.Space.m) {
-            stageCard(
-                title: "Waiting for review",
-                count: reviewCount,
-                symbol: "square.stack.3d.up",
-                empty: "Nothing waiting. When a stretch of work finishes, it lands here."
-            )
-            stageCard(
-                title: "Approved",
-                count: approvedCount,
-                symbol: "checkmark.circle",
-                empty: "Nothing approved yet."
-            )
-            stageCard(
-                title: "Sent",
-                count: sentItemCount,
-                symbol: "paperplane",
-                empty: "Nothing sent yet."
-            )
+            stageCard(title: "Waiting for review", count: reviewCount, symbol: "square.stack.3d.up", empty: "Nothing waiting.")
+            stageCard(title: "Approved", count: approvedCount, symbol: "checkmark.circle", empty: "Nothing approved.")
+            stageCard(title: "Sent", count: sentItemCount, symbol: "paperplane", empty: "Nothing sent.")
         }
     }
 
     private func stageCard(title: String, count: Int, symbol: String, empty: String) -> some View {
         GlassCard {
-            VStack(alignment: .leading, spacing: Theme.Space.s) {
-                HStack(spacing: Theme.Space.s) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: symbol)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.textSecondary)
-                    Text(title).font(Theme.Typo.bodyStrong)
-                    Spacer(minLength: Theme.Space.s)
+                        .frame(width: 16)
+                    Text(title)
+                        .font(Theme.Typo.bodyStrong)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
                     Text("\(count)")
-                        .font(.system(size: 20, weight: .regular, design: .monospaced))
+                        .font(.system(size: 18, weight: .regular, design: .monospaced))
                         .foregroundStyle(count > 0 && title == "Waiting for review" ? Theme.warning : Theme.textPrimary)
                 }
-                if count == 0 {
-                    Text(empty)
-                        .font(Theme.Typo.caption)
-                        .foregroundStyle(Theme.textTertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(count == 0 ? empty : "\(count) \(count == 1 ? "item" : "items")")
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textTertiary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, minHeight: 16, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, minHeight: 52, alignment: .top)
         }
     }
 
@@ -220,7 +200,7 @@ struct OutboxView: View {
                 button: "Read it in Settings",
                 action: openSettings
             )
-        } else if !sender.isConnected {
+        } else if !sender.isConnected, !guideVisible {
             NextStepBanner(
                 message: "This Mac is not connected. Approved batches wait here until it is.",
                 button: "Connect",
@@ -245,9 +225,9 @@ private struct NowCard: View {
     @ObservedObject var settings: Settings
 
     var body: some View {
-        GlassCard(emphasis: settings.state == .on ? .normal : .warning) {
-            HStack(alignment: .top, spacing: Theme.Space.m) {
-                GlowDot(color: dotColor).padding(.top, 6)
+        GlassCard(emphasis: .normal, padding: 12) {
+            HStack(alignment: .center, spacing: Theme.Space.m) {
+                GlowDot(color: dotColor, size: 6)
                 VStack(alignment: .leading, spacing: 4) {
                     switch settings.state {
                     case .off:
