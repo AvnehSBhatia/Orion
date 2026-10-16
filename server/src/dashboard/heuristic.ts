@@ -63,7 +63,7 @@ export function heuristicDashboard(
       title: "Sales desk",
       subtitle: "What you can sell today, deals that need you, and what changed for customers.",
       widgets: [
-        kpi("sellable", "Sellable now"),
+        kpi("sellable", "Ready to sell"),
         kpi("at_risk", "Deals at risk", only("sales")),
         kpi("done", "Shipped features", only("engineering")),
         kpi("sources_last_hour", "Captures this hour"),

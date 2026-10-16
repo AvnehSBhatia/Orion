@@ -56,7 +56,7 @@ export function SourceViewer({ orgId }: { orgId: string | null }) {
       if (target.kind === "source") return { kind: "source", detail: await fetchSource(orgId, target.id) };
       const [graph, activity] = await Promise.all([api.graph(orgId), api.activity(orgId, 120).catch(() => null)]);
       const node = graph.nodes.find((n) => n.id === target.id);
-      if (!node) return { kind: "error", message: "That node is no longer in the graph." };
+      if (!node) return { kind: "error", message: "That project is no longer in Orion." };
       const related = (activity?.sources ?? []).filter((s) => s.changes.some((c) => c.nodeId === node.id)).slice(0, 8);
       return { kind: "node", node, related };
     };
@@ -117,7 +117,7 @@ export function SourceViewer({ orgId }: { orgId: string | null }) {
             role="dialog"
             aria-modal="true"
             data-testid="source-viewer"
-            aria-label={target.kind === "source" ? "Source" : "Node"}
+            aria-label={target.kind === "source" ? "Document" : "Project"}
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
@@ -125,7 +125,7 @@ export function SourceViewer({ orgId }: { orgId: string | null }) {
             className="absolute top-0 right-0 flex h-full w-full max-w-[560px] flex-col border-l border-line-strong bg-panel shadow-[-24px_0_48px_rgba(0,0,0,0.5)]"
           >
             <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
-              <span className="font-mono text-[11px] tracking-wide text-faint uppercase">{target.kind === "source" ? "Source" : "Node"}</span>
+              <span className="font-mono text-[11px] tracking-wide text-faint uppercase">{target.kind === "source" ? "Document" : "Project"}</span>
               <button
                 type="button"
                 onClick={close}
@@ -252,7 +252,7 @@ function NodeBody({ node, related }: { node: PublicNode; related: Source[] }) {
       )}
       {related.length > 0 && (
         <>
-          <h3 className="mt-6 mb-2 font-mono text-[11px] tracking-wide text-faint uppercase">Sources</h3>
+          <h3 className="mt-6 mb-2 font-mono text-[11px] tracking-wide text-faint uppercase">Documents</h3>
           <ul className="divide-y divide-line rounded-lg border border-line">
             {related.map((s) => (
               <li key={s.id}>

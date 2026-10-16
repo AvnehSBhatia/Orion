@@ -1,6 +1,7 @@
 "use client";
 
 import type { ActivityResponse, DashboardSpec } from "@/lib/api/types";
+import { plainTitle } from "@/lib/format";
 import { agoShort, useNow } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { LayoutGrid, Sparkles, UserRound } from "lucide-react";
@@ -34,7 +35,7 @@ export const DashboardHeader = memo(function DashboardHeader({ spec, activity }:
           transition={{ duration: 0.16, ease: EASE }}
           className="flex min-w-0 items-center gap-2.5"
         >
-          <h1 className="truncate text-[24px] leading-tight font-semibold tracking-[-0.035em] md:text-[28px]">{spec.title}</h1>
+          <h1 className="truncate text-[24px] leading-tight font-semibold tracking-[-0.035em] md:text-[28px]">{plainTitle(spec.title)}</h1>
           <span
             className={cn(
               "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[9.5px] tracking-[0.08em] uppercase",
@@ -59,7 +60,7 @@ function Live({ activity }: { activity: ActivityResponse | null }) {
       <LiveDot on={!!activity && !stale} label={stale ? "Reconnecting" : activity ? "Live" : "Connecting"} />
       {activity && (
         <span className="tabular-nums">
-          {activity.counts.nodes.toLocaleString("en-US")} projects · {activity.counts.sources.toLocaleString("en-US")} captures
+          {activity.counts.nodes.toLocaleString("en-US")} projects · {activity.counts.sources.toLocaleString("en-US")} documents
         </span>
       )}
     </div>

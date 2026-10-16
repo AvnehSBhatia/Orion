@@ -32,6 +32,7 @@ export function ProjectPage({
   messages,
   onSend,
   onRetry,
+  onStop,
   onSelect,
   onNavigate,
 }: {
@@ -42,6 +43,8 @@ export function ProjectPage({
   onSend: (message: string) => void;
   /** Sends a failed question again, as it was first sent. */
   onRetry: (message: string) => void;
+  /** Cancels the answer being written. */
+  onStop?: () => void;
   onSelect: (id: string) => void;
   onNavigate: (view: View) => void;
 }) {
@@ -185,7 +188,7 @@ export function ProjectPage({
             <Stat spot="due" label="Due" value={star.due} detail={`Updated ${star.updated}`} />
           </section>
 
-          <Card spot="updates" title="Recent updates" note={`${star.updates.length} sources`} flush>
+          <Card spot="updates" title="Recent updates" note={`${star.updates.length} ${star.updates.length === 1 ? "document" : "documents"}`} flush>
             {star.updates.length === 0 && (
               <p className="px-5 pb-5 text-[14px] text-muted">No captures or commits have touched this yet.</p>
             )}
@@ -225,6 +228,7 @@ export function ProjectPage({
             messages={messages}
             onSend={handleSend}
             onRetry={onRetry}
+            onStop={onStop}
             suggestions={prompts}
             className="h-[560px] overflow-hidden rounded-2xl border border-line xl:hidden"
           />
@@ -235,6 +239,7 @@ export function ProjectPage({
         messages={messages}
         onSend={handleSend}
         onRetry={onRetry}
+        onStop={onStop}
         suggestions={prompts}
         className="hidden w-[340px] shrink-0 border-l border-line xl:flex"
       />

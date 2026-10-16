@@ -2,6 +2,7 @@
 // carries the session cookie (`credentials: "include"`), which the backend sets at sign-in.
 
 import { toHistory } from "@/lib/chat";
+import { cleanGraph } from "@/lib/format";
 import type {
   Account,
   AdminAliasRule,
@@ -242,7 +243,7 @@ export const api = {
   health: () => request<{ ok: boolean; version?: string }>("/api/health"),
   audit: (limit = 100) => request<{ events: AuditEvent[] }>("/api/audit", { query: { limit } }),
   users: (orgId: string) => request<{ users: User[] }>("/api/users", { query: { orgId } }),
-  graph: (orgId: string) => request<GraphResponse>("/api/graph", { query: { orgId } }),
+  graph: async (orgId: string) => cleanGraph(await request<GraphResponse>("/api/graph", { query: { orgId } })),
   activity: (orgId: string, limit = 40) => request<ActivityResponse>("/api/activity", { query: { orgId, limit } }),
   embeddings: (orgId: string) => request<EmbeddingsResponse>("/api/embeddings", { query: { orgId } }),
   brief: (orgId: string, userId: string) => request<BriefResponse>("/api/brief", { query: { orgId, userId } }),

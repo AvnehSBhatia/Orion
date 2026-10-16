@@ -44,10 +44,20 @@ import { useWorkspace } from "./useWorkspace";
 /** Answers slower than this are cut off with a friendly message and a Retry. */
 const CHAT_TIMEOUT_MS = 90_000;
 
-/** Returning visitors, and anyone on a touch screen (the scroll scrub is desktop-only), skip the intro. */
+/** Returning visitors skip the hero; see skipScrub for who skips the scroll scrub after the first question. */
 function initialPhase(): Phase {
   if (typeof window === "undefined") return "hero";
   return readStored(INTRO_SEEN_KEY) ? "app" : "hero";
+}
+
+/** The scrub is a desktop moment: reduced motion, touch screens, small screens, and repeat visits go straight in. */
+function skipScrub() {
+  return (
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+    window.matchMedia("(pointer: coarse)").matches ||
+    window.matchMedia("(max-width: 767px)").matches ||
+    !!readStored(INTRO_SEEN_KEY)
+  );
 }
 
 const ACTION_ICONS = [TrendingUp, CircleAlert, Megaphone];
@@ -71,6 +81,7 @@ export function AppShell() {
   const phaseRef = useRef(phase);
   const selectedRef = useRef(selectedId);
   const openAfterAnswer = useRef(false);
+  const stopRef = useRef<AbortController | null>(null);
   const demo = useDemo();
 
   useEffect(() => {
@@ -173,9 +184,14 @@ export function AppShell() {
     }
     // The dashboard reshapes on its own fast call and lands the moment it resolves, without waiting for the answer.
     if (isLayoutAsk(text)) dash.reshape(text);
+    // Stop cancels this answer; a newer question cancels it too, so only one streams at a time.
+    stopRef.current?.abort();
+    const stop = new AbortController();
+    stopRef.current = stop;
+    const timer = window.setTimeout(() => stop.abort(new DOMException("Answer timed out", "TimeoutError")), CHAT_TIMEOUT_MS);
+    // Tokens land in the reply as they arrive; the final message swaps in renumbered citations and next steps.
+    let streamed = "";
     try {
-      // Tokens land in the reply as they arrive; the final message swaps in renumbered citations and next steps.
-      let streamed = "";
       const response = await api.chat(
         orgId,
         userId,
@@ -186,7 +202,7 @@ export function AppShell() {
           update({ role: "assistant", text: streamed, pending: true });
         },
         history,
-        AbortSignal.timeout(CHAT_TIMEOUT_MS),
+        stop.signal,
       );
       update({ role: "assistant", text: response.reply, sources: response.sources, actions: response.actions });
       if (response.viewCommand) applyView(response.viewCommand);
@@ -202,21 +218,24 @@ export function AppShell() {
         if (id) setSelectedId(id);
       }
     } catch (error) {
-      update({ role: "assistant", text: friendlyError(error, "ask Orion"), failed: { question: text } });
+      // Stopped by hand: keep what had arrived, or offer the question again (not when a newer question replaced it).
+      if (stop.signal.aborted && (stop.signal.reason as Error | undefined)?.name !== "TimeoutError") {
+        const superseded = stopRef.current !== stop;
+        update(streamed || superseded ? { role: "assistant", text: streamed || "Stopped." } : { role: "assistant", text: "Stopped.", failed: { question: text } });
+      }
+      else update({ role: "assistant", text: friendlyError(stop.signal.aborted ? stop.signal.reason : error, "ask Orion"), failed: { question: text } });
+    } finally {
+      window.clearTimeout(timer);
+      if (stopRef.current === stop) stopRef.current = null;
     }
   };
+
+  const stopAnswer = () => stopRef.current?.abort();
 
   const sendFromMap = (text: string, options?: { retry?: boolean }) => {
     noteDemoSent(text);
     void ask(text, options);
-    if (phase === "hero") {
-      // The scrub is a desktop moment: reduced motion, touch screens, and repeat visits go straight in.
-      const skip =
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
-        window.matchMedia("(pointer: coarse)").matches ||
-        !!readStored(INTRO_SEEN_KEY);
-      setPhase(skip ? "app" : "entering");
-    }
+    if (phase === "hero") setPhase(skipScrub() ? "app" : "entering");
   };
 
   const goHome = () => {
@@ -288,6 +307,7 @@ export function AppShell() {
           messages={messages}
           onSend={(text) => void ask(text)}
           onRetry={(text) => void ask(text, { retry: true })}
+          onStop={stopAnswer}
           onSelect={setSelectedId}
           onNavigate={navigate}
         />
@@ -341,7 +361,16 @@ export function AppShell() {
         )}
         {phase === "hero" && <AccountMenu name={me.userId === user?.id ? user?.name : undefined} orgName={org?.name} className="absolute top-3 right-4 z-30" />}
         {phase === "entering" && (
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-40 h-px bg-white/80" style={{ width: "calc(var(--progress) * 100%)" }} />
+          <>
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-40 h-px bg-white/80" style={{ width: "calc(var(--progress) * 100%)" }} />
+            <button
+              type="button"
+              onClick={() => setPhase("app")}
+              className="absolute top-3 right-4 z-40 rounded-full border border-line-strong bg-bg/80 px-3 py-1 text-[12px] text-muted backdrop-blur-md transition-colors hover:text-ink"
+            >
+              Skip intro
+            </button>
+          </>
         )}
 
         <header
@@ -549,6 +578,7 @@ export function AppShell() {
               onSend={sendFromMap}
               onClose={() => setReplyOpen(false)}
               onRetry={(text) => sendFromMap(text, { retry: true })}
+              onStop={stopAnswer}
               keepOpen={demo.on}
             />
           )}

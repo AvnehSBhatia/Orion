@@ -3,7 +3,7 @@
 import { ActionPills } from "@/components/chat/ActionPills";
 import { ReplyText } from "@/components/chat/ReplyText";
 import { type Message, plainQuestion } from "@/lib/chat";
-import { CircleAlert, RotateCw, X } from "lucide-react";
+import { CircleAlert, RotateCw, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 /**
@@ -16,6 +16,7 @@ export function ReplyDock({
   onSend,
   onClose,
   onRetry,
+  onStop,
   keepOpen = false,
 }: {
   question: string;
@@ -24,6 +25,8 @@ export function ReplyDock({
   onClose: () => void;
   /** Sends a failed question again. */
   onRetry: (question: string) => void;
+  /** Cancels the answer being written. */
+  onStop?: () => void;
   /** Demo mode: the answer stays up while the presenter talks over it. */
   keepOpen?: boolean;
 }) {
@@ -70,6 +73,16 @@ export function ReplyDock({
       <div className="flex items-center justify-between gap-3">
         <p className="truncate text-[11.5px] text-faint">{plainQuestion(question)}</p>
         <div className="flex shrink-0 items-center gap-1">
+          {last.pending && onStop && (
+            <button
+              type="button"
+              onClick={onStop}
+              className="flex items-center gap-1 rounded-full px-1.5 text-[11px] text-faint hover:text-ink"
+            >
+              <Square className="size-2.5 fill-current" />
+              Stop
+            </button>
+          )}
           {earlier.length > 0 && (
             <button
               type="button"
