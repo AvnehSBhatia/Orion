@@ -87,7 +87,8 @@ public enum WindowCapture {
             }
         }
         if !request.isBrowser || request.readPageText {
-            let walk = AXReader.walkText(window, start: start, skip: profile?.skipIdentifiers ?? [],
+            let root = profile?.readRoot(in: window, start: start) ?? window
+            let walk = AXReader.walkText(root, start: start, skip: profile?.skipIdentifiers ?? [],
                                          dropAreaLabels: profile?.dropAreaLabels ?? false)
             // Both the record's title and the window's own (Mail's mailbox name and count).
             let lines = TextCleanup.dropTitleLines(TextCleanup.dropTitleLines(walk.lines, title: snapshot.windowTitle), title: title)
