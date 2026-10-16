@@ -10,12 +10,7 @@ let package = Package(
         // Capture logic with no UI: reading, browser URLs, exclusions, segmentation.
         .target(name: "CaptureCore", path: "Sources/CaptureCore"),
         // The menu bar app.
-        .executableTarget(
-            name: "Constellation",
-            dependencies: ["CaptureCore"],
-            path: "Sources/Constellation",
-            resources: [.process("Resources")]
-        ),
+        .executableTarget(name: "Constellation", dependencies: ["CaptureCore"], path: "Sources/Constellation"),
         // Swift Testing: the Command Line Tools ship it, but not XCTest (that needs Xcode).
         .testTarget(name: "CaptureCoreTests", dependencies: ["CaptureCore"], path: "Tests/CaptureCoreTests"),
     ]
