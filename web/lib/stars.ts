@@ -1,7 +1,7 @@
 // Live graph data in the Star shape the map and the project page are drawn from.
 
 import type { Domain, GraphResponse, PublicNode, Source } from "@/lib/api/types";
-import { clip, host, sourceLabel } from "@/lib/format";
+import { clip, host, isReadable, sourceLabel } from "@/lib/format";
 import { statusLabel } from "@/lib/status";
 import { ago, shortDate } from "@/lib/time";
 
@@ -136,6 +136,8 @@ export function toStars(graph: GraphResponse | null, sources: Source[], now = Da
       change: changeLine(source, node.id),
     }));
     const read = node.readLinks[0];
+    // The page it was captured from, unless that was a search or a new tab.
+    const page = host(node.sourceRef) && isReadable(node.sourceRef) ? node.sourceRef : null;
 
     return {
       id: node.id,
@@ -144,8 +146,8 @@ export function toStars(graph: GraphResponse | null, sources: Source[], now = Da
       status: LIVE_STATUS[node.status],
       summary: node.summary || "No summary yet.",
       todo: node.todo,
-      read: read?.title ?? (host(node.sourceRef) ? clip(node.sourceRef.replace(/^https?:\/\//, ""), 60) : "Nothing linked yet"),
-      readUrl: read?.url ?? (host(node.sourceRef) ? node.sourceRef : undefined),
+      read: read?.title ?? (page ? clip(page.replace(/^https?:\/\//, ""), 60) : "Nothing linked yet"),
+      readUrl: read?.url ?? page ?? undefined,
       updated: ago(node.updatedAt, now),
       sellable: node.sellable,
       owner: node.owner ?? "Unassigned",
