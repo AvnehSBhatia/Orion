@@ -6,7 +6,8 @@ struct AppProfileTests {
     @Test("Mail skips the mailbox list and the list of emails, and titles by the open email")
     func mail() throws {
         let mail = try #require(AppProfile.forApp("com.apple.mail"))
-        #expect(mail.skipIdentifiers == ["MailboxesOutlineView", "Mail.messageList", "Mail.categoryBucket."])
+        #expect(mail.skipIdentifiers == ["MailboxesOutlineView", "Mail.messageList", "Mail.categoryBucket.", "activityView"])
+        #expect(mail.focusIdentifiers == ["_MAIL_MESSAGE_BODY"]) // just the open email's body
         #expect(mail.title?.list == "Mail.messageList")
         #expect(mail.title?.fields.first == "Mail.messageList.cell.view.subjectLabel")
     }
