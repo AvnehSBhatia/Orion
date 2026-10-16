@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useSession } from "@/components/auth/session";
 import { PageFrame } from "@/components/settings/PageFrame";
 import { CopyButton, CopyField } from "@/components/ui/CopyButton";
@@ -180,7 +181,15 @@ function MacPanel() {
     <Panel
       id="mac"
       title="Connect your Mac"
-      description="The Constellation app on your Mac sends the work you approve in its Outbox to Orion. Make a code here and enter it in the app."
+      description={
+        <>
+          The Constellation app on your Mac sends the work you approve in its Outbox to Orion.{" "}
+          <Link href="/download" className="text-ink underline underline-offset-4">
+            Install it
+          </Link>
+          , then make a code here and enter it in the app.
+        </>
+      }
     >
       <div className="flex flex-wrap items-center gap-3">
         <PrimaryButton type="button" onClick={make} disabled={busy}>

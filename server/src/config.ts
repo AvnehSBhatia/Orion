@@ -82,6 +82,10 @@ export const config = {
   get dataDir(): string {
     return process.env.DATA_DIR || "data";
   },
+  /** Built Mac app releases served by /api/downloads/mac (see `downloads/mac.ts`). Not in the data backups. */
+  get downloadsDir(): string {
+    return process.env.DOWNLOADS_DIR || `${this.dataDir}/downloads`;
+  },
   /** light (default): keep a shrunk screenshot, skip OCR and pruning, which ate the server's CPU. full: OCR and prune every capture. */
   get ingestImages(): "light" | "full" {
     return process.env.INGEST_IMAGES === "full" ? "full" : "light";

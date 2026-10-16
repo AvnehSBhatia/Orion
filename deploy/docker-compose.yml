@@ -17,6 +17,7 @@ services:
     environment:
       NODE_ENV: production
       DATA_DIR: /data
+      DOWNLOADS_DIR: /downloads
       MODEL_CACHE_DIR: /models
       COOKIE_SECURE: "true"
       TRUST_PROXY: "true"
@@ -28,6 +29,8 @@ services:
       # Host directory that scripts/backup.ts writes into; deploy/backup/orion-backup.sh ships it offsite.
       # Create it first: mkdir -p deploy/backups && sudo chown 1000:1000 deploy/backups && chmod 700 deploy/backups
       - ${BACKUP_HOST_DIR:-./backups}:/backups
+      # Mac app releases (mac/Constellation/scripts/package.sh output) served by /api/downloads/mac. Read only.
+      - ${DOWNLOADS_HOST_DIR:-./downloads}:/downloads:ro
     expose:
       - "3001"
     # Local EmbeddingGemma peaks around 2GB during an image embed. Docker restarts the container if it is OOM-killed.
