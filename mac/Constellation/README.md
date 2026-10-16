@@ -37,7 +37,10 @@ git -C "$root" fetch origin cursor/mac-shell-nav-caef
 git -C "$root" switch cursor/mac-shell-nav-caef
 git -C "$root" pull --ff-only origin cursor/mac-shell-nav-caef
 git -C "$root" log -1 --oneline
-grep -q 'Text("Orion")' "$root/mac/Constellation/Sources/Constellation/UI/ShellView.swift"
+if ! grep -q 'Text("Orion")' "$root/mac/Constellation/Sources/Constellation/UI/ShellView.swift"; then
+  echo "Sidebar source still says Constellation. Leaving the open app alone."
+  exit 1
+fi
 cd "$root/mac/Constellation"
 swift build -c release
 if [ -n "$pid" ]; then kill "$pid" || true; fi
