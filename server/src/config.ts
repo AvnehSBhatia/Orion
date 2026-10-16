@@ -2,18 +2,56 @@
 export const config = {
   /** Composes each person's default dashboard from their role. Needs structured outputs on OpenRouter. */
   get chatModel(): string {
-    return process.env.OPENROUTER_CHAT_MODEL || "deepseek/deepseek-v4-flash";
+    return process.env.OPENROUTER_CHAT_MODEL || "deepseek/deepseek-v4.1-flash";
   },
   /**
-   * Interactive answers, the brief, and dashboard edits. Measured on OpenRouter (8 items, 200 tokens):
-   * gemini-2.5-flash-lite starts in about 0.5s, deepseek-v4-flash in about 1.6 to 2.1s.
+   * Interactive answers, the brief, and dashboard edits. deepseek-v4.1-flash starts in about 0.9s (gemini-2.5-flash-lite
+   * 0.5s) but costs less on our prompts: they are mostly input, at $0.018 per million tokens against $0.10.
    */
   get fastModel(): string {
-    return process.env.OPENROUTER_FAST_MODEL || "google/gemini-2.5-flash-lite";
+    return process.env.OPENROUTER_FAST_MODEL || "deepseek/deepseek-v4.1-flash";
   },
-  /** Turns captured pages and commits into graph nodes. */
+  /** The Jev router in chat: off sends every message to the chat model. */
+  get routerOn(): boolean {
+    return process.env.ROUTER !== "off" && !!this.openRouterKey;
+  },
+  /** Decides whether a message goes to Jev or the chat model. A yes/no decision model. */
+  get routerModel(): string {
+    return process.env.ROUTER_MODEL || "nace-ai/drex-v2.0";
+  },
+  /** Handles what the router sends it: picks the task and the work items, from up to 255 item cards at once. */
+  get jevModel(): string {
+    return process.env.JEV_MODEL || "~typesafe/jev-latest";
+  },
+  /** Least router probability that sends a message to Jev. Drex rates lookups 0.35 to 0.8 and writing under 0.01. */
+  get routerJevMin(): number {
+    const n = Number(process.env.ROUTER_JEV_MIN);
+    return Number.isFinite(n) && n > 0 && n < 1 ? n : 0.25;
+  },
+  /** Drex checks each capture for work before extraction; off extracts everything. */
+  get workGateOn(): boolean {
+    return process.env.WORK_GATE !== "off" && !!this.openRouterKey;
+  },
+  /** Least Drex probability of work that lets a capture through to extraction. Low: a missed capture is lost work. */
+  get workGateMin(): number {
+    const n = Number(process.env.WORK_GATE_MIN);
+    return Number.isFinite(n) && n > 0 && n < 1 ? n : 0.1;
+  },
+  get routerTimeoutMs(): number {
+    return Number(process.env.ROUTER_TIMEOUT_MS) || 3_000;
+  },
+  /**
+   * Turns captures and commits into graph nodes; also labels areas and writes digests in the background. Claude
+   * Haiku 5.5, about $0.00066 a capture. On 59 captures the cheaper models found well under its items: the closest,
+   * deepseek-v4.1-flash, matched 60% at $0.00052; upstage/solar-mini4 51% at $0.00022.
+   */
   get extractModel(): string {
-    return process.env.OPENROUTER_EXTRACT_MODEL || "deepseek/deepseek-v4-flash";
+    return process.env.OPENROUTER_EXTRACT_MODEL || "anthropic/claude-haiku-5.5";
+  },
+  /** Mac work blocks from one person extracted per model call. 1 sends each on its own. */
+  get extractBatch(): number {
+    const n = Number(process.env.EXTRACT_BATCH);
+    return Number.isInteger(n) && n > 0 ? Math.min(n, 10) : 5;
   },
   get openRouterKey(): string | undefined {
     return process.env.OPENROUTER_API_KEY || undefined;

@@ -7,7 +7,7 @@ Chrome extension ──captures──▶ ┐
 codebase agent / CI ─commits─▶ ├─▶ backend (Next.js API, :3001) ──▶ SQLite per org (data/orgs/<org>.db)
                                │        │            │
 web dashboard (:3000) ◀────────┘        │            └─▶ MCP /api/mcp ──▶ Claude Code, Cursor, Codex
-                                        └─▶ OpenRouter (extraction, chat), EmbeddingGemma 2 in process
+                                        └─▶ OpenRouter (extraction, chat, Jev router), EmbeddingGemma 2 in process
 ```
 
 ## Layout
@@ -77,7 +77,7 @@ Orion runs on one box: the API, the dashboard, and Caddy for automatic HTTPS. Th
 Box size depends on where embeddings run:
 
 - 1 GB: use `EMBED_PROVIDER=openrouter` and swap.
-- 2 GB: comfortable with `EMBED_PROVIDER=openrouter`.
+- 2 GB: comfortable with `EMBED_PROVIDER=openrouter`, or `EMBED_PROVIDER=gemma` with `GEMMA_DTYPE=q4` and `EMBED_SCREENSHOTS=never` (about 1 GB peak, no embedding bill; fine for Mac captures, which have no screenshots).
 - 4 GB: needed to run EmbeddingGemma locally (`EMBED_PROVIDER=gemma`). The model takes about 1 GB once loaded; an image embed peaks near 2 GB more, so use 8 GB if you set `EMBED_SCREENSHOTS=always`. Run `npm run embed-models` in `server/` at deploy time to download it into a persistent `MODEL_CACHE_DIR`.
 
 Run one server process per `DATA_DIR`: retention (hourly) and extraction retries run inside it. Back up with `npm run backup` in `server/` (SQLite's online backup API, safe while the server runs; never `cp` a live database). Monitor `GET /api/health` (503 when a check fails).

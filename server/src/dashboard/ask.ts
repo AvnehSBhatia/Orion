@@ -72,6 +72,8 @@ function sourceHosts(graph: Pick<GraphResponse, "nodes">): string[] {
 export type AskDeps = ComposeDeps & {
   /** Called with the instant draft before the model is asked, so the UI can show it right away. */
   onDraft?: (spec: DashboardSpec) => void;
+  /** Reshape even when the words do not read as a layout request (the Jev router already decided it is one). */
+  force?: boolean;
 };
 
 export type AskTrace = { draft: boolean; modelCalls: number; promptChars: number; ms: number };
@@ -86,12 +88,12 @@ export async function askDashboard(
   message: string,
   current: DashboardSpec,
   graph: Pick<GraphResponse, "nodes">,
-  { llm, model = config.fastModel, now = new Date(), onDraft }: AskDeps,
+  { llm, model = config.fastModel, now = new Date(), onDraft, force }: AskDeps,
   trace?: AskTrace,
 ): Promise<DashboardSpec | null> {
   const t0 = Date.now();
   const intent = parseAsk(message, user, graph);
-  if (!isAsk(message, intent)) return null;
+  if (!force && !isAsk(message, intent)) return null;
   const parsed = draftDashboard(user, message, current, graph, now, intent);
   const draft = parsed && intent.only ? enforceOnly(parsed) : parsed;
   if (trace) trace.draft = !!draft;

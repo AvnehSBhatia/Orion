@@ -4,6 +4,7 @@ import { DOMAINS, NODE_TYPES, RELATIONS, STATUSES, type Domain, type FeatureCard
 import type { ExtractedNode, GraphUpdate, StoredNode } from "@/db/store";
 import { HttpError } from "@/http/error";
 import { completeJson, nullable, OpenRouterClient, type LlmClient } from "./openrouter";
+import { holdsWork } from "./workGate";
 
 /**
  * The page as visible text; the screenshot goes to the embedder, not the extractor.
@@ -11,13 +12,15 @@ import { completeJson, nullable, OpenRouterClient, type LlmClient } from "./open
  */
 export type CaptureInput = { url: string; title: string; text: string; changes?: { since: string; diff: string } };
 export type CodeInput = { repo: string; commitSha: string; files: { path: string; diff: string }[]; cards?: FeatureCard[] };
-export type KnownNode = Pick<StoredNode, "id" | "label" | "type" | "domain">;
+export type KnownNode = Pick<StoredNode, "id" | "label" | "type" | "domain"> & { updatedAt?: string };
 /** Who the org is and who sent the document, so the model can tell this org's work from everything else. */
 export type ExtractContext = { org: Org | null; author: { name: string; role: string } | null };
 
 export interface Extractor {
   fromCapture(input: CaptureInput, known: KnownNode[], about?: ExtractContext): Promise<GraphUpdate>;
   fromCode(input: CodeInput, known: KnownNode[], about?: ExtractContext): Promise<GraphUpdate>;
+  /** Several screens from one person in one call, one update per input in order (Mac work blocks). */
+  fromCaptures?(inputs: CaptureInput[], known: KnownNode[], about?: ExtractContext): Promise<GraphUpdate[]>;
 }
 
 const hostIn = (url: string, sites: string[]) => {
@@ -70,7 +73,13 @@ export function aboutLines(about: ExtractContext | undefined, url?: string): str
 const MAX_CAPTURE_NODES = 8;
 const MAX_CODE_NODES = 8;
 const MAX_KNOWN_IN_PROMPT = 200;
-
+/**
+ * Known items sent with a capture: the ones its words name, then the most recently updated. The full list was about
+ * 70% of a capture's input tokens; on 12 Mac blocks the 30 most relevant cost 37% less and found the same items.
+ */
+export const RELEVANT_KNOWN = 30;
+/** For a batch of blocks, which name more items between them. */
+const RELEVANT_KNOWN_BATCH = 45;
 
 const nodeProps = {
   label: { type: "string", description: "Short name, at most 40 characters. Reuse a known label exactly when it is the same thing." },
@@ -118,6 +127,37 @@ const BUILD_UPDATE_SCHEMA = {
   },
 };
 
+// Mac blocks: no to-do or links (a work block rarely has either) and a shorter summary, as output is half the cost.
+const { todo: _todo, readLinks: _readLinks, ...blockNodeProps } = nodeProps;
+const BLOCK_BATCH_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["blocks"],
+  properties: {
+    blocks: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["block", "nodes", "edges"],
+        properties: {
+          block: { type: "integer", description: "The block's number." },
+          nodes: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: Object.keys(blockNodeProps),
+              properties: { ...blockNodeProps, summary: { type: "string", description: "At most 100 characters, plain language." } },
+            },
+          },
+          edges: edgesSchema,
+        },
+      },
+    },
+  },
+};
+
 const CODE_TYPES: NodeType[] = ["feature", "task", "milestone", "decision", "risk"];
 const codeNodeProps = {
   ...nodeProps,
@@ -157,6 +197,10 @@ The input starts with what changed on this page since the same person's previous
 State the change itself with its old and new values and who made it, for example a summary like "Daily budget raised from $900 to $1,200 by Mina Rao." Use the person in "Sent by" unless the page names someone else.
 Put the change on the node it belongs to, reusing a known label exactly when the page is about that thing. Set status when the change implies one (for example paused or over budget is at_risk, launched or approved is done, resumed is on_track).
 Use the page text only for context: do not restate unchanged things from it. If the change is only cosmetic (counters, timestamps, layout) and the page has no other work on it, return empty lists.`;
+
+const BATCH_PROMPT = `
+The input holds several numbered blocks: separate screens the same person had open, one after another. Read each block as fully as if it were the only one: list every item it shows (the main one and every other project, deal, ticket, or decision it names with a status, owner, or date), up to ${MAX_CAPTURE_NODES} per block.
+Answer with one entry per block that has work, giving its number. A block with nothing useful is left out. When two blocks show the same thing, use the same label in both.`;
 
 const CODE_PROMPT = `You read a code change and write feature cards that anyone on the team, including sales, can understand and repeat.
 For each meaningful change: a label, a plain-language summary of what a customer or teammate gets (not how the code works), status, release, and sellable.
@@ -203,6 +247,9 @@ const nodeOut = z.object({
 });
 const edgeOut = z.object({ source: z.string(), target: z.string(), relation: z.enum(RELATIONS) });
 const captureOut = z.object({ nodes: z.array(nodeOut), edges: z.array(edgeOut) });
+const batchOut = z.object({
+  blocks: z.array(z.object({ block: z.number().int(), nodes: z.array(nodeOut.omit({ todo: true, readLinks: true })), edges: z.array(edgeOut) })),
+});
 const codeOut = z.object({
   nodes: z.array(
     nodeOut.omit({ domain: true }).extend({
@@ -220,6 +267,26 @@ function parseModelOutput<T>(schema: z.ZodType<T>, raw: unknown): T {
   throw new HttpError(422, "model output did not match the contract");
 }
 
+const words = (text: string) => text.toLowerCase().match(/[a-z0-9][a-z0-9-]{2,}/g) ?? [];
+
+/** The known items most likely on this page: by how many of their label's words it contains, then the newest. */
+export function relevantKnown(known: KnownNode[], text: string, max = RELEVANT_KNOWN): KnownNode[] {
+  if (known.length <= max) return known;
+  const seen = new Set(words(text));
+  const lower = text.toLowerCase();
+  return known
+    .map((n) => {
+      const w = words(n.label);
+      const hits = w.filter((x) => seen.has(x)).length;
+      // A label spelled out on the page wins outright; otherwise the share of its words the page has.
+      const score = lower.includes(n.label.toLowerCase()) ? 10 : w.length ? (hits / w.length) * (hits >= 2 || w.length === 1 ? 1 : 0.5) : 0;
+      return { n, score, at: n.updatedAt ? Date.parse(n.updatedAt) : 0 };
+    })
+    .sort((a, b) => b.score - a.score || b.at - a.at)
+    .slice(0, max)
+    .map(({ n }) => n);
+}
+
 function knownList(known: KnownNode[]): string {
   if (!known.length) return "Known nodes: none yet.";
   const lines = known.slice(0, MAX_KNOWN_IN_PROMPT).map((n) => `- [${n.type}, ${n.domain}] ${n.label}`);
@@ -230,7 +297,8 @@ function knownList(known: KnownNode[]): string {
 export function captureUser(input: CaptureInput, known: KnownNode[], about?: ExtractContext): string {
   const change = input.changes ? `What changed since the last capture (at ${input.changes.since}):\n${input.changes.diff}\n\n` : "";
   const page = input.changes ? "Page text now (for context, may be shortened):" : "Page text:";
-  return `${aboutLines(about, input.url)}${knownList(known)}\n\nURL: ${input.url}\nTitle: ${input.title}\n${change}${page}\n${input.text}`;
+  const shown = relevantKnown(known, `${input.title}\n${input.url}\n${input.changes?.diff ?? ""}\n${input.text}`);
+  return `${aboutLines(about, input.url)}${knownList(shown)}\n\nURL: ${input.url}\nTitle: ${input.title}\n${change}${page}\n${input.text}`;
 }
 
 /** Graph extraction through an OpenAI-compatible model (DeepSeek on OpenRouter by default). */
@@ -238,9 +306,13 @@ export class LlmExtractor implements Extractor {
   constructor(
     private readonly llm: LlmClient = new OpenRouterClient(),
     private readonly model = config.extractModel,
+    /** Says whether a capture holds work before it is extracted (`workGate.ts`); null extracts everything. */
+    private readonly gate: ((input: CaptureInput, about?: ExtractContext) => Promise<boolean>) | null = config.workGateOn ? holdsWork : null,
   ) {}
 
   async fromCapture(input: CaptureInput, known: KnownNode[], about?: ExtractContext): Promise<GraphUpdate> {
+    // An empty update is how every caller already treats a page with no work in it.
+    if (this.gate && !(await this.gate(input, about))) return { nodes: [], edges: [] };
     const raw = await completeJson(this.llm, {
       model: this.model,
       purpose: "extract",
@@ -252,6 +324,36 @@ export class LlmExtractor implements Extractor {
     const out = parseModelOutput(captureOut, raw);
     const nodes: ExtractedNode[] = out.nodes.slice(0, MAX_CAPTURE_NODES).map((n) => ({ ...n, sellable: null }));
     return { nodes, edges: out.edges };
+  }
+
+  /**
+   * Mac work blocks, several per call: the instructions, org profile and known items are paid for once per batch
+   * instead of once per block. Blocks the work gate turns away are left out of the call. A capture with `changes`
+   * should go through `fromCapture`, whose prompt is about the change.
+   */
+  async fromCaptures(inputs: CaptureInput[], known: KnownNode[], about?: ExtractContext): Promise<GraphUpdate[]> {
+    const out: GraphUpdate[] = inputs.map(() => ({ nodes: [], edges: [] }));
+    const sent: number[] = [];
+    // One at a time: Drex rate-limits bursts.
+    for (const [i, input] of inputs.entries()) if (!this.gate || (await this.gate(input, about))) sent.push(i);
+    if (!sent.length) return out;
+    const blocks = sent.map((i, k) => `Block ${k + 1}\nURL: ${inputs[i].url}\nTitle: ${inputs[i].title}\n${inputs[i].text}`);
+    const shown = relevantKnown(known, blocks.join("\n"), sent.length > 1 ? RELEVANT_KNOWN_BATCH : RELEVANT_KNOWN);
+    const raw = await completeJson(this.llm, {
+      model: this.model,
+      purpose: "extract",
+      name: "build_updates",
+      schema: BLOCK_BATCH_SCHEMA,
+      system: `${EXTRACT_PROMPT}\n${BATCH_PROMPT}`,
+      user: `${aboutLines(about)}${knownList(shown)}\n\n${blocks.join("\n\n")}`,
+    });
+    for (const b of parseModelOutput(batchOut, raw).blocks) {
+      const i = sent[b.block - 1];
+      if (i === undefined) continue;
+      const nodes: ExtractedNode[] = b.nodes.slice(0, MAX_CAPTURE_NODES).map((n) => ({ ...n, todo: null, readLinks: [], sellable: null }));
+      out[i] = { nodes: [...out[i].nodes, ...nodes], edges: [...out[i].edges, ...b.edges] };
+    }
+    return out;
   }
 
   async fromCode(input: CodeInput, known: KnownNode[], about?: ExtractContext): Promise<GraphUpdate> {

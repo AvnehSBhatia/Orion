@@ -1,8 +1,9 @@
 // Extraction state per stored source, and the background retry of extractions that failed on a provider error.
+import { config } from "@/config";
 import type { Store, GraphUpdate, StoredSource } from "@/db/store";
 import { HttpError } from "@/http/error";
 import { logJson } from "@/jobs/log";
-import type { Extractor, ExtractContext, KnownNode } from "@/llm/extract";
+import type { CaptureInput, Extractor, ExtractContext, KnownNode } from "@/llm/extract";
 import { BudgetExceededError, overBudget } from "@/usage";
 import { changesOf, pageOf } from "./diff";
 
@@ -83,14 +84,23 @@ export function duePendingCount(store: Store, now = Date.now()): number {
   ).n;
 }
 
-export type RetryReport = { tried: number; extracted: number; notWork: number; failed: number; stillPending: number; overBudget?: true };
+export type RetryReport = {
+  tried: number;
+  extracted: number;
+  notWork: number;
+  failed: number;
+  stillPending: number;
+  /** Mac blocks marked done unread: the same person had the same screen extracted within the day. */
+  repeats: number;
+  overBudget?: true;
+};
 
 function aboutFor(store: Store, authorId: string | null): ExtractContext {
   const u = authorId ? store.getUser(authorId) : null;
   return { org: store.getOrg(), author: u ? { name: u.name, role: u.role } : null };
 }
 
-const known = (store: Store): KnownNode[] => store.listNodes().map(({ id, label, type, domain }) => ({ id, label, type, domain }));
+const known = (store: Store): KnownNode[] => store.listNodes().map(({ id, label, type, domain, updatedAt }) => ({ id, label, type, domain, updatedAt }));
 
 /** Page text sent to the model on a retry (the capture path sends at most this much too). */
 const MAX_RETRY_TEXT = 30_000;
@@ -103,15 +113,57 @@ function filesOf(text: string): { path: string; diff: string }[] {
   return files;
 }
 
-async function extractAgain(store: Store, extractor: Extractor, s: StoredSource): Promise<GraphUpdate> {
-  const about = aboutFor(store, s.authorId);
-  if (s.kind === "code") {
-    const at = s.ref.lastIndexOf("@");
-    return extractor.fromCode({ repo: s.ref.slice(0, at), commitSha: s.ref.slice(at + 1), files: filesOf(s.text) }, known(store), about);
-  }
+function captureInput(s: StoredSource): CaptureInput {
   const changes = changesOf(s.text);
   const seen = s.ocrText && s.imageStatus === "kept" ? `${pageOf(s.text)}\n\nText in the screenshot:\n${s.ocrText}` : pageOf(s.text);
-  return extractor.fromCapture({ url: s.ref, title: s.title, text: seen.slice(0, MAX_RETRY_TEXT), ...(changes && { changes }) }, known(store), about);
+  return { url: s.ref, title: s.title, text: seen.slice(0, MAX_RETRY_TEXT), ...(changes && { changes }) };
+}
+
+/** Mac blocks go in batches when the extractor takes them; everything else one source per call. */
+const batchable = (extractor: Extractor, s: StoredSource) => s.kind === "mac" && !!extractor.fromCaptures;
+
+/** One update per source in `group`: a batch of one person's Mac blocks, or a single source. */
+async function extractAgain(store: Store, extractor: Extractor, group: StoredSource[]): Promise<GraphUpdate[]> {
+  const s = group[0];
+  const about = aboutFor(store, s.authorId);
+  if (batchable(extractor, s)) return extractor.fromCaptures!(group.map(captureInput), known(store), about);
+  if (s.kind === "code") {
+    const at = s.ref.lastIndexOf("@");
+    return [await extractor.fromCode({ repo: s.ref.slice(0, at), commitSha: s.ref.slice(at + 1), files: filesOf(s.text) }, known(store), about)];
+  }
+  return [await extractor.fromCapture(captureInput(s), known(store), about)];
+}
+
+const DAY_MS = 86_400_000;
+
+/** A Mac block with the same window and text as one the same person had extracted within a day: nothing new to read. */
+function isRepeat(store: Store, s: StoredSource): boolean {
+  if (s.kind !== "mac") return false;
+  const from = new Date(Date.parse(s.createdAt) - DAY_MS).toISOString();
+  const to = new Date(Date.parse(s.createdAt) + DAY_MS).toISOString();
+  return !!store.db
+    .prepare(
+      `SELECT 1 FROM sources WHERE ref = ? AND created_at BETWEEN ? AND ? AND kind = 'mac' AND id <> ? AND author_id IS ? AND title = ? AND text = ?
+         AND (extraction IS NULL OR extraction = 'done') LIMIT 1`,
+    )
+    .get(s.ref, from, to, s.id, s.authorId, s.title, s.text);
+}
+
+/** The due sources in calls: one person's Mac blocks in batches of `config.extractBatch`, others one each. */
+function groups(extractor: Extractor, sources: StoredSource[]): StoredSource[][] {
+  const out: StoredSource[][] = [];
+  const open = new Map<string, StoredSource[]>();
+  for (const s of sources) {
+    if (!batchable(extractor, s)) {
+      out.push([s]);
+      continue;
+    }
+    const key = s.authorId ?? "";
+    let g = open.get(key);
+    if (!g || g.length >= config.extractBatch) open.set(key, (g = [])), out.push(g);
+    g.push(s);
+  }
+  return out;
 }
 
 /** Merges a late extraction into the graph as if it had come with the capture: nodes, what the source changed, touches. */
@@ -139,7 +191,7 @@ export async function retryPendingExtractions(
   { now = Date.now(), limit = 20 }: { now?: number; limit?: number } = {},
 ): Promise<RetryReport> {
   ensureExtractionColumns(store);
-  const report: RetryReport = { tried: 0, extracted: 0, notWork: 0, failed: 0, stillPending: 0 };
+  const report: RetryReport = { tried: 0, extracted: 0, notWork: 0, failed: 0, stillPending: 0, repeats: 0 };
   const ids = (
     store.db
       .prepare("SELECT id FROM sources WHERE extraction = 'pending' AND extraction_next_at <= ? ORDER BY created_at LIMIT ?")
@@ -148,35 +200,54 @@ export async function retryPendingExtractions(
   if (!ids.length) return report;
   if (overBudget(store, new Date(now))) return { ...report, overBudget: true };
   const max = extractionEnv.maxAttempts;
+  const due: StoredSource[] = [];
+  const pass = new Set<string>();
   for (const s of store.getSources(ids)) {
-    report.tried++;
+    if (isRepeat(store, s)) {
+      store.db.prepare("UPDATE sources SET extraction = 'done', extraction_next_at = NULL, extraction_error = NULL WHERE id = ?").run(s.id);
+      report.repeats++;
+      continue;
+    }
+    // A repeat of a block in this same pass waits for the next one, when the first is done and it matches.
+    const key = s.kind === "mac" ? `${s.authorId}\n${s.ref}\n${s.title}\n${s.text}` : s.id;
+    if (pass.has(key)) continue;
+    pass.add(key);
+    due.push(s);
+  }
+  for (const group of groups(extractor, due)) {
+    report.tried += group.length;
     try {
-      const update = await extractAgain(store, extractor, s);
-      if (s.kind === "extension" && !update.nodes.length && !update.edges.length) {
-        store.db.prepare("DELETE FROM sources WHERE id = ?").run(s.id);
-        report.notWork++;
-      } else {
-        applyLate(store, s, update);
-        report.extracted++;
-      }
+      const updates = await extractAgain(store, extractor, group);
+      group.forEach((s, i) => {
+        const update = updates[i] ?? { nodes: [], edges: [] };
+        if (s.kind === "extension" && !update.nodes.length && !update.edges.length) {
+          store.db.prepare("DELETE FROM sources WHERE id = ?").run(s.id);
+          report.notWork++;
+        } else {
+          applyLate(store, s, update);
+          report.extracted++;
+        }
+      });
     } catch (err) {
       if (err instanceof BudgetExceededError) {
         report.overBudget = true;
-        report.tried--;
+        report.tried -= group.length;
         break;
       }
-      if (!(err instanceof HttpError)) logJson("error", "extraction retry crashed", { sourceId: s.id, err });
-      const row = store.db.prepare("SELECT extraction_attempts AS n FROM sources WHERE id = ?").get(s.id) as { n: number };
-      const attempts = row.n + 1;
-      if (attempts >= max) {
-        store.db.prepare("UPDATE sources SET extraction = 'failed', extraction_attempts = ?, extraction_next_at = NULL, extraction_error = ? WHERE id = ?").run(attempts, reason(err), s.id);
-        report.failed++;
-        logJson("warn", "extraction gave up", { sourceId: s.id, attempts, error: reason(err) });
-      } else {
-        store.db
-          .prepare("UPDATE sources SET extraction_attempts = ?, extraction_next_at = ?, extraction_error = ? WHERE id = ?")
-          .run(attempts, new Date(now + retryDelayMs(attempts)).toISOString(), reason(err), s.id);
-        report.stillPending++;
+      for (const s of group) {
+        if (!(err instanceof HttpError)) logJson("error", "extraction retry crashed", { sourceId: s.id, err });
+        const row = store.db.prepare("SELECT extraction_attempts AS n FROM sources WHERE id = ?").get(s.id) as { n: number };
+        const attempts = row.n + 1;
+        if (attempts >= max) {
+          store.db.prepare("UPDATE sources SET extraction = 'failed', extraction_attempts = ?, extraction_next_at = NULL, extraction_error = ? WHERE id = ?").run(attempts, reason(err), s.id);
+          report.failed++;
+          logJson("warn", "extraction gave up", { sourceId: s.id, attempts, error: reason(err) });
+        } else {
+          store.db
+            .prepare("UPDATE sources SET extraction_attempts = ?, extraction_next_at = ?, extraction_error = ? WHERE id = ?")
+            .run(attempts, new Date(now + retryDelayMs(attempts)).toISOString(), reason(err), s.id);
+          report.stillPending++;
+        }
       }
     }
   }

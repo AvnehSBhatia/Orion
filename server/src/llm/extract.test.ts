@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fakeLlm, jsonTurn } from "@/test/llm";
-import { cardsToUpdate, domainForRole, LlmExtractor } from "./extract";
+import { cardsToUpdate, domainForRole, LlmExtractor, relevantKnown, RELEVANT_KNOWN, type KnownNode } from "./extract";
 
 type Schema = { type?: string; properties?: Record<string, Schema>; items?: Schema; anyOf?: Schema[]; required?: string[]; additionalProperties?: boolean };
 
@@ -112,5 +112,46 @@ describe("domainForRole", () => {
     const cards = [{ label: "Launch post", summary: "s", status: "in_beta" as const, paths: ["a.md"] }];
     expect(cardsToUpdate(cards, "marketing").nodes[0].domain).toBe("marketing");
     expect(cardsToUpdate(cards).nodes[0].domain).toBe("engineering");
+  });
+});
+
+describe("known items in the prompt", () => {
+  const kn = (label: string, updatedAt = "2026-10-01T00:00:00.000Z"): KnownNode => ({ id: label, label, type: "task", domain: "engineering", updatedAt });
+  const many = Array.from({ length: 100 }, (_, i) => kn(`Filler item ${i}`, `2026-09-${String((i % 28) + 1).padStart(2, "0")}T00:00:00.000Z`));
+
+  it("sends the items a page names first, then the newest, and no more than the cap", () => {
+    const named = [kn("NW-482 Escalation routing"), kn("Acme renewal")];
+    const out = relevantKnown([...many, ...named], "NW-482 drops tickets in escalation routing. Blocks the Acme renewal.");
+    expect(out).toHaveLength(RELEVANT_KNOWN);
+    expect(out.slice(0, 2).map((n) => n.label).sort()).toEqual(["Acme renewal", "NW-482 Escalation routing"]);
+    expect(out[2].updatedAt).toBe("2026-09-28T00:00:00.000Z");
+  });
+
+  it("sends a short list whole", () => {
+    expect(relevantKnown(many.slice(0, 5), "anything")).toHaveLength(5);
+  });
+});
+
+describe("Mac blocks in one call", () => {
+  const block = (title: string) => ({ url: "mac://Linear", title, text: `${title}. Status: blocked.` });
+  const node = (label: string) => ({ label, type: "task", domain: "engineering", summary: "Blocked.", owner: null, status: "blocked" });
+
+  it("sends the blocks the gate lets through in one request and gives each block its own update", async () => {
+    const { llm, requests } = fakeLlm([jsonTurn({ blocks: [{ block: 2, nodes: [node("Routing fix")], edges: [] }, { block: 1, nodes: [node("Pricing page")], edges: [] }] })]);
+    const ex = new LlmExtractor(llm, "test/model", async (input) => input.title !== "Lunch menu");
+    const out = await ex.fromCaptures([block("Pricing page"), block("Lunch menu"), block("Routing fix")], []);
+    expect(requests).toHaveLength(1);
+    expect(requests[0].messages.at(-1)!.content).toContain("Block 2\nURL: mac://Linear\nTitle: Routing fix");
+    expect(requests[0].messages.at(-1)!.content).not.toContain("Lunch menu");
+    assertStrict((requests[0].response_format as { json_schema: { schema: Schema } }).json_schema.schema);
+    expect(out.map((u) => u.nodes.map((n) => n.label))).toEqual([["Pricing page"], [], ["Routing fix"]]);
+    expect(out[0].nodes[0]).toMatchObject({ todo: null, readLinks: [], sellable: null });
+  });
+
+  it("makes no call when the gate turns every block away", async () => {
+    const { llm, requests } = fakeLlm([]);
+    const out = await new LlmExtractor(llm, "test/model", async () => false).fromCaptures([block("a"), block("b")], []);
+    expect(requests).toHaveLength(0);
+    expect(out).toEqual([{ nodes: [], edges: [] }, { nodes: [], edges: [] }]);
   });
 });

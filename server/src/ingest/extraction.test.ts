@@ -7,6 +7,7 @@ import { deps, extracted, memoryStore } from "@/test/helpers";
 import { BudgetExceededError, recordUsage } from "@/usage";
 import { duePendingCount, extractionEnv, extractionState, retryDelayMs, retryPendingExtractions } from "./extraction";
 import { cleanCaptureUrl, ingestCapture, ingestCode } from "./pipeline";
+import { submitWorkBlocks } from "@/mac/workBlocks";
 
 const T0 = Date.parse("2026-10-14T12:00:00Z");
 const capture = {
@@ -173,5 +174,63 @@ describe("budget", () => {
     expect(r).toMatchObject({ tried: 0, overBudget: true });
     expect(ex.calls).toBe(0);
     expect(extractionState(store, sourceId!)).toMatchObject({ state: "pending", attempts: 1 });
+  });
+});
+
+describe("Mac blocks", () => {
+  const block = (id: string, title: string, snippet = `${title} is blocked on infra.`) => ({
+    local_id: id,
+    started_at: "2026-10-14T10:00:00.000Z",
+    ended_at: "2026-10-14T10:05:00.000Z",
+    app_name: "Linear",
+    window_title: title,
+    match_method: "none",
+    match_confidence: 0,
+    snippet,
+  });
+
+  /** Records each batch it is sent; every block yields one item named after its title. */
+  function batcher() {
+    const batches: string[][] = [];
+    const ex: Extractor = {
+      fromCapture: async () => WORK,
+      fromCode: async () => WORK,
+      async fromCaptures(inputs) {
+        batches.push(inputs.map((i) => i.title));
+        return inputs.map((i) => ({ nodes: [extracted({ label: i.title, type: "task" })], edges: [] }));
+      },
+    };
+    return { ex, batches };
+  }
+
+  it("go to the model in batches per person, and a block already read that day is not sent again", async () => {
+    const store = memoryStore();
+    for (const id of ["devon", "priya"]) store.saveUser({ id, name: id, role: "Engineer", teamDescription: "" });
+    const d = deps(store, WORK);
+    const now = new Date(T0);
+    submitWorkBlocks(d, "devon", ["a", "b", "c", "d", "e", "f"].map((t) => block(t, `Ticket ${t}`)), now);
+    submitWorkBlocks(d, "priya", [block("p1", "Deal p1"), block("p2", "Ticket a")], now);
+    // The same screen twice in one sync: read once.
+    submitWorkBlocks(d, "devon", [block("a2", "Ticket a")], now);
+    const { ex, batches } = batcher();
+    const r = await retryPendingExtractions(store, ex, { now: T0 + 1000, limit: 50 });
+    // Same start time for all, so only the grouping is fixed, not the order of the calls.
+    expect(batches.map((b) => b.join(", ")).sort()).toEqual(["Deal p1, Ticket a", "Ticket a, Ticket b, Ticket c, Ticket d, Ticket e", "Ticket f"]);
+    expect(r).toMatchObject({ tried: 8, extracted: 8, repeats: 0 });
+    expect(store.getNode("ticket-c")).toBeTruthy();
+
+    // The held-back repeat is marked done on the next pass without a call.
+    const again = await retryPendingExtractions(store, ex, { now: T0 + 2000, limit: 50 });
+    expect(again).toMatchObject({ tried: 0, repeats: 1 });
+    expect(batches).toHaveLength(3);
+    expect(duePendingCount(store, T0 + 3000)).toBe(0);
+  });
+
+  it("a failed batch leaves each of its blocks pending for a retry", async () => {
+    const store = memoryStore();
+    store.saveUser({ id: "devon", name: "Devon", role: "Engineer", teamDescription: "" });
+    submitWorkBlocks(deps(store, WORK), "devon", [block("a", "Ticket a"), block("b", "Ticket b")], new Date(T0));
+    const ex: Extractor = { fromCapture: async () => WORK, fromCode: async () => WORK, fromCaptures: async () => Promise.reject(new HttpError(504, "timed out")) };
+    expect(await retryPendingExtractions(store, ex, { now: T0 + 1000 })).toMatchObject({ tried: 2, stillPending: 2 });
   });
 });

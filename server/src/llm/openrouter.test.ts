@@ -46,6 +46,28 @@ describe("OpenRouterClient", () => {
     expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
   });
 
+  it("drops temperature for a model with no endpoint that takes it, and remembers", async () => {
+    const noEndpoints = () => new Response(JSON.stringify({ error: { message: "No endpoints found that can handle the requested parameters.", code: 404 } }), { status: 404 });
+    fetchMock.mockResolvedValueOnce(noEndpoints()).mockImplementation(async () => completion("hello"));
+    const claude = { ...req, model: "anthropic/test-no-temperature", temperature: 0 };
+    const client = new OpenRouterClient();
+    expect((await client.complete(claude)).choices[0].message.content).toBe("hello");
+    expect(sentBody(0).temperature).toBe(0);
+    expect(sentBody(1).temperature).toBeUndefined();
+    await client.complete(claude);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(sentBody(2).temperature).toBeUndefined();
+  });
+
+  it("drops temperature for every request that went out at once, not only the first to come back", async () => {
+    const noEndpoints = () => new Response(JSON.stringify({ error: { message: "No endpoints found that can handle the requested parameters.", code: 404 } }), { status: 404 });
+    fetchMock.mockImplementation(async (_url, init) => (JSON.parse(init.body as string).temperature === undefined ? completion("hello") : noEndpoints()));
+    const claude = { ...req, model: "anthropic/test-no-temperature-burst", temperature: 0 };
+    const client = new OpenRouterClient();
+    const out = await Promise.all([client.complete(claude), client.complete(claude), client.complete(claude)]);
+    expect(out.map((c) => c.choices[0].message.content)).toEqual(["hello", "hello", "hello"]);
+  });
+
   it("sends the provider allow and deny lists", async () => {
     process.env.OPENROUTER_PROVIDERS = "google-vertex, openai";
     process.env.OPENROUTER_IGNORE_PROVIDERS = "deepinfra";

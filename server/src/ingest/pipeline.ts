@@ -108,7 +108,7 @@ function aboutFor(store: Store, userId?: string): ExtractContext {
 }
 
 function known(store: Store): KnownNode[] {
-  return store.listNodes().map(({ id, label, type, domain }) => ({ id, label, type, domain }));
+  return store.listNodes().map(({ id, label, type, domain, updatedAt }) => ({ id, label, type, domain, updatedAt }));
 }
 
 type SourceDoc = {

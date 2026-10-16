@@ -63,6 +63,25 @@ export function requestBody(req: CompletionRequest, extra: Record<string, unknow
 const reasoningRequired = new Set<string>();
 
 /**
+ * Models with no endpoint that takes `temperature` (Claude 5 models). With require_parameters a request carrying it
+ * finds no endpoint at all, so after one such 404 the model's requests leave it out.
+ */
+const noTemperature = new Set<string>();
+const NO_ENDPOINTS = /no endpoints found that can handle the requested parameters/i;
+const supported = (req: CompletionRequest): CompletionRequest => (noTemperature.has(req.model) ? { ...req, temperature: undefined } : req);
+
+/**
+ * True (and remembered) when a 404 came from `temperature`, so the caller sends the request again without it. Checked
+ * even when the model is already remembered: requests sent at the same time all went out with it.
+ */
+async function droppedTemperature(res: Response, req: CompletionRequest): Promise<boolean> {
+  if (res.status !== 404 || req.temperature === undefined) return false;
+  if (!NO_ENDPOINTS.test(await res.clone().text().catch(() => ""))) return false;
+  noTemperature.add(req.model);
+  return true;
+}
+
+/**
  * Chat completions through OpenRouter: a timeout per attempt, retries with backoff on 429, 5xx and network errors,
  * and (inside `withUsage`) the org's budget checked before the call and its usage recorded after.
  */
@@ -78,7 +97,7 @@ export class OpenRouterClient implements LlmClient {
           method: "POST",
           headers: headers(key),
           // Reasoning off: hidden thinking ate the token budget and made replies slow or empty.
-          body: requestBody(req, reasoningOff ? { reasoning: { enabled: false } } : {}),
+          body: requestBody(supported(req), reasoningOff ? { reasoning: { enabled: false } } : {}),
         },
         { purpose, label: purpose, quiet: req.zdr },
       );
@@ -91,6 +110,7 @@ export class OpenRouterClient implements LlmClient {
         ({ res } = await send(false));
       }
     }
+    if (await droppedTemperature(res, req)) ({ res } = await send(!reasoningRequired.has(req.model)));
     if (!res.ok) return failed(res, req.zdr);
     const json = (await res.json()) as Completion & { error?: { message?: string }; usage?: unknown };
     const usage = readUsage(json.usage);
@@ -149,12 +169,15 @@ export async function streamCompletion(req: CompletionRequest, onDelta: (text: s
     return full;
   };
   try {
-    const { res, body } = await fetchWithRetry(
-      CHAT_URL,
-      // Reasoning would spend the small token budget before the answer starts.
-      { method: "POST", headers: headers(key), body: requestBody(req, { stream: true, reasoning: { enabled: false } }) },
-      { purpose, label: `${purpose} stream`, read },
-    );
+    const send = () =>
+      fetchWithRetry(
+        CHAT_URL,
+        // Reasoning would spend the small token budget before the answer starts.
+        { method: "POST", headers: headers(key), body: requestBody(supported(req), { stream: true, reasoning: { enabled: false } }) },
+        { purpose, label: `${purpose} stream`, read },
+      );
+    let { res, body } = await send();
+    if (await droppedTemperature(res, req)) ({ res, body } = await send());
     if (!res.ok) return failed(res);
     return body as string;
   } finally {

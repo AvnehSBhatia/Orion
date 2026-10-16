@@ -103,6 +103,8 @@ export type RetryOpts = {
   /** For logs: "chat", "embeddings". */
   label: string;
   timeoutMs?: number;
+  /** Retries after the first attempt; default OPENROUTER_MAX_RETRIES. */
+  retries?: number;
   /** Log statuses only, never the provider's error body (zero-retention calls: a provider may echo the prompt). */
   quiet?: boolean;
   /**
@@ -134,7 +136,7 @@ export async function fetchWithRetry(
   opts: RetryOpts,
 ): Promise<{ res: Response; body?: unknown }> {
   const timeoutMs = opts.timeoutMs ?? llmEnv.timeoutMs(opts.purpose);
-  const max = llmEnv.maxRetries;
+  const max = opts.retries ?? llmEnv.maxRetries;
   for (let attempt = 0; ; attempt++) {
     const last = attempt >= max;
     let wait: number | null = null;

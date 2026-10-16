@@ -22,8 +22,10 @@ Not subprocessors:
 
 Orion uses these models by default, all through OpenRouter. Admins can ask which models their organization uses.
 
-- Extraction and chat: `deepseek/deepseek-v4-flash` [update to production values]
-- Fast steps: `google/gemini-2.5-flash-lite`
+- Extraction, area labels, and digests: `anthropic/claude-haiku-5.5`, after `nace-ai/drex-v2.0` checks the capture holds work (it sees the org name and description, the person's name and role, the URL, the title, and the first 3,000 characters of text)
+- Chat and dashboards: `deepseek/deepseek-v4.1-flash` [update to production values]
+- Fast steps: `deepseek/deepseek-v4.1-flash`
+- Chat routing (decision models, no text generated): `nace-ai/drex-v2.0` decides whether a message needs the chat model; `~typesafe/jev-latest` reads the message with up to 255 work item cards and picks the task and items. Both see the message, the earlier question, the person's name and role, and the item cards.
 - Embeddings:
   - `EMBED_PROVIDER=gemma`: run on our own servers, no third party.
   - `EMBED_PROVIDER=openrouter`: `google/gemini-embedding-2`, which sends page text to Google.
