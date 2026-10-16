@@ -93,4 +93,21 @@ describe("reads", () => {
     expect(readGraph(store).nodes.every((n) => !("embedding" in n) && !("key" in n))).toBe(true);
     expect("embedding" in toPublicNode(store.listNodes()[0])).toBe(false);
   });
+
+  it("drops junk to-dos and links stored before the filter", () => {
+    const store = memoryStore();
+    store.upsertGraph({ nodes: [extracted({ label: "Q4 search campaign", owner: "Mina Rao" })], edges: [] }, prov);
+    // Written straight to the row, as older extractions were.
+    store.db.prepare("UPDATE nodes SET todo = ?, read_links = ? WHERE id = ?").run(
+      "Update 230.",
+      JSON.stringify([
+        { title: "DuckDuckGo – Protection. Privacy. Peace of mind.", url: "https://duckduckgo.com/" },
+        { title: "Campaign", url: "https://ads.google.com/aw/campaigns" },
+      ]),
+      "q4-search-campaign",
+    );
+    const node = readGraph(store).nodes.find((n) => n.id === "q4-search-campaign")!;
+    expect(node.todo).toBeNull();
+    expect(node.readLinks).toEqual([{ title: "Campaign", url: "https://ads.google.com/aw/campaigns" }]);
+  });
 });

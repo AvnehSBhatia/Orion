@@ -1,5 +1,6 @@
 // Nodes and edges: the work graph, and how extracted updates are merged into it.
 import type { Domain, Edge, NodeType, ReadLink, Relation, SourceKind, Status } from "@/contract/types";
+import { usefulReadLinks, usefulTodo, withoutJunk } from "@/lib/junk";
 import { LABEL_MAX, SUMMARY_MAX, clamp, normalizeLabel, slugify } from "@/lib/text";
 import { edgeId, nodeKey } from "./keys";
 import { NO_VECTORS, rowVectors, toBlob, type Db, type VectorRow } from "./rows";
@@ -24,8 +25,9 @@ type NodeRow = VectorRow & {
 
 type EdgeRow = { id: string; source: string; target: string; relation: string; source_ref: string };
 
+/** Junk to-dos and links are dropped on read too, so items stored before the filter display clean. */
 function rowToNode(r: NodeRow): StoredNode {
-  return {
+  return withoutJunk({
     id: r.id,
     key: r.key,
     label: r.label,
@@ -41,7 +43,7 @@ function rowToNode(r: NodeRow): StoredNode {
     sourceRef: r.source_ref,
     updatedAt: r.updated_at,
     ...rowVectors(r),
-  };
+  });
 }
 
 export function listNodes(db: Db): StoredNode[] {
@@ -143,18 +145,19 @@ function mergeLinks(a: ReadLink[], b: ReadLink[]): ReadLink[] {
   for (const link of [...a, ...b]) {
     if (link.url) seen.set(link.url, link);
   }
-  return [...seen.values()].slice(0, 8);
+  return usefulReadLinks([...seen.values()]).slice(0, 8);
 }
 
-/** Model output is untrusted: clamp lengths, drop empty fields, keep only http(s) links. */
+/** Model output is untrusted: clamp lengths, drop empty fields and junk to-dos, keep only links worth reading. */
 function cleanNode(n: ExtractedNode): ExtractedNode {
+  const todo = usefulTodo(n.todo);
   return {
     ...n,
     label: clamp(n.label, LABEL_MAX),
     summary: clamp(n.summary, SUMMARY_MAX),
-    todo: n.todo?.trim() ? clamp(n.todo, 200) : null,
+    todo: todo ? clamp(todo, 200) : null,
     owner: n.owner?.trim() || null,
-    readLinks: n.readLinks.filter((l) => /^https?:\/\//.test(l.url)).map((l) => ({ title: clamp(l.title || l.url, 80), url: l.url })),
+    readLinks: usefulReadLinks(n.readLinks).map((l) => ({ title: clamp(l.title || l.url, 80), url: l.url })),
   };
 }
 

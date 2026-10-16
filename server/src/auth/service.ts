@@ -2,6 +2,7 @@ import { z } from "zod";
 import { audit } from "@/audit/log";
 import type { Store } from "@/db/store";
 import { HttpError, tooManyRequests } from "@/http/error";
+import { titleFromId } from "@/lib/text";
 import { dummyHash, verifyPassword } from "./crypto";
 import { MIN_PASSWORD, normalizeUsername, type Account, type AuthDb } from "./db";
 import type { LoginLimiter } from "./ratelimit";
@@ -54,10 +55,10 @@ export async function login(db: AuthDb, limiter: LoginLimiter, input: { username
   return { token, orgId: account.orgId, userId: account.userId, admin: account.admin, username };
 }
 
-/** Adds the person to the org if they are not in it yet. Returns true when it created them. */
+/** Adds the person to the org if they are not in it yet, named from their id when no name is given. Returns true when it created them. */
 export function ensurePerson(store: Store, userId: string, name?: string, role?: string): boolean {
   if (store.getUser(userId)) return false;
-  store.saveUser({ id: userId, name: name || userId, role: role || "Member", teamDescription: "" });
+  store.saveUser({ id: userId, name: name?.trim() || titleFromId(userId), role: role || "Member", teamDescription: "" });
   return true;
 }
 

@@ -3,6 +3,7 @@ import { config } from "@/config";
 import { DOMAINS, NODE_TYPES, RELATIONS, STATUSES, type Domain, type FeatureCard, type NodeType, type Org } from "@/contract/types";
 import type { ExtractedNode, GraphUpdate, StoredNode } from "@/db/store";
 import { HttpError } from "@/http/error";
+import { withoutJunk } from "@/lib/junk";
 import { completeJson, nullable, OpenRouterClient, type LlmClient } from "./openrouter";
 import { holdsWork } from "./workGate";
 
@@ -322,7 +323,7 @@ export class LlmExtractor implements Extractor {
       user: captureUser(input, known, about),
     });
     const out = parseModelOutput(captureOut, raw);
-    const nodes: ExtractedNode[] = out.nodes.slice(0, MAX_CAPTURE_NODES).map((n) => ({ ...n, sellable: null }));
+    const nodes: ExtractedNode[] = out.nodes.slice(0, MAX_CAPTURE_NODES).map((n) => withoutJunk({ ...n, sellable: null }));
     return { nodes, edges: out.edges };
   }
 
@@ -371,12 +372,14 @@ export class LlmExtractor implements Extractor {
     });
     const out = parseModelOutput(codeOut, raw);
     const domain = domainForRole(about?.author?.role) ?? "engineering";
-    const nodes: ExtractedNode[] = out.nodes.slice(0, MAX_CODE_NODES).map(({ release, sellable, ...n }) => ({
-      ...n,
-      domain,
-      status: n.status === "unknown" && release === "shipped" ? "done" : n.status,
-      sellable: sellable && release !== "in_progress",
-    }));
+    const nodes: ExtractedNode[] = out.nodes.slice(0, MAX_CODE_NODES).map(({ release, sellable, ...n }) =>
+      withoutJunk({
+        ...n,
+        domain,
+        status: n.status === "unknown" && release === "shipped" ? "done" : n.status,
+        sellable: sellable && release !== "in_progress",
+      }),
+    );
     return { nodes, edges: out.edges };
   }
 }

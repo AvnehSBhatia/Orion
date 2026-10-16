@@ -47,7 +47,16 @@ export function htmlToText(html: string): string {
     .trim();
 }
 
-export const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
+/** A display name from an id, for when none was given: "devon-lee" becomes "Devon Lee". */
+export function titleFromId(id: string): string {
+  return id
+    .split(/[-_.\s]+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(" ") || id;
+}
+
+export const firstName =(name: string) => name.trim().split(/\s+/)[0] || name;
 
 export function clamp(text: string, max: number): string {
   const t = plain(text);
