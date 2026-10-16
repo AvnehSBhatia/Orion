@@ -435,7 +435,7 @@ struct EmptyState: View {
     }
 }
 
-/// The sidebar mark. The same planet as the empty states, drawn small.
+/// The sidebar mark. Same geometry as the empty states, drawn small.
 struct ConstellationMark: View {
     var body: some View {
         PlanetArt(compact: true)
@@ -443,7 +443,7 @@ struct ConstellationMark: View {
     }
 }
 
-/// The empty-state planet: one body, one ring, a few still stars.
+/// The empty-state mark, larger than the sidebar.
 struct OrbitalIllustration: View {
     var body: some View {
         PlanetArt(compact: false)
@@ -451,114 +451,51 @@ struct OrbitalIllustration: View {
     }
 }
 
-/// The welcome panel. Drawn, so it matches the mark instead of a cropped photo.
+/// The welcome panel. The mark sits on the panel color, with no extra scene.
 struct PlanetPortrait: View {
     var body: some View {
         ZStack {
             Theme.welcomePanel
             PlanetArt(compact: false)
-                .padding(28)
+                .padding(36)
         }
         .accessibilityLabel("Constellation")
     }
 }
 
-/// A shaded sphere and a ring that passes behind it, then in front.
+/// A geometric C with one point in the counter. One stroke, one dot, no shading.
 struct PlanetArt: View {
     var compact = false
 
     var body: some View {
         Canvas { context, size in
             let side = min(size.width, size.height)
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let radius = side * (compact ? 0.22 : 0.27)
-            let ringRx = radius * (compact ? 1.62 : 1.78)
-            let ringRy = radius * 0.52
-            let rotation: CGFloat = -0.55
-            let ringWidth = max(compact ? 1.15 : 1.6, side * (compact ? 0.075 : 0.028))
-
-            if !compact {
-                let glow = radius * 2.15
-                context.fill(
-                    Path(ellipseIn: CGRect(x: center.x - glow, y: center.y - glow, width: glow * 2, height: glow * 2)),
-                    with: .radialGradient(
-                        Gradient(colors: [Color(hex: 0xE8943A).opacity(0.22), Color(hex: 0xE8943A).opacity(0.05), .clear]),
-                        center: center,
-                        startRadius: radius * 0.9,
-                        endRadius: glow
-                    )
-                )
-                for star in Self.stars {
-                    let point = CGPoint(x: size.width * star.x, y: size.height * star.y)
-                    let r = side * star.scale
-                    context.fill(
-                        Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2)),
-                        with: .color(Theme.accent.opacity(star.opacity))
-                    )
-                }
+            let origin = CGPoint(x: (size.width - side) / 2, y: (size.height - side) / 2)
+            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                CGPoint(x: origin.x + side * x / 100, y: origin.y + side * y / 100)
             }
 
-            let arcs = Self.ringArcs(center: center, rx: ringRx, ry: ringRy, rotation: rotation)
-            let back = StrokeStyle(lineWidth: ringWidth * 0.85, lineCap: .round, lineJoin: .round)
-            let front = StrokeStyle(lineWidth: ringWidth, lineCap: .round, lineJoin: .round)
-            let edge = StrokeStyle(lineWidth: ringWidth * 0.38, lineCap: .round, lineJoin: .round)
-            context.stroke(arcs.back, with: .color(Theme.accent.opacity(compact ? 0.45 : 0.38)), style: back)
+            var letter = Path()
+            letter.move(to: point(70, 24))
+            letter.addLine(to: point(42, 24))
+            letter.addCurve(to: point(24, 42), control1: point(28, 24), control2: point(24, 32))
+            letter.addLine(to: point(24, 58))
+            letter.addCurve(to: point(42, 76), control1: point(24, 68), control2: point(28, 76))
+            letter.addLine(to: point(70, 76))
 
-            let sphere = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
-            let light = CGPoint(x: center.x - radius * 0.34, y: center.y - radius * 0.38)
-            context.fill(
-                Path(ellipseIn: sphere),
-                with: .radialGradient(
-                    Gradient(stops: [
-                        .init(color: Color(hex: 0xF6E7C8), location: 0),
-                        .init(color: Color(hex: 0xC47A3A), location: 0.16),
-                        .init(color: Color(hex: 0x3A2C22), location: 0.48),
-                        .init(color: Color(hex: 0x171412), location: 1),
-                    ]),
-                    center: light,
-                    startRadius: 0,
-                    endRadius: radius * 1.45
-                )
+            context.stroke(
+                letter,
+                with: .color(Theme.textPrimary),
+                style: StrokeStyle(lineWidth: side * 0.12, lineCap: .round, lineJoin: .round)
             )
-            context.stroke(Path(ellipseIn: sphere), with: .color(Color.white.opacity(0.08)), lineWidth: max(0.6, side * 0.004))
 
-            context.stroke(arcs.front, with: .color(Theme.accent.opacity(0.92)), style: front)
-            context.stroke(arcs.front, with: .color(Color(hex: 0xFFE7C4).opacity(compact ? 0.7 : 0.85)), style: edge)
+            let dot = side * (compact ? 0.11 : 0.08)
+            let center = point(54, 50)
+            context.fill(
+                Path(ellipseIn: CGRect(x: center.x - dot, y: center.y - dot, width: dot * 2, height: dot * 2)),
+                with: .color(Theme.accent)
+            )
         }
-    }
-
-    private static let stars: [(x: CGFloat, y: CGFloat, scale: CGFloat, opacity: Double)] = [
-        (0.18, 0.22, 0.012, 0.85),
-        (0.78, 0.18, 0.008, 0.55),
-        (0.84, 0.62, 0.014, 0.7),
-        (0.22, 0.74, 0.007, 0.4),
-        (0.62, 0.16, 0.006, 0.35),
-    ]
-
-    /// The near side of the ring is the lower half on screen, so it can sit in front of the sphere.
-    private static func ringArcs(center: CGPoint, rx: CGFloat, ry: CGFloat, rotation: CGFloat) -> (back: Path, front: Path) {
-        let steps = 120
-        var back = Path()
-        var front = Path()
-        var backOpen = false
-        var frontOpen = false
-        let turn = cos(rotation)
-        let tilt = sin(rotation)
-        for index in 0...steps {
-            let t = CGFloat(index) / CGFloat(steps) * 2 * .pi
-            let x = rx * cos(t)
-            let y = ry * sin(t)
-            let point = CGPoint(x: center.x + x * turn - y * tilt, y: center.y + x * tilt + y * turn)
-            let isFront = point.y >= center.y
-            if isFront {
-                if frontOpen { front.addLine(to: point) } else { front.move(to: point); frontOpen = true }
-                backOpen = false
-            } else {
-                if backOpen { back.addLine(to: point) } else { back.move(to: point); backOpen = true }
-                frontOpen = false
-            }
-        }
-        return (back, front)
     }
 }
 
