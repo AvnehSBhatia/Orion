@@ -2,50 +2,74 @@ import AppKit
 import CoreText
 import SwiftUI
 
-/// Figtree, the geometric sans used for this window. Registered from the app bundle.
+/// Figtree, the geometric sans used for this window.
+/// The file is registered from beside the executable. A missing file uses the system font, so the window still opens.
 enum AppFont {
-    static let family = "Figtree"
-    /// OpenType weight axis. Figtree runs from 300 to 900.
     static let regular: CGFloat = 400
     static let medium: CGFloat = 500
     static let semibold: CGFloat = 600
     static let bold: CGFloat = 700
 
     private static let registered: Void = {
-        let bundle = Bundle.module
-        let urls = [
-            bundle.url(forResource: "Figtree-Variable", withExtension: "ttf", subdirectory: "Fonts"),
-            bundle.url(forResource: "Figtree-Variable", withExtension: "ttf"),
-        ].compactMap { $0 }
-        for url in urls {
-            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        guard let url = fontFileURL() else {
+            print("Constellation typeface: system font. Figtree was not next to the app.")
+            return
         }
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        print("Constellation typeface: Figtree.")
     }()
+
+    /// Safe to call more than once. Views also call it the first time they draw text.
+    static func register() {
+        _ = registered
+    }
 
     static func font(_ size: CGFloat, _ weight: CGFloat = regular) -> Font {
         _ = registered
-        let variations: [NSNumber: NSNumber] = [2003265652: NSNumber(value: Double(weight))]
-        let attributes: [CFString: Any] = [
-            kCTFontNameAttribute: family as CFString,
-            kCTFontVariationAttribute: variations,
-        ]
-        let descriptor = CTFontDescriptorCreateWithAttributes(attributes as CFDictionary)
-        let resolved = CTFontCreateWithFontDescriptor(descriptor, size, nil)
-        let resolvedFamily = CTFontCopyFamilyName(resolved) as String
-        if resolvedFamily.localizedCaseInsensitiveContains(family) {
-            return Font(resolved as NSFont)
-        }
-        let fallback = NSFont.systemFont(ofSize: size, weight: nsWeight(weight))
-        return Font(fallback)
+        return Font.custom(postScriptName(weight), size: size)
     }
 
-    private static func nsWeight(_ weight: CGFloat) -> NSFont.Weight {
+    private static func postScriptName(_ weight: CGFloat) -> String {
         switch weight {
-        case ..<450: .regular
-        case ..<550: .medium
-        case ..<650: .semibold
-        default: .bold
+        case ..<450: "Figtree-Regular"
+        case ..<550: "Figtree-Medium"
+        case ..<650: "Figtree-SemiBold"
+        default: "Figtree-Bold"
         }
+    }
+
+    /// Swift packages place resources in a sibling bundle. `Bundle.module` quits the app when that bundle is not found, so this looks beside the executable instead.
+    private static func fontFileURL() -> URL? {
+        let manager = FileManager.default
+        var roots: [URL] = []
+        if let executable = Bundle.main.executableURL {
+            roots.append(executable.deletingLastPathComponent())
+        }
+        roots.append(Bundle.main.bundleURL)
+        roots.append(Bundle.main.bundleURL.deletingLastPathComponent())
+
+        var seen = Set<String>()
+        for root in roots where seen.insert(root.path).inserted {
+            if let match = fontFile(in: root, manager) { return match }
+            guard let items = try? manager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { continue }
+            for item in items where item.pathExtension == "bundle" {
+                if let match = fontFile(in: item, manager) { return match }
+            }
+        }
+        return nil
+    }
+
+    private static func fontFile(in directory: URL, _ manager: FileManager) -> URL? {
+        let relative = [
+            "Fonts/Figtree-Variable.ttf",
+            "Figtree-Variable.ttf",
+            "Resources/Fonts/Figtree-Variable.ttf",
+        ]
+        for path in relative {
+            let url = directory.appendingPathComponent(path)
+            if manager.fileExists(atPath: url.path) { return url }
+        }
+        return nil
     }
 }
 
