@@ -72,7 +72,7 @@ struct BaselineView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
-                    .background(index == model.selected ? Color.white.opacity(0.14) : Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+                    .background(index == model.selected ? Theme.selectedNav : Theme.buttonFill, in: RoundedRectangle(cornerRadius: 8))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(date.formatted(.dateTime.weekday(.wide).month().day()))

@@ -22,6 +22,7 @@ enum CaptureState: Equatable {
         static let maskNames = "maskNames"
         static let redactPrivateIPs = "redactPrivateIPs"
         static let onboardingDone = "onboardingDone"
+        static let guideDismissed = "guideDismissed"
         static let outboxMode = "outboxMode"
         static let autoApprove = "autoApprove"
         static let backendURL = "backendURL"
@@ -50,6 +51,8 @@ enum CaptureState: Equatable {
     @Published var redactPrivateIPs: Bool { didSet { defaults.set(redactPrivateIPs, forKey: Key.redactPrivateIPs) } }
     /// The welcome screens have been seen (M4).
     @Published var onboardingDone: Bool { didSet { defaults.set(onboardingDone, forKey: Key.onboardingDone) } }
+    /// The in-window setup path was hidden. Missing means it still shows.
+    @Published var guideDismissed: Bool { didSet { defaults.set(guideDismissed, forKey: Key.guideDismissed) } }
     /// Outbox (spec 9): Review first by default.
     @Published var outboxMode: OutboxMode { didSet { defaults.set(outboxMode.rawValue, forKey: Key.outboxMode) } }
     /// Review first only: approve automatically after Limits.autoApproveMinutes. On by default.
@@ -81,6 +84,7 @@ enum CaptureState: Equatable {
         maskNames = defaults.bool(forKey: Key.maskNames)
         redactPrivateIPs = defaults.bool(forKey: Key.redactPrivateIPs)
         onboardingDone = defaults.bool(forKey: Key.onboardingDone)
+        guideDismissed = defaults.bool(forKey: Key.guideDismissed)
         outboxMode = defaults.string(forKey: Key.outboxMode).flatMap(OutboxMode.init(rawValue:)) ?? .reviewFirst
         autoApprove = defaults.object(forKey: Key.autoApprove) as? Bool ?? true
         backendURL = defaults.string(forKey: Key.backendURL) ?? "http://localhost:8787"

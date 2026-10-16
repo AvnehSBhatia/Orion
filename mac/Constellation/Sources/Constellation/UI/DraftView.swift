@@ -6,39 +6,194 @@ import SwiftUI
 struct DraftView: View {
     @ObservedObject var model: DraftModel
     @ObservedObject var directory: ClientDirectory
+    var embedded = false
+    var batchesWaiting = 0
+    var connected = true
+    var appsChosen = true
+    /// The window already shows the setup path, so this page does not repeat it.
+    var guideVisible = false
+    var onOutbox: () -> Void = {}
+    var onApps: () -> Void = {}
+    var onSettings: () -> Void = {}
+    var onBaseline: (() -> Void)? = nil
+    var macFooter: String? = nil
 
     var body: some View {
-        SpaceScreen {
+        SpaceScreen(embedded: embedded) {
             WindowHeader(
-                title: "Today's Draft",
+                title: "Today",
                 detail: Date().formatted(.dateTime.weekday(.wide).month(.wide).day()),
-                subtitle: "Review each entry, then accept, edit, or reject it."
+                subtitle: promise,
+                statusLabel: connected ? "Connected" : "Not connected",
+                statusColor: connected ? Theme.success : Theme.warning
             ) {
                 if model.loading { ProgressView().controlSize(.small) }
                 IconButton(symbol: "arrow.clockwise", help: "Refresh") { Task { await model.refresh() } }
             }
-            if let draft = model.draft {
+            if let draft = model.draft, !draft.entries.isEmpty {
                 HStack(spacing: Theme.Space.s) {
-                    StatusPill(icon: "clock", text: draft.totalMinutes.asDuration, color: Theme.textPrimary)
-                    StatusPill(icon: "list.bullet", text: "\(draft.entries.count) \(draft.entries.count == 1 ? "entry" : "entries")")
-                    let pending = draft.entries.filter { $0.status == .pending }.count
-                    StatusPill(icon: "star", text: "\(pending) to review", color: pending > 0 ? Theme.warning : Theme.textSecondary)
+                    StatusPill(icon: "clock", text: draft.totalMinutes.asDuration, color: Theme.accent)
+                    StatusPill(icon: "list.bullet", text: "\(keptCount(draft)) \(keptCount(draft) == 1 ? "entry" : "entries")")
+                    StatusPill(icon: "star", text: pendingLabel, color: model.pendingCount > 0 ? Theme.warning : Theme.success)
                 }
             }
-            if let error = model.error {
+            if let error = model.error, !(guideVisible && !connected) {
                 Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
             }
         } content: {
-            if let draft = model.draft, draft.entries.isEmpty {
-                EmptyState(title: "Nothing yet today", message: "Entries appear here once work blocks have been sent.")
-            }
-            ForEach(model.draft?.entries ?? []) { entry in
+            cue
+            timesheet
+            if embedded, let macFooter { macStatus(macFooter) }
+        }
+        .task { await model.refresh() }
+    }
+
+    /// What this page is for, in the state the person is actually in.
+    private var promise: String {
+        guard let draft = model.draft else { return "Your timesheet, written from the work you already did." }
+        if draft.entries.isEmpty {
+            if !connected { return "Your timesheet, written from the work you already did." }
+            return "Approving a batch in the Outbox is what fills this page. You confirm the day. You do not rewrite it."
+        }
+        let names = clientNames(in: draft)
+        let who = names.isEmpty
+            ? "with no client yet"
+            : "for \(names.prefix(3).joined(separator: ", "))\(names.count > 3 ? " +\(names.count - 3)" : "")"
+        if model.exported != nil {
+            return "\(draft.totalMinutes.asDuration) \(who). This day is finished, and the CSV is the record."
+        }
+        if model.pendingCount == 0 {
+            return "\(draft.totalMinutes.asDuration) \(who). Every entry is reviewed. Done for today locks it."
+        }
+        return "\(draft.totalMinutes.asDuration) \(who). Confirm what is right. The writing is already done."
+    }
+
+    private var pendingLabel: String {
+        model.pendingCount > 0 ? "\(model.pendingCount) to confirm" : "All confirmed"
+    }
+
+    private func keptCount(_ draft: Draft) -> Int {
+        draft.entries.filter { $0.status != .rejected }.count
+    }
+
+    private func clientNames(in draft: Draft) -> [String] {
+        var seen = Set<String>()
+        return draft.entries.filter { $0.status != .rejected }.compactMap { entry -> String? in
+            guard let id = entry.clientId, seen.insert(id).inserted else { return nil }
+            return directory.list.clients.first { $0.id == id }?.name ?? "A client"
+        }
+    }
+
+    private var emptyMessage: String {
+        if batchesWaiting > 0 { return "Work is waiting in the Outbox. Approve it, and it shows up here as time by client." }
+        if !appsChosen { return "No apps are turned on, so nothing is being read." }
+        if !connected { return "This Mac is not connected yet, so finished work cannot be drafted into a timesheet." }
+        return "Keep working in an app you turned on. When a stretch finishes and you approve it, the entry appears here."
+    }
+
+    @ViewBuilder private var timesheet: some View {
+        if let draft = model.draft, !draft.entries.isEmpty {
+            ForEach(draft.entries) { entry in
                 EntryCard(entry: entry, model: model, clients: directory.list.clients)
                     .id("\(entry.id)-\(entry.status)-\(entry.edited)-\(entry.narrative)-\(entry.minutes)-\(entry.clientId ?? "")")
             }
-            if let draft = model.draft, !draft.entries.isEmpty { DoneForToday(model: model) }
+            DoneForToday(model: model)
+            baselineLink
+        } else if !connected || model.draft != nil || model.error != nil {
+            emptyHero
         }
-        .task { await model.refresh() }
+    }
+
+    private struct HeroAction {
+        let title: String
+        let run: () -> Void
+    }
+
+    private var heroAction: HeroAction? {
+        if batchesWaiting > 0 { return HeroAction(title: "Review in Outbox", run: onOutbox) }
+        if guideVisible { return nil }
+        if !connected { return HeroAction(title: "Connect", run: onSettings) }
+        if !appsChosen { return HeroAction(title: "Choose apps", run: onApps) }
+        return nil
+    }
+
+    private var emptyHero: some View {
+        GlassCard {
+            HStack(alignment: .center, spacing: 24) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Today's timesheet")
+                        .font(Theme.Typo.sheetTitle)
+                    Text(emptyMessage)
+                        .font(Theme.Typo.subtitle)
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let heroAction {
+                        Button(heroAction.title, action: heroAction.run)
+                            .buttonStyle(PrimaryButtonStyle(small: true))
+                            .padding(.top, 4)
+                    }
+                    baselineLink
+                }
+                Spacer(minLength: 8)
+                OrbitalIllustration()
+                    .frame(width: 150, height: 112)
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
+    @ViewBuilder private var baselineLink: some View {
+        if onBaseline != nil {
+            Button("Compare with your usual timesheet") { onBaseline?() }
+                .buttonStyle(LinkButtonStyle())
+        }
+    }
+
+    private func macStatus(_ line: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.m) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("On this Mac")
+                    .font(Theme.Typo.sectionHeader)
+                    .kerning(0.6)
+                    .foregroundStyle(Theme.textTertiary)
+                    .textCase(.uppercase)
+                Text("Orion").font(Theme.Typo.bodyStrong)
+            }
+            Spacer(minLength: Theme.Space.s)
+            Text(line)
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.top, Theme.Space.s)
+    }
+
+    private var hasEntries: Bool {
+        guard let draft = model.draft else { return false }
+        return !draft.entries.isEmpty
+    }
+
+    /// The empty hero already carries the next step, so the banner only appears once there is a timesheet.
+    @ViewBuilder private var cue: some View {
+        if hasEntries, batchesWaiting > 0 {
+            NextStepBanner(
+                message: "\(batchesWaiting) \(batchesWaiting == 1 ? "item is" : "items are") still on this Mac. Approving \(batchesWaiting == 1 ? "it" : "them") writes today's timesheet.",
+                button: "Review in Outbox",
+                action: onOutbox
+            )
+        } else if hasEntries, !connected, !guideVisible {
+            NextStepBanner(
+                message: "Connect this Mac. Until you do, today's timesheet cannot arrive.",
+                button: "Connect",
+                action: onSettings
+            )
+        } else if hasEntries, !appsChosen, !guideVisible {
+            NextStepBanner(
+                message: "Turn on the apps you work in. Nothing else on this Mac is read.",
+                button: "Choose apps",
+                action: onApps
+            )
+        }
     }
 }
 
@@ -107,45 +262,59 @@ private struct EntryCard: View {
 
     var body: some View {
         GlassCard(emphasis: (clientId == nil || entry.unmatched) && entry.status != .rejected ? .dashed : .normal) {
-            VStack(alignment: .leading, spacing: Theme.Space.m) {
-                topRow
-                descriptionView
-                bottomRow
-                if showEvidence { evidence }
+            HStack(alignment: .top, spacing: 16) {
+                timeColumn
+                VStack(alignment: .leading, spacing: Theme.Space.m) {
+                    HStack(spacing: Theme.Space.s) {
+                        clientMenu
+                        Spacer(minLength: Theme.Space.s)
+                        minuteStepper
+                        StarBadge(kind: badge, label: badge == .noClient ? "" : nil)
+                    }
+                    descriptionView
+                    bottomRow
+                    if showEvidence { evidence }
+                }
             }
         }
         .opacity(entry.status == .rejected ? 0.65 : 1)
         .disabled(model.saving == entry.id)
     }
 
-    // Client pill, minutes, time range, badge.
-    private var topRow: some View {
-        HStack(spacing: Theme.Space.m) {
-            Menu {
-                Button("No Client") { clientId = nil }
-                Divider()
-                ForEach(clients) { client in Button(client.name) { clientId = client.id } }
-            } label: {
-                Text(clientName).font(Theme.Typo.bodyStrong)
-                    .foregroundStyle(clientId == nil ? Theme.textSecondary : Theme.textPrimary)
+    private var timeColumn: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let start = entry.startedAt {
+                Text(start.formatted(date: .omitted, time: .shortened))
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textTertiary)
             }
-            .pillMenu()
-            .help("Change the client")
+            if let end = entry.endedAt {
+                Text(end.formatted(date: .omitted, time: .shortened))
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textTertiary.opacity(0.8))
+            }
+        }
+        .frame(width: 68, alignment: .leading)
+    }
 
-            HStack(spacing: 2) {
-                IconButton(symbol: "minus", help: "5 minutes less") { minutes = max(DraftReview.minuteRange.lowerBound, minutes - 5) }
-                Text(minutes.asDuration).font(Theme.Typo.bodyStrong).monospacedDigit().frame(minWidth: 72)
-                IconButton(symbol: "plus", help: "5 minutes more") { minutes = min(DraftReview.minuteRange.upperBound, minutes + 5) }
-            }
+    private var clientMenu: some View {
+        Menu {
+            Button("No Client") { clientId = nil }
+            Divider()
+            ForEach(clients) { client in Button(client.name) { clientId = client.id } }
+        } label: {
+            Text(clientName).font(Theme.Typo.bodyStrong)
+                .foregroundStyle(clientId == nil ? Theme.textSecondary : Theme.textPrimary)
+        }
+        .pillMenu()
+        .help("Change the client")
+    }
 
-            if let start = entry.startedAt, let end = entry.endedAt {
-                Text("\(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))")
-                    .font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: Theme.Space.s)
-            // With no client, the pill already says "Pick a client": the ghost star alone.
-            StarBadge(kind: badge, label: badge == .noClient ? "" : nil)
+    private var minuteStepper: some View {
+        HStack(spacing: 2) {
+            IconButton(symbol: "minus", help: "5 minutes less") { minutes = max(DraftReview.minuteRange.lowerBound, minutes - 5) }
+            Text(minutes.asDuration).font(Theme.Typo.bodyStrong).monospacedDigit().frame(minWidth: 64)
+            IconButton(symbol: "plus", help: "5 minutes more") { minutes = min(DraftReview.minuteRange.upperBound, minutes + 5) }
         }
     }
 

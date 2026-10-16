@@ -43,7 +43,7 @@ import CaptureCore
         let menu = NSMenu()
         let appItem = NSMenuItem()
         appItem.submenu = NSMenu()
-        appItem.submenu?.addItem(withTitle: "Quit Constellation", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu?.addItem(withTitle: "Quit Orion", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(appItem)
         let editItem = NSMenuItem()
         let edit = NSMenu(title: "Edit")
@@ -60,6 +60,7 @@ import CaptureCore
     func applicationDidFinishLaunching(_ notification: Notification) {
         // No permission prompt here: the welcome screens explain what is read first,
         // and ask for the permission themselves (spec 5.1).
+        AppFont.register()
         menuBar = MenuBarController(settings: settings, engine: engine, stats: stats, outbox: outbox, sender: sender, drafts: drafts)
         installMainMenu()
 
@@ -79,16 +80,19 @@ import CaptureCore
         sender.start()
 
         print("""
-        Constellation is running. Look for the eye icon at the top right of your menu bar.
-        If your menu bar is full, macOS may hide it behind the camera notch; the Apps window has the same controls.
-        Press Ctrl+C here, or choose Quit Constellation in the menu bar popover, to stop.
+        Orion is running, and its window should be in front.
+        The sidebar says Orion, next to three stars. Scroll a page and the title bar leaves. Scroll back to the top and it returns.
+        If the sidebar still says Constellation, this is an older copy: quit, then pull and rebuild.
+        Setup is listed in the sidebar, under Today, Outbox, Apps, and Settings.
+        The eye in the menu bar opens that window again. On a MacBook, a full menu bar can hide the eye behind the camera notch, so the window also opens whenever you start the app.
+        Press Ctrl+C here, or choose Quit Orion in the menu bar popover, to stop.
         """)
-        // First run, or no permission yet: the welcome screens. Otherwise the apps
-        // window, since a menu bar app has no window of its own.
+        // First run, or no permission yet: the welcome screens, then the window on Apps.
+        // After that the window still opens. The menu bar eye is easy to lose under the notch.
         if !settings.onboardingDone || !AXIsProcessTrusted() {
             menuBar?.showWelcome()
         } else {
-            menuBar?.showApps()
+            menuBar?.show(.today)
         }
     }
 }

@@ -17,6 +17,7 @@ import SwiftUI
     private let drafts: DraftModel
     private var windows: [String: NSWindow] = [:]
     private lazy var baseline = BaselineModel(sender: sender)
+    private let navigation = ShellNavigation()
     private var sink: AnyCancellable?
 
     /// Default and minimum content sizes. Every screen is checked at its minimum.
@@ -25,8 +26,13 @@ import SwiftUI
         "baseline": (CGSize(width: 640, height: 600), CGSize(width: 520, height: 460)),
         "outbox": (CGSize(width: 780, height: 720), CGSize(width: 580, height: 520)),
         "apps": (CGSize(width: 680, height: 720), CGSize(width: 560, height: 520)),
-        "welcome": (CGSize(width: 620, height: 560), CGSize(width: 560, height: 500)),
+        "welcome": (CGSize(width: 980, height: 640), CGSize(width: 860, height: 560)),
         "debug": (CGSize(width: 1040, height: 480), CGSize(width: 820, height: 360)),
+        "shell": (CGSize(width: 980, height: 740), CGSize(width: 800, height: 560)),
+        "shell-today": (CGSize(width: 980, height: 740), CGSize(width: 800, height: 560)),
+        "shell-outbox": (CGSize(width: 980, height: 740), CGSize(width: 800, height: 560)),
+        "shell-apps": (CGSize(width: 980, height: 740), CGSize(width: 800, height: 560)),
+        "shell-settings": (CGSize(width: 980, height: 740), CGSize(width: 800, height: 560)),
     ]
 
     init(settings: Settings, engine: CaptureEngine, stats: DebugStats, outbox: OutboxModel, sender: Sender, drafts: DraftModel) {
@@ -51,14 +57,8 @@ import SwiftUI
     }
 
     private var popoverView: MenuPopoverView {
-        MenuPopoverView(settings: settings, engine: engine, outbox: outbox, actions: MenuPopoverView.Actions(
-            openDraft: { [weak self] in self?.open { $0.showDraft() } },
-            openBaseline: { [weak self] in self?.open { $0.showBaseline() } },
-            openOutbox: { [weak self] in self?.open { $0.showOutbox() } },
-            openApps: { [weak self] in self?.open { $0.showApps() } },
-            openWelcome: { [weak self] in self?.open { $0.showWelcome() } },
-            openDebug: { [weak self] in self?.open { $0.showDebug() } },
-            deleteAll: { [weak self] in self?.deleteEverything() },
+        MenuPopoverView(settings: settings, engine: engine, outbox: outbox, drafts: drafts, sender: sender, actions: MenuPopoverView.Actions(
+            open: { [weak self] place in self?.show(place) },
             quit: { NSApp.terminate(nil) }
         ))
     }
@@ -82,12 +82,21 @@ import SwiftUI
         show(self)
     }
 
+    /// One window. The menu bar, the sidebar, and the next-step banners all come through here.
+    func show(_ place: ShellPlace) {
+        navigation.place = place
+        open { $0.showShell() }
+    }
+
     @objc private func togglePopover() {
         guard let button = item.button else { return }
         if popover.isShown {
             popover.performClose(nil)
         } else {
             outbox.refresh() // fresh "to review" count
+            if sender.isConnected {
+                Task { await drafts.refresh() }
+            }
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
@@ -95,9 +104,9 @@ import SwiftUI
 
     private func updateIcon(_ status: CaptureStatus) {
         let (symbol, label): (String, String) = switch status.state {
-        case .on: ("eye", "Constellation: capture on")
-        case .paused: ("pause.circle", "Constellation: paused")
-        case .off: ("eye.slash", "Constellation: capture off")
+        case .on: ("eye", "Orion: capture on")
+        case .paused: ("pause.circle", "Orion: paused")
+        case .off: ("eye.slash", "Orion: capture off")
         }
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
         image?.isTemplate = true
@@ -107,34 +116,34 @@ import SwiftUI
 
     // MARK: Windows
 
-    @objc func showApps() {
-        show("apps", title: "Constellation: Apps and Privacy", AppPickerView(settings: settings, engine: engine) { [weak self] in
-            self?.showDebug()
-        })
+    private func showShell() {
+        show("shell", title: "Orion", shellView)
     }
 
-    @objc func showOutbox() {
-        show("outbox", title: "Constellation: Outbox", OutboxView(model: outbox, settings: settings, sender: sender))
-    }
-
-    @objc func showDraft() {
-        show("draft", title: "Constellation: Today's Draft", DraftView(model: drafts, directory: sender.directory))
-    }
-
-    @objc func showBaseline() {
-        show("baseline", title: "Constellation: Baseline", BaselineView(model: baseline, directory: sender.directory))
+    private var shellView: ShellView {
+        ShellView(
+            navigation: navigation,
+            settings: settings,
+            engine: engine,
+            outbox: outbox,
+            drafts: drafts,
+            sender: sender,
+            stats: stats,
+            baseline: baseline,
+            deleteAll: { [weak self] in self?.deleteEverything() },
+            showWelcome: { [weak self] in self?.showWelcome() }
+        )
     }
 
     @objc func showWelcome() {
-        show("welcome", title: "Welcome to Constellation", OnboardingView(
+        show("welcome", title: "Welcome to Orion", OnboardingView(
             settings: settings,
-            openApps: { [weak self] in self?.showApps() },
-            finish: { [weak self] in self?.windows["welcome"]?.close() }
+            openApps: { [weak self] in self?.show(.apps) },
+            finish: { [weak self] in
+                self?.windows["welcome"]?.close()
+                self?.show(.apps)
+            }
         ))
-    }
-
-    @objc func showDebug() {
-        show("debug", title: "Constellation: Debug", DebugView(stats: stats, engine: engine))
     }
 
     /// Smoke test: lay out every screen without showing it.
@@ -146,6 +155,7 @@ import SwiftUI
             NSHostingController(rootView: OutboxView(model: outbox, settings: settings, sender: sender)).view,
             NSHostingController(rootView: DraftView(model: drafts, directory: sender.directory)).view,
             NSHostingController(rootView: BaselineView(model: baseline, directory: sender.directory)).view,
+            NSHostingController(rootView: shellView).view,
             NSHostingController(rootView: popoverView).view,
         ]
         views.forEach {
@@ -183,6 +193,22 @@ import SwiftUI
             ("apps", AnyView(AppPickerView(settings: settings, engine: engine) {})),
             ("debug", AnyView(DebugView(stats: stats, engine: engine))),
         ]
+        for place in ShellPlace.allCases {
+            let navigation = ShellNavigation()
+            navigation.place = place
+            screens.append(("shell-\(place.rawValue)", AnyView(ShellView(
+                navigation: navigation,
+                settings: settings,
+                engine: engine,
+                outbox: outbox,
+                drafts: drafts,
+                sender: sender,
+                stats: stats,
+                baseline: baseline,
+                deleteAll: {},
+                showWelcome: {}
+            ))))
+        }
         for step in 0..<5 {
             screens.append(("welcome", AnyView(OnboardingView(settings: settings, openApps: {}, finish: {}, startStep: step))))
         }
@@ -194,7 +220,7 @@ import SwiftUI
             render(view, size: size.minimum, to: folder.appendingPathComponent("\(id)\(suffix)-min.png"))
             render(view, size: size.initial, to: folder.appendingPathComponent("\(id)\(suffix)-default.png"))
         }
-        render(AnyView(popoverView), size: CGSize(width: 300, height: 430), to: folder.appendingPathComponent("popover.png"))
+        render(AnyView(popoverView), size: CGSize(width: 300, height: 340), to: folder.appendingPathComponent("popover.png"))
     }
 
     private func render(_ view: AnyView, size: CGSize, to url: URL) {

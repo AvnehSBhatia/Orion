@@ -1,42 +1,120 @@
 import AppKit
+import CoreText
 import SwiftUI
 
-/// Design tokens for every screen: a calm, always-dark "space" look.
-/// Contrast was checked against the brightest surface (a card over the top-left
-/// glow): primary 11 to 17:1, secondary 5.3 to 6.9:1, tertiary 4.5 to 5.4:1,
-/// mint, amber, coral 5 to 8:1, dark text on periwinkle 8.2:1.
+/// Figtree, the geometric sans used for this window.
+/// The file is registered from beside the executable. A missing file uses the system font, so the window still opens.
+enum AppFont {
+    static let regular: CGFloat = 400
+    static let medium: CGFloat = 500
+    static let semibold: CGFloat = 600
+    static let bold: CGFloat = 700
+
+    private static let registered: Void = {
+        guard let url = fontFileURL() else {
+            print("Orion typeface: system font. Figtree was not next to the app.")
+            return
+        }
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        print("Orion typeface: Figtree.")
+    }()
+
+    /// Safe to call more than once. Views also call it the first time they draw text.
+    static func register() {
+        _ = registered
+    }
+
+    static func font(_ size: CGFloat, _ weight: CGFloat = regular) -> Font {
+        _ = registered
+        return Font.custom(postScriptName(weight), size: size)
+    }
+
+    private static func postScriptName(_ weight: CGFloat) -> String {
+        switch weight {
+        case ..<450: "Figtree-Regular"
+        case ..<550: "Figtree-Medium"
+        case ..<650: "Figtree-SemiBold"
+        default: "Figtree-Bold"
+        }
+    }
+
+    /// Swift packages place resources in a sibling bundle. `Bundle.module` quits the app when that bundle is not found, so this looks beside the executable instead.
+    private static func fontFileURL() -> URL? {
+        let manager = FileManager.default
+        var roots: [URL] = []
+        if let executable = Bundle.main.executableURL {
+            roots.append(executable.deletingLastPathComponent())
+        }
+        roots.append(Bundle.main.bundleURL)
+        roots.append(Bundle.main.bundleURL.deletingLastPathComponent())
+
+        var seen = Set<String>()
+        for root in roots where seen.insert(root.path).inserted {
+            if let match = fontFile(in: root, manager) { return match }
+            guard let items = try? manager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { continue }
+            for item in items where item.pathExtension == "bundle" {
+                if let match = fontFile(in: item, manager) { return match }
+            }
+        }
+        return nil
+    }
+
+    private static func fontFile(in directory: URL, _ manager: FileManager) -> URL? {
+        let relative = [
+            "Fonts/Figtree-Variable.ttf",
+            "Figtree-Variable.ttf",
+            "Resources/Fonts/Figtree-Variable.ttf",
+        ]
+        for path in relative {
+            let url = directory.appendingPathComponent(path)
+            if manager.fileExists(atPath: url.path) { return url }
+        }
+        return nil
+    }
+}
+
+/// Warm dark surfaces, cream type, and one light pill for the main action.
 enum Theme {
     // MARK: Background
-    static let backgroundTop = Color(hex: 0x070B1A)
-    static let backgroundBottom = Color(hex: 0x0E1530)
-    static let glow = Color(hex: 0x1B2350)
-    static let nebula = Color(hex: 0x3A2A6B)
-    static let windowBackground = NSColor(red: 0x0B / 255, green: 0x10 / 255, blue: 0x25 / 255, alpha: 1)
+    static let canvas = Color(hex: 0x161513)
+    static let sidebar = canvas
+    static let panel = Color(hex: 0x201F1C)
+    static let welcomePanel = Color(hex: 0x242320)
+    static let backgroundTop = canvas
+    static let backgroundBottom = canvas
+    static let glow = canvas
+    static let nebula = canvas
+    static let windowBackground = NSColor(srgbRed: 22 / 255, green: 21 / 255, blue: 19 / 255, alpha: 1)
 
     // MARK: Text
-    static let textPrimary = Color(hex: 0xEAF0FF)
-    static let textSecondary = textPrimary.opacity(0.62)
-    /// 56%, not 50%: 50% fell to 4.0:1 on cards; 55% is the lowest that passes 4.5:1 everywhere.
-    static let textTertiary = textPrimary.opacity(0.56)
+    static let textPrimary = Color(hex: 0xF4F2EC)
+    static let textSecondary = Color(hex: 0xA8A59C)
+    static let textTertiary = Color(hex: 0x7C7A73)
 
     // MARK: Accent and status
-    static let accent = Color(hex: 0x8AA4FF) // primary actions, focus
-    static let onAccent = Color(hex: 0x070B1A) // text on accent
-    static let line = Color(hex: 0x6FE3FF) // constellation lines
-    static let star = Color(hex: 0xFFF4D6)
-    static let success = Color(hex: 0x5EE6B0)
-    static let warning = Color(hex: 0xFFC46B)
-    static let danger = Color(hex: 0xFF7A8A)
+    /// Ember, for the planet ring and small highlights. Main buttons use primaryFill.
+    static let accent = Color(hex: 0xE8943A)
+    static let onAccent = Color(hex: 0x1A1916)
+    static let primaryFill = Color(hex: 0xF3F1EA)
+    static let onPrimary = Color(hex: 0x1A1916)
+    static let line = accent
+    static let star = accent
+    static let success = Color(hex: 0x8FCBB0)
+    static let warning = Color(hex: 0xE3BA79)
+    static let danger = Color(hex: 0xE39AA4)
+    static let planetMid = Color(hex: 0x8A5A32)
 
     // MARK: Surfaces
-    static let cardFill = Color.white.opacity(0.06)
-    static let cardFillHover = Color.white.opacity(0.085)
-    static let cardBorder = Color.white.opacity(0.10)
-    static let cardBorderHover = Color.white.opacity(0.16)
-    /// Used instead of translucent fills when Reduce Transparency is on.
-    static let cardSolid = Color(hex: 0x1A2140)
-    static let inset = Color.black.opacity(0.28) // code and payload panels
-    static let fieldFill = Color.white.opacity(0.05)
+    static let cardFill = Color(hex: 0x2A2926)
+    static let cardFillHover = Color(hex: 0x302F2B)
+    static let buttonFill = Color(hex: 0x32312D)
+    static let selectedNav = Color.white.opacity(0.08)
+    static let border = Color.white.opacity(0.08)
+    static let cardBorder = border
+    static let cardBorderHover = border
+    static let cardSolid = cardFill
+    static let inset = Color(hex: 0x181715)
+    static let fieldFill = Color(hex: 0x181715)
 
     // MARK: Spacing and shape
     enum Space {
@@ -48,20 +126,29 @@ enum Theme {
     }
 
     static let cardPadding: CGFloat = 16
-    static let cardRadius: CGFloat = 14
-    static let controlRadius: CGFloat = 8
+    static let cardRadius: CGFloat = 16
+    static let panelRadius: CGFloat = 20
+    static let controlRadius: CGFloat = 10
     static let windowPadding: CGFloat = 24
-    static let contentMaxWidth: CGFloat = 680
+    static let pageInset: CGFloat = 28
+    static let pageTop: CGFloat = 22
+    static let contentMaxWidth: CGFloat = 720
+    static let sidebarWidth: CGFloat = 228
     /// Room for the traffic lights, since content runs under the transparent title bar.
     static let titlebarInset: CGFloat = 28
 
     // MARK: Type
     enum Typo {
-        static let windowTitle = Font.system(size: 22, weight: .semibold)
-        static let sectionHeader = Font.system(size: 12, weight: .semibold)
-        static let body = Font.system(size: 13)
-        static let bodyStrong = Font.system(size: 13, weight: .semibold)
-        static let caption = Font.system(size: 11.5)
+        static let windowTitle = AppFont.font(26, AppFont.semibold)
+        static let sheetTitle = AppFont.font(20, AppFont.semibold)
+        static let sectionHeader = AppFont.font(11, AppFont.medium)
+        static let body = AppFont.font(14, AppFont.regular)
+        static let bodyStrong = AppFont.font(14, AppFont.semibold)
+        static let subtitle = AppFont.font(14, AppFont.regular)
+        static let caption = AppFont.font(13, AppFont.regular)
+        static let nav = AppFont.font(14, AppFont.medium)
+        static let stat = AppFont.font(28, AppFont.medium)
+        static let wordmark = AppFont.font(15, AppFont.semibold)
         static let mono = Font.system(size: 12, design: .monospaced)
         static let monoSmall = Font.system(size: 11, design: .monospaced)
     }

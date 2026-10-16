@@ -27,7 +27,7 @@ extension BackendError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .invalidURL: "That isn't a valid web address."
-        case .notConnected: "Connect to the backend in the Outbox first."
+        case .notConnected: "Connect this Mac in Settings."
         case .insecureURL: "Use an https address (http is only allowed for localhost)."
         case .unauthorized: "The backend no longer accepts this Mac. Connect again."
         case .server(let status): "The backend answered with an error (\(status))."
