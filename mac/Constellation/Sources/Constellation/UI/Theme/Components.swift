@@ -36,7 +36,7 @@ struct SpaceScreen<Header: View, Content: View>: View {
         }
         .foregroundStyle(Theme.textPrimary)
         .font(Theme.Typo.body)
-        .tint(Theme.accent)
+        .tint(Theme.textPrimary)
         .preferredColorScheme(.dark)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -60,33 +60,21 @@ struct WindowHeader<Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.s) {
-            if eyebrow != nil || statusLabel != nil {
-                HStack(alignment: .center, spacing: Theme.Space.s) {
-                    if let eyebrow {
-                        Text(eyebrow.uppercased())
-                            .font(Theme.Typo.sectionHeader)
-                            .kerning(1.1)
-                            .foregroundStyle(Theme.textTertiary)
-                    }
-                    Spacer(minLength: Theme.Space.s)
-                    if let statusLabel {
-                        HStack(spacing: 6) {
-                            Circle().fill(statusColor).frame(width: 5, height: 5)
-                            Text(statusLabel.uppercased())
-                                .font(Theme.Typo.sectionHeader)
-                                .kerning(0.8)
-                                .foregroundStyle(statusColor)
-                        }
-                    }
-                }
-            }
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: Theme.Space.m) {
-                Text(title).font(Theme.Typo.windowTitle)
+                Text(title).font(Theme.Typo.windowTitle).tracking(-0.3)
                 if let detail {
-                    Text(detail).font(Theme.Typo.subtitle).foregroundStyle(Theme.textSecondary)
+                    Text(detail).font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
                 }
                 Spacer(minLength: Theme.Space.s)
+                if let statusLabel {
+                    HStack(spacing: 6) {
+                        Circle().fill(statusColor).frame(width: 6, height: 6)
+                        Text(statusLabel)
+                            .font(Theme.Typo.caption)
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
                 trailing
             }
             if let subtitle {
@@ -267,17 +255,19 @@ struct Chip: View {
 
 struct PrimaryButtonStyle: ButtonStyle {
     var small = false
+    var expand = false
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(small ? Theme.Typo.caption.weight(.semibold) : Font.system(size: 13, weight: .semibold))
-            .foregroundStyle(Theme.onAccent)
-            .padding(.horizontal, small ? 12 : 16)
-            .padding(.vertical, small ? 6 : 11)
-            .background(Theme.accent.opacity(configuration.isPressed ? 0.82 : 1), in: RoundedRectangle(cornerRadius: Theme.controlRadius))
+            .font(AppFont.font(small ? 13 : 14, AppFont.semibold))
+            .foregroundStyle(Theme.onPrimary)
+            .padding(.horizontal, small ? 14 : 16)
+            .padding(.vertical, small ? 7 : 9)
+            .frame(maxWidth: expand ? .infinity : nil)
+            .background(Theme.primaryFill.opacity(configuration.isPressed ? 0.82 : 1), in: Capsule())
             .opacity(isEnabled ? 1 : 0.4)
-            .contentShape(Rectangle())
+            .contentShape(Capsule())
     }
 }
 
@@ -288,20 +278,19 @@ struct GhostButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(small ? Theme.Typo.caption.weight(.semibold) : Font.system(size: 13, weight: .semibold))
+            .font(AppFont.font(small ? 13 : 14, AppFont.semibold))
             .foregroundStyle(color)
-            .padding(.horizontal, small ? 12 : 16)
-            .padding(.vertical, small ? 6 : 11)
-            .background(Theme.buttonFill.opacity(configuration.isPressed ? 0.7 : 1), in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-            .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Theme.border))
+            .padding(.horizontal, small ? 14 : 16)
+            .padding(.vertical, small ? 7 : 9)
+            .background(Theme.buttonFill.opacity(configuration.isPressed ? 0.7 : 1), in: Capsule())
             .opacity(isEnabled ? 1 : 0.4)
-            .contentShape(Rectangle())
+            .contentShape(Capsule())
     }
 }
 
 /// Plain text that acts like a link: "Change", "Show all".
 struct LinkButtonStyle: ButtonStyle {
-    var color: Color = Theme.accent
+    var color: Color = Theme.textPrimary
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -400,7 +389,7 @@ struct Hairline: View {
 struct ConstellationDivider: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 1)
-            .fill(Theme.accent)
+            .fill(Theme.textTertiary.opacity(0.45))
             .frame(width: 36, height: 2)
             .accessibilityHidden(true)
     }
@@ -493,7 +482,7 @@ struct PlanetArt: View {
                 context.fill(
                     Path(ellipseIn: CGRect(x: center.x - glow, y: center.y - glow, width: glow * 2, height: glow * 2)),
                     with: .radialGradient(
-                        Gradient(colors: [Theme.accent.opacity(0.20), Theme.accent.opacity(0.05), .clear]),
+                        Gradient(colors: [Color(hex: 0xE8943A).opacity(0.22), Color(hex: 0xE8943A).opacity(0.05), .clear]),
                         center: center,
                         startRadius: radius * 0.9,
                         endRadius: glow
@@ -521,10 +510,10 @@ struct PlanetArt: View {
                 Path(ellipseIn: sphere),
                 with: .radialGradient(
                     Gradient(stops: [
-                        .init(color: Color(hex: 0xE7E0FF), location: 0),
-                        .init(color: Color(hex: 0x8D7AD0), location: 0.16),
-                        .init(color: Color(hex: 0x3A3458), location: 0.48),
-                        .init(color: Color(hex: 0x171820), location: 1),
+                        .init(color: Color(hex: 0xF6E7C8), location: 0),
+                        .init(color: Color(hex: 0xC47A3A), location: 0.16),
+                        .init(color: Color(hex: 0x3A2C22), location: 0.48),
+                        .init(color: Color(hex: 0x171412), location: 1),
                     ]),
                     center: light,
                     startRadius: 0,
@@ -534,7 +523,7 @@ struct PlanetArt: View {
             context.stroke(Path(ellipseIn: sphere), with: .color(Color.white.opacity(0.08)), lineWidth: max(0.6, side * 0.004))
 
             context.stroke(arcs.front, with: .color(Theme.accent.opacity(0.92)), style: front)
-            context.stroke(arcs.front, with: .color(Color(hex: 0xF2EEFF).opacity(compact ? 0.7 : 0.85)), style: edge)
+            context.stroke(arcs.front, with: .color(Color(hex: 0xFFE7C4).opacity(compact ? 0.7 : 0.85)), style: edge)
         }
     }
 

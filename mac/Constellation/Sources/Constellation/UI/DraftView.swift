@@ -24,7 +24,6 @@ struct DraftView: View {
                 title: "Today",
                 detail: Date().formatted(.dateTime.weekday(.wide).month(.wide).day()),
                 subtitle: promise,
-                eyebrow: "Workspace / Today",
                 statusLabel: connected ? "Connected" : "Not connected",
                 statusColor: connected ? Theme.success : Theme.warning
             ) {
@@ -100,60 +99,46 @@ struct DraftView: View {
             }
             DoneForToday(model: model)
             baselineLink
-        } else if !connected {
-            awaitingConnection
-        } else if model.draft != nil || model.error != nil {
-            emptyTimesheet
+        } else if !connected || model.draft != nil || model.error != nil {
+            emptyHero
         }
     }
 
-    private var awaitingConnection: some View {
+    private struct HeroAction {
+        let title: String
+        let run: () -> Void
+    }
+
+    private var heroAction: HeroAction? {
+        if batchesWaiting > 0 { return HeroAction(title: "Review in Outbox", run: onOutbox) }
+        if guideVisible { return nil }
+        if !connected { return HeroAction(title: "Connect", run: onSettings) }
+        if !appsChosen { return HeroAction(title: "Choose apps", run: onApps) }
+        return nil
+    }
+
+    private var emptyHero: some View {
         GlassCard {
-            VStack(spacing: Theme.Space.m) {
-                Text("Your daily timesheet")
-                    .font(Theme.Typo.sectionHeader)
-                    .kerning(1.1)
-                    .foregroundStyle(Theme.textTertiary)
-                    .textCase(.uppercase)
-                Text("Awaiting connection")
-                    .font(Theme.Typo.sectionHeader)
-                    .kerning(1.1)
-                    .foregroundStyle(Theme.warning)
-                    .textCase(.uppercase)
-                OrbitalIllustration()
-                    .frame(maxWidth: 180, minHeight: 88, maxHeight: 100)
-                Text("A little space for your day.")
-                    .font(.system(size: 16))
-                Text("Today’s timesheet will appear here once this Mac is connected.")
-                    .font(Theme.Typo.subtitle)
-                    .foregroundStyle(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 420)
-                baselineLink
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, Theme.Space.m)
-        }
-    }
-
-    private var emptyTimesheet: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
-            GlassCard {
-                VStack(spacing: Theme.Space.m) {
-                    OrbitalIllustration()
-                        .frame(maxWidth: 160, minHeight: 80, maxHeight: 96)
-                    Text("Nothing on today's timesheet yet")
-                        .font(Theme.Typo.bodyStrong)
+            HStack(alignment: .center, spacing: 24) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Today's timesheet")
+                        .font(Theme.Typo.sheetTitle)
                     Text(emptyMessage)
                         .font(Theme.Typo.subtitle)
                         .foregroundStyle(Theme.textSecondary)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 440)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let heroAction {
+                        Button(heroAction.title, action: heroAction.run)
+                            .buttonStyle(PrimaryButtonStyle(small: true))
+                            .padding(.top, 4)
+                    }
+                    baselineLink
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, Theme.Space.s)
+                Spacer(minLength: 8)
+                OrbitalIllustration()
+                    .frame(width: 150, height: 112)
             }
-            baselineLink
+            .padding(.vertical, 6)
         }
     }
 
@@ -169,7 +154,7 @@ struct DraftView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("On this Mac")
                     .font(Theme.Typo.sectionHeader)
-                    .kerning(1.1)
+                    .kerning(0.6)
                     .foregroundStyle(Theme.textTertiary)
                     .textCase(.uppercase)
                 Text("Constellation").font(Theme.Typo.bodyStrong)
@@ -183,20 +168,26 @@ struct DraftView: View {
         .padding(.top, Theme.Space.s)
     }
 
+    private var hasEntries: Bool {
+        guard let draft = model.draft else { return false }
+        return !draft.entries.isEmpty
+    }
+
+    /// The empty hero already carries the next step, so the banner only appears once there is a timesheet.
     @ViewBuilder private var cue: some View {
-        if batchesWaiting > 0 {
+        if hasEntries, batchesWaiting > 0 {
             NextStepBanner(
                 message: "\(batchesWaiting) \(batchesWaiting == 1 ? "item is" : "items are") still on this Mac. Approving \(batchesWaiting == 1 ? "it" : "them") writes today's timesheet.",
                 button: "Review in Outbox",
                 action: onOutbox
             )
-        } else if !connected, !guideVisible {
+        } else if hasEntries, !connected, !guideVisible {
             NextStepBanner(
                 message: "Connect this Mac. Until you do, today's timesheet cannot arrive.",
                 button: "Connect",
                 action: onSettings
             )
-        } else if !appsChosen, !guideVisible {
+        } else if hasEntries, !appsChosen, !guideVisible {
             NextStepBanner(
                 message: "Turn on the apps you work in. Nothing else on this Mac is read.",
                 button: "Choose apps",
@@ -271,45 +262,59 @@ private struct EntryCard: View {
 
     var body: some View {
         GlassCard(emphasis: (clientId == nil || entry.unmatched) && entry.status != .rejected ? .dashed : .normal) {
-            VStack(alignment: .leading, spacing: Theme.Space.m) {
-                topRow
-                descriptionView
-                bottomRow
-                if showEvidence { evidence }
+            HStack(alignment: .top, spacing: 16) {
+                timeColumn
+                VStack(alignment: .leading, spacing: Theme.Space.m) {
+                    HStack(spacing: Theme.Space.s) {
+                        clientMenu
+                        Spacer(minLength: Theme.Space.s)
+                        minuteStepper
+                        StarBadge(kind: badge, label: badge == .noClient ? "" : nil)
+                    }
+                    descriptionView
+                    bottomRow
+                    if showEvidence { evidence }
+                }
             }
         }
         .opacity(entry.status == .rejected ? 0.65 : 1)
         .disabled(model.saving == entry.id)
     }
 
-    // Client pill, minutes, time range, badge.
-    private var topRow: some View {
-        HStack(spacing: Theme.Space.m) {
-            Menu {
-                Button("No Client") { clientId = nil }
-                Divider()
-                ForEach(clients) { client in Button(client.name) { clientId = client.id } }
-            } label: {
-                Text(clientName).font(Theme.Typo.bodyStrong)
-                    .foregroundStyle(clientId == nil ? Theme.textSecondary : Theme.textPrimary)
+    private var timeColumn: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let start = entry.startedAt {
+                Text(start.formatted(date: .omitted, time: .shortened))
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textTertiary)
             }
-            .pillMenu()
-            .help("Change the client")
+            if let end = entry.endedAt {
+                Text(end.formatted(date: .omitted, time: .shortened))
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textTertiary.opacity(0.8))
+            }
+        }
+        .frame(width: 68, alignment: .leading)
+    }
 
-            HStack(spacing: 2) {
-                IconButton(symbol: "minus", help: "5 minutes less") { minutes = max(DraftReview.minuteRange.lowerBound, minutes - 5) }
-                Text(minutes.asDuration).font(Theme.Typo.bodyStrong).monospacedDigit().frame(minWidth: 72)
-                IconButton(symbol: "plus", help: "5 minutes more") { minutes = min(DraftReview.minuteRange.upperBound, minutes + 5) }
-            }
+    private var clientMenu: some View {
+        Menu {
+            Button("No Client") { clientId = nil }
+            Divider()
+            ForEach(clients) { client in Button(client.name) { clientId = client.id } }
+        } label: {
+            Text(clientName).font(Theme.Typo.bodyStrong)
+                .foregroundStyle(clientId == nil ? Theme.textSecondary : Theme.textPrimary)
+        }
+        .pillMenu()
+        .help("Change the client")
+    }
 
-            if let start = entry.startedAt, let end = entry.endedAt {
-                Text("\(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))")
-                    .font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: Theme.Space.s)
-            // With no client, the pill already says "Pick a client": the ghost star alone.
-            StarBadge(kind: badge, label: badge == .noClient ? "" : nil)
+    private var minuteStepper: some View {
+        HStack(spacing: 2) {
+            IconButton(symbol: "minus", help: "5 minutes less") { minutes = max(DraftReview.minuteRange.lowerBound, minutes - 5) }
+            Text(minutes.asDuration).font(Theme.Typo.bodyStrong).monospacedDigit().frame(minWidth: 64)
+            IconButton(symbol: "plus", help: "5 minutes more") { minutes = min(DraftReview.minuteRange.upperBound, minutes + 5) }
         }
     }
 

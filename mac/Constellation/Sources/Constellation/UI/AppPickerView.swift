@@ -35,8 +35,7 @@ struct AppPickerView: View {
                 title: appsOnly ? "Apps" : "Apps and Privacy",
                 subtitle: appsOnly
                     ? "Turn on the apps you work in. Browsers share only the tab title and address. Everything else on this Mac stays unread."
-                    : "Every app starts off. Browsers share only the tab title and address.",
-                eyebrow: appsOnly ? "Workspace / Apps" : nil
+                    : "Every app starts off. Browsers share only the tab title and address."
             ) {
                 if !appsOnly {
                     IconButton(symbol: "gauge.with.dots.needle.33percent", help: "Open the debug view", action: showDebug)

@@ -67,7 +67,7 @@ struct OnboardingView: View {
         }
         .foregroundStyle(Theme.textPrimary)
         .font(Theme.Typo.body)
-        .tint(Theme.accent)
+        .tint(Theme.textPrimary)
         .preferredColorScheme(.dark)
         .onReceive(poll) { _ in trusted = AXIsProcessTrusted() }
     }
@@ -88,7 +88,7 @@ struct OnboardingView: View {
     private var progress: some View {
         HStack(spacing: 10) {
             Text(String(format: "%02d  /  %02d", step + 1, Self.stepCount))
-                .font(Theme.Typo.monoSmall)
+                .font(Theme.Typo.caption)
                 .foregroundStyle(Theme.textSecondary)
             StepDots(current: step, count: Self.stepCount)
         }
@@ -103,12 +103,11 @@ struct OnboardingView: View {
         HStack(spacing: 20) {
             VStack(alignment: .leading, spacing: Theme.Space.l) {
                 Text("Less admin. More orbit.")
-                    .font(Theme.Typo.sectionHeader)
-                    .kerning(1.2)
-                    .foregroundStyle(Theme.accent)
-                    .textCase(.uppercase)
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textSecondary)
                 Text("Welcome to Constellation")
                     .font(Theme.Typo.windowTitle)
+                    .tracking(-0.3)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Your daily time entries, mostly written for you.")
                     .font(Theme.Typo.subtitle)
@@ -125,10 +124,8 @@ struct OnboardingView: View {
                     .buttonStyle(PrimaryButtonStyle())
                     .keyboardShortcut(.defaultAction)
                 Text("Made for your Mac")
-                    .font(Theme.Typo.sectionHeader)
-                    .kerning(1.1)
+                    .font(Theme.Typo.caption)
                     .foregroundStyle(Theme.textTertiary)
-                    .textCase(.uppercase)
             }
             .padding(.leading, 40)
             .padding(.trailing, 12)
@@ -161,10 +158,10 @@ struct OnboardingView: View {
             .frame(maxWidth: 380)
             .frame(maxHeight: .infinity)
             .background(Theme.welcomePanel)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .padding(.top, Theme.titlebarInset)
-            .padding(.trailing, 20)
-            .padding(.bottom, 20)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous))
+            .padding(.top, 12)
+            .padding(.trailing, 12)
+            .padding(.bottom, 12)
         }
     }
 

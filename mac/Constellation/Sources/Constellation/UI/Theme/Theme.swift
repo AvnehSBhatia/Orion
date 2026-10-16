@@ -1,44 +1,96 @@
 import AppKit
+import CoreText
 import SwiftUI
 
-/// Design tokens for the Mac window: charcoal canvas, lilac accent, one radius.
+/// Figtree, the geometric sans used for this window. Registered from the app bundle.
+enum AppFont {
+    static let family = "Figtree"
+    /// OpenType weight axis. Figtree runs from 300 to 900.
+    static let regular: CGFloat = 400
+    static let medium: CGFloat = 500
+    static let semibold: CGFloat = 600
+    static let bold: CGFloat = 700
+
+    private static let registered: Void = {
+        let bundle = Bundle.module
+        let urls = [
+            bundle.url(forResource: "Figtree-Variable", withExtension: "ttf", subdirectory: "Fonts"),
+            bundle.url(forResource: "Figtree-Variable", withExtension: "ttf"),
+        ].compactMap { $0 }
+        for url in urls {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
+    }()
+
+    static func font(_ size: CGFloat, _ weight: CGFloat = regular) -> Font {
+        _ = registered
+        let variations: [NSNumber: NSNumber] = [2003265652: NSNumber(value: Double(weight))]
+        let attributes: [CFString: Any] = [
+            kCTFontNameAttribute: family as CFString,
+            kCTFontVariationAttribute: variations,
+        ]
+        let descriptor = CTFontDescriptorCreateWithAttributes(attributes as CFDictionary)
+        let resolved = CTFontCreateWithFontDescriptor(descriptor, size, nil)
+        let resolvedFamily = CTFontCopyFamilyName(resolved) as String
+        if resolvedFamily.localizedCaseInsensitiveContains(family) {
+            return Font(resolved as NSFont)
+        }
+        let fallback = NSFont.systemFont(ofSize: size, weight: nsWeight(weight))
+        return Font(fallback)
+    }
+
+    private static func nsWeight(_ weight: CGFloat) -> NSFont.Weight {
+        switch weight {
+        case ..<450: .regular
+        case ..<550: .medium
+        case ..<650: .semibold
+        default: .bold
+        }
+    }
+}
+
+/// Warm dark surfaces, cream type, and one light pill for the main action.
 enum Theme {
     // MARK: Background
-    static let canvas = Color(hex: 0x101115)
-    static let sidebar = Color(hex: 0x14151A)
-    static let welcomePanel = Color(hex: 0x18151F)
+    static let canvas = Color(hex: 0x161513)
+    static let sidebar = canvas
+    static let panel = Color(hex: 0x201F1C)
+    static let welcomePanel = Color(hex: 0x242320)
     static let backgroundTop = canvas
     static let backgroundBottom = canvas
     static let glow = canvas
     static let nebula = canvas
-    static let windowBackground = NSColor(red: 0x10 / 255, green: 0x11 / 255, blue: 0x15 / 255, alpha: 1)
+    static let windowBackground = NSColor(srgbRed: 22 / 255, green: 21 / 255, blue: 19 / 255, alpha: 1)
 
     // MARK: Text
-    static let textPrimary = Color(hex: 0xF2F1F7)
-    static let textSecondary = Color(hex: 0xA0A1B1)
-    static let textTertiary = Color(hex: 0x858797)
+    static let textPrimary = Color(hex: 0xF4F2EC)
+    static let textSecondary = Color(hex: 0xA8A59C)
+    static let textTertiary = Color(hex: 0x7C7A73)
 
     // MARK: Accent and status
-    static let accent = Color(hex: 0xAD97FF)
-    static let onAccent = Color(hex: 0x101115)
+    /// Ember, for the planet ring and small highlights. Main buttons use primaryFill.
+    static let accent = Color(hex: 0xE8943A)
+    static let onAccent = Color(hex: 0x1A1916)
+    static let primaryFill = Color(hex: 0xF3F1EA)
+    static let onPrimary = Color(hex: 0x1A1916)
     static let line = accent
     static let star = accent
     static let success = Color(hex: 0x8FCBB0)
     static let warning = Color(hex: 0xE3BA79)
     static let danger = Color(hex: 0xE39AA4)
-    static let planetMid = Color(hex: 0x4B3D72)
+    static let planetMid = Color(hex: 0x8A5A32)
 
     // MARK: Surfaces
-    static let cardFill = Color(hex: 0x191A21)
-    static let cardFillHover = Color(hex: 0x1E1F27)
-    static let buttonFill = Color(hex: 0x20212A)
-    static let selectedNav = Color(hex: 0x292339)
-    static let border = Color(hex: 0x2C2D37)
+    static let cardFill = Color(hex: 0x2A2926)
+    static let cardFillHover = Color(hex: 0x302F2B)
+    static let buttonFill = Color(hex: 0x32312D)
+    static let selectedNav = Color.white.opacity(0.08)
+    static let border = Color.white.opacity(0.08)
     static let cardBorder = border
     static let cardBorderHover = border
     static let cardSolid = cardFill
-    static let inset = Color(hex: 0x101115)
-    static let fieldFill = buttonFill
+    static let inset = Color(hex: 0x181715)
+    static let fieldFill = Color(hex: 0x181715)
 
     // MARK: Spacing and shape
     enum Space {
@@ -50,25 +102,29 @@ enum Theme {
     }
 
     static let cardPadding: CGFloat = 16
-    static let cardRadius: CGFloat = 12
-    static let controlRadius: CGFloat = 8
+    static let cardRadius: CGFloat = 16
+    static let panelRadius: CGFloat = 20
+    static let controlRadius: CGFloat = 10
     static let windowPadding: CGFloat = 24
-    static let pageInset: CGFloat = 32
-    static let pageTop: CGFloat = 20
-    static let contentMaxWidth: CGFloat = 680
-    static let sidebarWidth: CGFloat = 232
+    static let pageInset: CGFloat = 28
+    static let pageTop: CGFloat = 22
+    static let contentMaxWidth: CGFloat = 720
+    static let sidebarWidth: CGFloat = 228
     /// Room for the traffic lights, since content runs under the transparent title bar.
     static let titlebarInset: CGFloat = 28
 
     // MARK: Type
     enum Typo {
-        static let windowTitle = Font.system(size: 28, weight: .regular)
-        static let sheetTitle = Font.system(size: 22, weight: .regular)
-        static let sectionHeader = Font.system(size: 10, weight: .medium, design: .monospaced)
-        static let body = Font.system(size: 13)
-        static let bodyStrong = Font.system(size: 13, weight: .semibold)
-        static let subtitle = Font.system(size: 14)
-        static let caption = Font.system(size: 12)
+        static let windowTitle = AppFont.font(26, AppFont.semibold)
+        static let sheetTitle = AppFont.font(20, AppFont.semibold)
+        static let sectionHeader = AppFont.font(11, AppFont.medium)
+        static let body = AppFont.font(14, AppFont.regular)
+        static let bodyStrong = AppFont.font(14, AppFont.semibold)
+        static let subtitle = AppFont.font(14, AppFont.regular)
+        static let caption = AppFont.font(13, AppFont.regular)
+        static let nav = AppFont.font(14, AppFont.medium)
+        static let stat = AppFont.font(28, AppFont.medium)
+        static let wordmark = AppFont.font(15, AppFont.semibold)
         static let mono = Font.system(size: 12, design: .monospaced)
         static let monoSmall = Font.system(size: 11, design: .monospaced)
     }

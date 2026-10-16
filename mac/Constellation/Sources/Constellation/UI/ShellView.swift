@@ -69,13 +69,12 @@ struct ShellView: View {
             SpaceBackground()
             HStack(spacing: 0) {
                 sidebar
-                Rectangle().fill(Theme.border).frame(width: 1)
                 detail
             }
         }
         .foregroundStyle(Theme.textPrimary)
         .font(Theme.Typo.body)
-        .tint(Theme.accent)
+        .tint(Theme.textPrimary)
         .preferredColorScheme(.dark)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $showBaseline) {
@@ -86,15 +85,12 @@ struct ShellView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .center, spacing: 10) {
-                ConstellationMark().frame(width: 22, height: 22).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Constellation").font(.system(size: 14, weight: .semibold))
-                    Text("On this Mac").font(Theme.Typo.monoSmall).foregroundStyle(Theme.textTertiary)
-                }
+            HStack(alignment: .center, spacing: 8) {
+                ConstellationMark().frame(width: 18, height: 18).accessibilityHidden(true)
+                Text("Constellation").font(Theme.Typo.wordmark)
             }
-            .padding(.horizontal, 14)
-            .padding(.bottom, Theme.Space.m)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 14)
 
             ForEach(ShellPlace.allCases) { place in
                 sidebarRow(place)
@@ -105,18 +101,18 @@ struct ShellView: View {
             } else if needsSetup {
                 Button("Show setup steps") { settings.guideDismissed = false }
                     .buttonStyle(.plain)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.accent)
-                    .padding(.horizontal, 14)
+                    .font(AppFont.font(13, AppFont.medium))
+                    .foregroundStyle(Theme.textSecondary)
+                    .padding(.horizontal, 10)
                     .padding(.top, 8)
             }
 
             Spacer(minLength: Theme.Space.l)
             captureControl
         }
-        .padding(.horizontal, 12)
-        .padding(.top, Theme.titlebarInset + Theme.Space.s)
-        .padding(.bottom, Theme.Space.l)
+        .padding(.horizontal, 10)
+        .padding(.top, Theme.titlebarInset + 4)
+        .padding(.bottom, 16)
         .frame(width: Theme.sidebarWidth)
         .background(Theme.sidebar)
     }
@@ -127,24 +123,24 @@ struct ShellView: View {
         return Button {
             navigation.place = place
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Image(systemName: place.symbol)
-                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
-                    .frame(width: 16)
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 18)
                 Text(place.label)
-                    .font(.system(size: 14, weight: selected ? .semibold : .regular))
+                    .font(AppFont.font(14, selected ? AppFont.medium : AppFont.regular))
                 Spacer(minLength: 4)
                 if badge > 0 {
                     Text("\(badge)")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(AppFont.font(12, AppFont.medium))
                         .foregroundStyle(Theme.textTertiary)
                 }
             }
-            .foregroundStyle(selected ? Color.white : Theme.textSecondary)
-            .padding(.horizontal, 14)
-            .frame(height: 44)
+            .foregroundStyle(selected ? Theme.textPrimary : Theme.textSecondary)
+            .padding(.horizontal, 10)
+            .frame(height: 34)
             .contentShape(Rectangle())
-            .background(selected ? Theme.selectedNav : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+            .background(selected ? Theme.selectedNav : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .keyboardShortcut(place.shortcut, modifiers: [.command])
@@ -173,17 +169,16 @@ struct ShellView: View {
                 .fixedSize(horizontal: false, vertical: true)
             captureButton
         }
-        .padding(12)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.cardFill, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
-        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border))
+        .background(Theme.cardFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     @ViewBuilder private var captureButton: some View {
         switch engine.status.state {
         case .off:
             if settings.policy.captureEnabled {
-                Button("Turn On") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle(small: true))
+                Button("Turn On") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle(small: true, expand: true))
             }
         case .paused:
             Button { settings.resume() } label: {
@@ -238,7 +233,15 @@ struct ShellView: View {
 
     private var showsGuide: Bool { needsSetup && !settings.guideDismissed }
 
-    private var detail: some View { pageStack }
+    private var detail: some View {
+        pageStack
+            .background(Theme.panel)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.panelRadius, style: .continuous))
+            .padding(.top, 12)
+            .padding(.bottom, 12)
+            .padding(.trailing, 12)
+            .padding(.leading, 2)
+    }
 
     private var pageStack: some View {
         ZStack {
@@ -314,16 +317,16 @@ struct ShellView: View {
             HStack {
                 Text("Setup")
                     .font(Theme.Typo.sectionHeader)
-                    .kerning(1.0)
+                    .kerning(0.6)
                     .foregroundStyle(Theme.textTertiary)
                     .textCase(.uppercase)
                 Spacer()
                 Button("Hide") { settings.guideDismissed = true }
                     .buttonStyle(.plain)
-                    .font(.system(size: 11))
+                    .font(AppFont.font(12, AppFont.medium))
                     .foregroundStyle(Theme.textTertiary)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 10)
             .padding(.bottom, 4)
             ForEach(guideSteps) { step in
                 Button {
@@ -335,28 +338,28 @@ struct ShellView: View {
                 } label: {
                     HStack(spacing: 8) {
                         ZStack {
-                            Circle().fill(step.done ? Theme.success.opacity(0.22) : (step.current ? Theme.accent : Color.clear))
+                            Circle().fill(step.done ? Theme.success.opacity(0.22) : (step.current ? Theme.primaryFill : Color.clear))
                             if step.done {
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 8, weight: .bold))
                                     .foregroundStyle(Theme.success)
                             } else {
                                 Text("\(step.id)")
-                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(step.current ? Theme.onAccent : Theme.textTertiary)
+                                    .font(AppFont.font(10, AppFont.semibold))
+                                    .foregroundStyle(step.current ? Theme.onPrimary : Theme.textTertiary)
                             }
                         }
                         .frame(width: 16, height: 16)
                         .overlay(Circle().strokeBorder(step.current || step.done ? Color.clear : Theme.border, lineWidth: 1))
                         Text(step.title)
-                            .font(.system(size: 13, weight: step.current ? .semibold : .regular))
-                            .foregroundStyle(step.current ? Color.white : Theme.textSecondary)
+                            .font(AppFont.font(13, step.current ? AppFont.medium : AppFont.regular))
+                            .foregroundStyle(step.current ? Theme.textPrimary : Theme.textSecondary)
                             .lineLimit(1)
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 10)
-                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-                    .background(step.current ? Theme.selectedNav : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                    .padding(.horizontal, 8)
+                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                    .background(step.current ? Theme.selectedNav : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .help(step.detail)

@@ -27,7 +27,7 @@ struct MenuPopoverView: View {
             HStack(spacing: Theme.Space.m) {
                 GlowDot(color: dotColor, size: 11)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(headline).font(.system(size: 20, weight: .semibold))
+                    Text(headline).font(Theme.Typo.sheetTitle)
                     Text(detail).font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let minutes = drafts.draft?.totalMinutes, minutes > 0, cue?.place != .today {
@@ -98,7 +98,7 @@ struct MenuPopoverView: View {
         .background(SpaceBackground())
         .foregroundStyle(Theme.textPrimary)
         .font(Theme.Typo.body)
-        .tint(Theme.accent)
+        .tint(Theme.textPrimary)
         .preferredColorScheme(.dark)
     }
 

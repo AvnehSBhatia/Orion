@@ -26,7 +26,6 @@ struct SettingsView: View {
                 subtitle: tab == .connection
                     ? "Connect this Mac, choose when work leaves, and see what is replaced."
                     : "What is always replaced, and the windows this Mac never reads.",
-                eyebrow: "Workspace / Settings",
                 statusLabel: sender.isConnected ? "Connected" : "Not connected",
                 statusColor: sender.isConnected ? Theme.success : Theme.warning
             )
