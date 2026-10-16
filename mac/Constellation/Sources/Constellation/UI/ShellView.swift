@@ -99,13 +99,16 @@ struct ShellView: View {
             ForEach(ShellPlace.allCases) { place in
                 sidebarRow(place)
             }
-            if needsSetup, settings.guideDismissed {
+            if showsGuide {
+                setupGuide
+                    .padding(.top, 14)
+            } else if needsSetup {
                 Button("Show setup steps") { settings.guideDismissed = false }
                     .buttonStyle(.plain)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.accent)
                     .padding(.horizontal, 14)
-                    .padding(.top, 6)
+                    .padding(.top, 8)
             }
 
             Spacer(minLength: Theme.Space.l)
@@ -170,7 +173,7 @@ struct ShellView: View {
                 .fixedSize(horizontal: false, vertical: true)
             captureButton
         }
-        .padding(Theme.cardPadding)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.cardFill, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
         .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border))
@@ -235,16 +238,7 @@ struct ShellView: View {
 
     private var showsGuide: Bool { needsSetup && !settings.guideDismissed }
 
-    private var detail: some View {
-        VStack(spacing: 0) {
-            if showsGuide {
-                setupGuide
-                    .padding(.horizontal, Theme.pageInset)
-                    .padding(.top, 14)
-            }
-            pageStack
-        }
-    }
+    private var detail: some View { pageStack }
 
     private var pageStack: some View {
         ZStack {
@@ -316,60 +310,56 @@ struct ShellView: View {
     }
 
     private var setupGuide: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text("Start here")
+                Text("Setup")
                     .font(Theme.Typo.sectionHeader)
-                    .kerning(1.1)
+                    .kerning(1.0)
                     .foregroundStyle(Theme.textTertiary)
                     .textCase(.uppercase)
                 Spacer()
                 Button("Hide") { settings.guideDismissed = true }
-                    .buttonStyle(LinkButtonStyle(color: Theme.textTertiary))
-            }
-            HStack(alignment: .stretch, spacing: 8) {
-                ForEach(guideSteps) { step in
-                    Button {
-                        if let place = step.place {
-                            navigation.place = place
-                        } else {
-                            showWelcome()
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            ZStack {
-                                Circle().fill(step.done ? Theme.success.opacity(0.22) : (step.current ? Theme.accent : Theme.buttonFill))
-                                if step.done {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 9, weight: .bold))
-                                        .foregroundStyle(Theme.success)
-                                } else {
-                                    Text("\(step.id)")
-                                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                        .foregroundStyle(step.current ? Theme.onAccent : Theme.textSecondary)
-                                }
-                            }
-                            .frame(width: 18, height: 18)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(step.title)
-                                    .font(.system(size: 13, weight: step.current ? .semibold : .regular))
-                                    .foregroundStyle(Theme.textPrimary)
-                                    .lineLimit(1)
-                                Text(step.detail)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(Theme.textTertiary)
-                                    .lineLimit(1)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                        .background(step.current ? Theme.selectedNav : Theme.cardFill, in: RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(step.current ? Theme.accent.opacity(0.7) : Theme.border, lineWidth: 1))
-                    }
                     .buttonStyle(.plain)
-                    .help(step.title)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.textTertiary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 4)
+            ForEach(guideSteps) { step in
+                Button {
+                    if let place = step.place {
+                        navigation.place = place
+                    } else {
+                        showWelcome()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        ZStack {
+                            Circle().fill(step.done ? Theme.success.opacity(0.22) : (step.current ? Theme.accent : Color.clear))
+                            if step.done {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundStyle(Theme.success)
+                            } else {
+                                Text("\(step.id)")
+                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(step.current ? Theme.onAccent : Theme.textTertiary)
+                            }
+                        }
+                        .frame(width: 16, height: 16)
+                        .overlay(Circle().strokeBorder(step.current || step.done ? Color.clear : Theme.border, lineWidth: 1))
+                        Text(step.title)
+                            .font(.system(size: 13, weight: step.current ? .semibold : .regular))
+                            .foregroundStyle(step.current ? Color.white : Theme.textSecondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                    .background(step.current ? Theme.selectedNav : Color.clear, in: RoundedRectangle(cornerRadius: 8))
                 }
+                .buttonStyle(.plain)
+                .help(step.detail)
             }
         }
     }

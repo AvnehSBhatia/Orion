@@ -80,6 +80,7 @@ import CaptureCore
 
         print("""
         Constellation is running, and its window should be in front.
+        Setup is listed in the sidebar, under Today, Outbox, Apps, and Settings. If you do not see the word Setup there, this is an older copy: quit, then pull and rebuild.
         The eye in the menu bar opens that window again. On a MacBook, a full menu bar can hide the eye behind the camera notch, so the window also opens whenever you start the app.
         Press Ctrl+C here, or choose Quit Constellation in the menu bar popover, to stop.
         """)

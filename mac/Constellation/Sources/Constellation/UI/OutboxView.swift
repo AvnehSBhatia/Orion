@@ -122,38 +122,37 @@ struct OutboxView: View {
     private var approvedCount: Int { model.approved.reduce(0) { $0 + $1.items.count } }
     private var sentItemCount: Int { model.sent.reduce(0) { $0 + $1.items.count } }
 
+    /// One bar, three equal columns. Separate cards made the row uneven.
     private var stageCards: some View {
-        HStack(alignment: .top, spacing: Theme.Space.m) {
-            stageCard(title: "Waiting for review", count: reviewCount, symbol: "square.stack.3d.up", empty: "Nothing waiting.")
-            stageCard(title: "Approved", count: approvedCount, symbol: "checkmark.circle", empty: "Nothing approved.")
-            stageCard(title: "Sent", count: sentItemCount, symbol: "paperplane", empty: "Nothing sent.")
+        HStack(spacing: 0) {
+            stageCell(title: "Waiting", count: reviewCount, detail: reviewCount == 0 ? "Nothing waiting" : "To approve")
+            Rectangle().fill(Theme.border).frame(width: 1)
+            stageCell(title: "Approved", count: approvedCount, detail: approvedCount == 0 ? "Nothing approved" : "Ready to send")
+            Rectangle().fill(Theme.border).frame(width: 1)
+            stageCell(title: "Sent", count: sentItemCount, detail: sentItemCount == 0 ? "Nothing sent" : "Already left")
         }
+        .background(Theme.cardFill, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border))
     }
 
-    private func stageCard(title: String, count: Int, symbol: String, empty: String) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: symbol)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.textSecondary)
-                        .frame(width: 16)
-                    Text(title)
-                        .font(Theme.Typo.bodyStrong)
-                        .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Text("\(count)")
-                        .font(.system(size: 18, weight: .regular, design: .monospaced))
-                        .foregroundStyle(count > 0 && title == "Waiting for review" ? Theme.warning : Theme.textPrimary)
-                }
-                Text(count == 0 ? empty : "\(count) \(count == 1 ? "item" : "items")")
-                    .font(Theme.Typo.caption)
-                    .foregroundStyle(Theme.textTertiary)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, minHeight: 16, alignment: .leading)
-            }
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .top)
+    private func stageCell(title: String, count: Int, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.uppercased())
+                .font(Theme.Typo.sectionHeader)
+                .kerning(0.6)
+                .foregroundStyle(Theme.textTertiary)
+            Text("\(count)")
+                .font(.system(size: 22, weight: .regular, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(count > 0 && title == "Waiting" ? Theme.warning : Theme.textPrimary)
+            Text(detail)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.textTertiary)
+                .lineLimit(1)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
     }
 
     /// A single line so the Outbox never hides whether this Mac is connected.
@@ -225,8 +224,7 @@ private struct NowCard: View {
     @ObservedObject var settings: Settings
 
     var body: some View {
-        GlassCard(emphasis: .normal, padding: 12) {
-            HStack(alignment: .center, spacing: Theme.Space.m) {
+        HStack(alignment: .center, spacing: Theme.Space.m) {
                 GlowDot(color: dotColor, size: 6)
                 VStack(alignment: .leading, spacing: 4) {
                     switch settings.state {
@@ -268,7 +266,6 @@ private struct NowCard: View {
                     .buttonStyle(GhostButtonStyle(small: true))
                 case .on: EmptyView()
                 }
-            }
         }
     }
 
