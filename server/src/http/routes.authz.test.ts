@@ -187,7 +187,7 @@ const CASES: Case[] = [
   { key: "GET /api/downloads/mac/latest", call: () => ({ url: "/api/downloads/mac/latest" }), anon: 404, otherOrg: "skip", member: "skip" as never, admin: "skip" as never },
   {
     key: "GET /api/downloads/mac/[file]",
-    call: () => ({ url: "/api/downloads/mac/Constellation-0.1.0.zip", params: { file: "Constellation-0.1.0.zip" } }),
+    call: () => ({ url: "/api/downloads/mac/Orion-0.1.0.zip", params: { file: "Orion-0.1.0.zip" } }),
     anon: 404,
     otherOrg: "skip",
     member: "skip" as never,

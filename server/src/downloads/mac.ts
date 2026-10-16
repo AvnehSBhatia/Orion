@@ -1,5 +1,5 @@
-// The Mac app download: `mac/Constellation/scripts/package.sh` builds Constellation.app, zips it, and writes
-// latest.json beside it; the operator copies both into `${downloadsDir}/mac` on the box. Nothing is in git or the
+// The Mac app download: `mac/Constellation/scripts/package.sh` builds Orion.app (the Constellation capture app),
+// zips it, and writes latest.json beside it; the operator copies both into `${downloadsDir}/mac` on the box. Nothing is in git or the
 // image. The app is not notarized, so the page leads with install.sh: files curl fetches carry no quarantine flag,
 // so Gatekeeper does not stop the app, and the script checks the zip's SHA-256 before installing it.
 import { createReadStream, promises as fs } from "node:fs";
@@ -11,7 +11,7 @@ import { HttpError } from "@/http/error";
 
 const release = z.object({
   version: z.string().regex(/^[\w.+-]{1,32}$/),
-  file: z.string().regex(/^Constellation-[\w.+-]{1,64}\.zip$/),
+  file: z.string().regex(/^Orion-[\w.+-]{1,64}\.zip$/),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
   size: z.number().int().positive(),
   publishedAt: z.string(),
@@ -57,20 +57,20 @@ export function publicOrigin(req: Request): string {
 
 /**
  * `curl -fsSL <api>/api/downloads/mac/install.sh | bash`: downloads the latest zip, checks its SHA-256, quits a
- * running copy, and puts Constellation.app in /Applications (~/Applications when that is not writable). Running it
+ * running copy, and puts Orion.app in /Applications (~/Applications when that is not writable). Running it
  * again is how a Mac updates.
  */
 export function installScript(origin: string): string {
   return `#!/bin/bash
-# Installs or updates Constellation, the Orion Mac app, from ${origin}.
+# Installs or updates Orion for Mac from ${origin}.
 set -euo pipefail
 API="${origin}"
-[ "$(uname -s)" = Darwin ] || { echo "Constellation runs on macOS only." >&2; exit 1; }
+[ "$(uname -s)" = Darwin ] || { echo "Orion for Mac runs on macOS only." >&2; exit 1; }
 meta=$(curl -fsSL "$API/api/downloads/mac/latest")
 field() { /usr/bin/plutil -extract "$1" raw -o - - <<<"$meta"; }
 version=$(field version); file=$(field file); sum=$(field sha256)
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-echo "Downloading Constellation $version..."
+echo "Downloading Orion for Mac $version..."
 curl -fL --progress-bar -o "$tmp/$file" "$API/api/downloads/mac/$file"
 [ "$(shasum -a 256 "$tmp/$file" | cut -d' ' -f1)" = "$sum" ] || { echo "The download is damaged (checksum mismatch). Nothing was installed." >&2; exit 1; }
 /usr/bin/ditto -x -k "$tmp/$file" "$tmp/app"
@@ -78,10 +78,11 @@ dest="\${CONSTELLATION_DEST:-/Applications}"
 [ -w "$dest" ] || { dest="$HOME/Applications"; mkdir -p "$dest"; }
 /usr/bin/osascript -e 'tell application id "ai.orion.constellation" to quit' >/dev/null 2>&1 || true
 pkill -x Constellation >/dev/null 2>&1 || true
-rm -rf "$dest/Constellation.app"
-/usr/bin/ditto "$tmp/app/Constellation.app" "$dest/Constellation.app"
-/usr/bin/xattr -dr com.apple.quarantine "$dest/Constellation.app" 2>/dev/null || true
-echo "Installed Constellation $version in $dest."
-[ -n "\${CONSTELLATION_NO_OPEN:-}" ] || open "$dest/Constellation.app"
+# Versions before 0.7 were named Constellation.app.
+rm -rf "$dest/Orion.app" "$dest/Constellation.app"
+/usr/bin/ditto "$tmp/app/Orion.app" "$dest/Orion.app"
+/usr/bin/xattr -dr com.apple.quarantine "$dest/Orion.app" 2>/dev/null || true
+echo "Installed Orion $version in $dest."
+[ -n "\${CONSTELLATION_NO_OPEN:-}" ] || open "$dest/Orion.app"
 `;
 }

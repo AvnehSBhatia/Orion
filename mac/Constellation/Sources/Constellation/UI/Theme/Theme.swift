@@ -45,6 +45,9 @@ enum AppFont {
         if let executable = Bundle.main.executableURL {
             roots.append(executable.deletingLastPathComponent())
         }
+        if let resources = Bundle.main.resourceURL {
+            roots.append(resources) // Orion.app/Contents/Resources, where scripts/package.sh puts the font
+        }
         roots.append(Bundle.main.bundleURL)
         roots.append(Bundle.main.bundleURL.deletingLastPathComponent())
 

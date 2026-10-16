@@ -132,8 +132,8 @@ Notes:
 
 The download page is `https://app.<domain>/download`. It is public, and Settings, Connect your Mac links to it. The API serves the files from `deploy/downloads/mac/` (mounted read only at `/downloads`); they are not in git or the image.
 
-1. On a Mac, from `mac/Constellation`: `scripts/package.sh 0.7.0` (add `SWIFT=scripts/swift-clt.sh` on a Mac with stale Command Line Tools). It builds a universal `Constellation.app`, signs it, and writes `dist/Constellation-0.7.0.zip` and `dist/latest.json`.
-2. Copy the zip first, then `latest.json`, so the page never points at a missing file: `scp dist/Constellation-0.7.0.zip dist/latest.json <box>:<repo>/deploy/downloads/mac/`.
+1. On a Mac, from `mac/Constellation`: `scripts/package.sh 0.7.0` (add `SWIFT=scripts/swift-clt.sh` on a Mac with stale Command Line Tools). It builds a universal `Orion.app`, signs it, and writes `dist/Orion-0.7.0.zip` and `dist/latest.json`.
+2. Copy the zip first, then `latest.json`, so the page never points at a missing file: `scp dist/Orion-0.7.0.zip dist/latest.json <box>:<repo>/deploy/downloads/mac/`.
 3. Check `https://api.<domain>/api/downloads/mac/latest` shows the new version.
 
 People install and update with `curl -fsSL https://api.<domain>/api/downloads/mac/install.sh | bash`, which checks the zip's SHA-256. The app is not notarized: a zip downloaded in a browser needs System Settings, Privacy & Security, Open Anyway on first launch; the curl install doesn't.

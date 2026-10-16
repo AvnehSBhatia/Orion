@@ -5,7 +5,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "Download for Mac · Orion",
-  description: "Install Constellation, the Orion app for Mac that sends the work you approve to your team's Orion.",
+  description: "Install Orion for Mac, the app that sends the work you approve to your team's Orion.",
 };
 
 /** Public: no sign-in, so a new teammate can install the app before their first visit. */

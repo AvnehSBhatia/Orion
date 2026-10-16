@@ -49,9 +49,9 @@ export function MacDownload() {
 
   return (
     <>
-      <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-ink">Constellation for Mac</h1>
+      <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-ink">Orion for Mac</h1>
       <p className="mt-3 leading-relaxed">
-        Constellation reads the work on your screen from the apps you turn on, removes private details on your Mac, and sends only what you approve
+        The Orion app reads the work on your screen from the apps you turn on, removes private details on your Mac, and sends only what you approve
         in its Outbox to your team&apos;s Orion.
       </p>
       <p className="mt-2 text-[13px] text-faint" role="status">
@@ -77,13 +77,13 @@ export function MacDownload() {
         <h2 className="text-[17px] font-semibold text-ink">Then</h2>
         <ol className="mt-2 list-decimal space-y-1.5 pl-5 leading-relaxed">
           <li>
-            When Constellation asks, allow it in System Settings, Privacy &amp; Security, <span className="text-ink">Accessibility</span>. That is how
+            When Orion asks, allow it in System Settings, Privacy &amp; Security, <span className="text-ink">Accessibility</span>. That is how
             it reads text on screen. It never takes screenshots.
           </li>
           <li>
             In Orion, open Settings, <span className="text-ink">Connect your Mac</span>, and make a code.
           </li>
-          <li>In Constellation, open the Outbox, choose Connect, and enter the code.</li>
+          <li>In the Orion app, open the Outbox, choose Connect, and enter the code.</li>
           <li>Choose which apps it may read. Every app starts off.</li>
         </ol>
       </section>
@@ -101,8 +101,8 @@ export function MacDownload() {
           <p className="mt-2">The download link appears here once a version is published.</p>
         )}
         <p className="mt-3 leading-relaxed">
-          Unzip it and move Constellation to Applications. The app isn&apos;t notarized by Apple, so the first time you open it macOS blocks it. Open
-          System Settings, Privacy &amp; Security, scroll down, choose <span className="text-ink">Open Anyway</span> next to Constellation, and
+          Unzip it and move Orion to Applications. The app isn&apos;t notarized by Apple, so the first time you open it macOS blocks it. Open
+          System Settings, Privacy &amp; Security, scroll down, choose <span className="text-ink">Open Anyway</span> next to Orion, and
           confirm.
         </p>
         {release && (

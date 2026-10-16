@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { installScript, latestMac, macZip, publicOrigin } from "./mac";
 
 let dir: string;
-const release = { version: "0.7.0", file: "Constellation-0.7.0.zip", sha256: "a".repeat(64), size: 3, publishedAt: "2026-10-16T00:00:00Z", minMacos: "14.0" };
+const release = { version: "0.7.0", file: "Orion-0.7.0.zip", sha256: "a".repeat(64), size: 3, publishedAt: "2026-10-16T00:00:00Z", minMacos: "14.0" };
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "orion-downloads-"));
@@ -28,14 +28,14 @@ describe("Mac downloads", () => {
   });
 
   it("serves only release zips from the folder", async () => {
-    fs.writeFileSync(path.join(dir, "mac/Constellation-0.7.0.zip"), "zip");
+    fs.writeFileSync(path.join(dir, "mac/Orion-0.7.0.zip"), "zip");
     fs.writeFileSync(path.join(dir, "mac/secret.txt"), "no");
-    const res = await macZip("Constellation-0.7.0.zip");
-    expect(res.headers.get("content-disposition")).toBe('attachment; filename="Constellation-0.7.0.zip"');
+    const res = await macZip("Orion-0.7.0.zip");
+    expect(res.headers.get("content-disposition")).toBe('attachment; filename="Orion-0.7.0.zip"');
     expect(await res.text()).toBe("zip");
     await expect(macZip("secret.txt")).rejects.toMatchObject({ status: 404 });
-    await expect(macZip("Constellation-../x.zip")).rejects.toMatchObject({ status: 404 });
-    await expect(macZip("Constellation-0.8.0.zip")).rejects.toMatchObject({ status: 404 });
+    await expect(macZip("Orion-../x.zip")).rejects.toMatchObject({ status: 404 });
+    await expect(macZip("Orion-0.8.0.zip")).rejects.toMatchObject({ status: 404 });
   });
 
   it("writes an install script for the API's own address that is valid bash", () => {

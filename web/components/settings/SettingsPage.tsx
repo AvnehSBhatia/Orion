@@ -186,7 +186,7 @@ function MacPanel() {
       title="Connect your Mac"
       description={
         <>
-          The Constellation app on your Mac sends the work you approve in its Outbox to Orion.{" "}
+          The Orion app on your Mac sends the work you approve in its Outbox to Orion.{" "}
           <Link href="/download" className="text-ink underline underline-offset-4">
             Install it
           </Link>
@@ -212,7 +212,7 @@ function MacPanel() {
               </div>
               <p className="mt-2 text-[12px] text-faint">Expires in {left}</p>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-[14px] text-muted">
-                <li>Open Constellation on your Mac.</li>
+                <li>Open Orion on your Mac.</li>
                 <li>Go to Outbox and choose Connect.</li>
                 <li>Paste this code. It works once, for 15 minutes.</li>
               </ol>

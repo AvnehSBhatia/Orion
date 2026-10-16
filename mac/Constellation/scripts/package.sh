@@ -1,9 +1,9 @@
 #!/bin/bash
-# Builds Constellation.app (Apple Silicon and Intel), zips it, and writes latest.json for the server's download
+# Builds Orion.app, the Constellation capture app (Apple Silicon and Intel), zips it, and writes latest.json for the server's download
 # page (server/src/downloads/mac.ts):
-#   scripts/package.sh 0.7.0            # -> dist/Constellation-0.7.0.zip and dist/latest.json
+#   scripts/package.sh 0.7.0            # -> dist/Orion-0.7.0.zip and dist/latest.json
 # Then copy both into the box's downloads folder, zip first so latest.json never points at a missing file:
-#   scp dist/Constellation-0.7.0.zip dist/latest.json <box>:<repo>/deploy/downloads/mac/
+#   scp dist/Orion-0.7.0.zip dist/latest.json <box>:<repo>/deploy/downloads/mac/
 # Signing: without an Apple Developer ID the app is signed ad hoc, and macOS then asks for the Accessibility
 # permission again after every update. Set CODESIGN_IDENTITY to a self-signed code signing certificate in your
 # keychain (Keychain Access, Certificate Assistant, Create a Certificate, type Code Signing) and sign every release
@@ -16,7 +16,7 @@ SWIFT="${SWIFT:-swift}"
 MIN_MACOS=14.0
 BUNDLE_ID=ai.orion.constellation
 OUT=dist
-APP="$OUT/Constellation.app"
+APP="$OUT/Orion.app"
 
 rm -rf "$OUT" && mkdir -p "$APP/Contents/MacOS"
 bins=()
@@ -25,6 +25,9 @@ for arch in arm64 x86_64; do
   bins+=(".build/$arch/release/Constellation")
 done
 lipo -create "${bins[@]}" -output "$APP/Contents/MacOS/Constellation"
+# The window's typeface (Theme.swift looks in Contents/Resources).
+mkdir -p "$APP/Contents/Resources/Fonts"
+cp Sources/Constellation/Resources/Fonts/* "$APP/Contents/Resources/Fonts/"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -32,8 +35,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
   <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
-  <key>CFBundleName</key><string>Constellation</string>
-  <key>CFBundleDisplayName</key><string>Constellation</string>
+  <key>CFBundleName</key><string>Orion</string>
+  <key>CFBundleDisplayName</key><string>Orion</string>
   <key>CFBundleExecutable</key><string>Constellation</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
@@ -48,7 +51,7 @@ PLIST
 codesign --force --options runtime --timestamp=none --sign "${CODESIGN_IDENTITY:--}" "$APP"
 codesign --verify --strict "$APP"
 
-ZIP="Constellation-$VERSION.zip"
+ZIP="Orion-$VERSION.zip"
 /usr/bin/ditto -c -k --keepParent "$APP" "$OUT/$ZIP"
 SUM=$(shasum -a 256 "$OUT/$ZIP" | cut -d' ' -f1)
 SIZE=$(stat -f%z "$OUT/$ZIP")
