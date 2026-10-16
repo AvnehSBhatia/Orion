@@ -28,38 +28,42 @@ struct OnboardingView: View {
     var body: some View {
         ZStack {
             SpaceBackground()
-            VStack(alignment: .leading, spacing: Theme.Space.l) {
-                Group {
-                    switch step {
-                    case 0: welcome
-                    case 1: whatIsRead
-                    case 2: permission
-                    case 3: sharing
-                    default: chooseApps
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
-                HStack(spacing: Theme.Space.s) {
-                    StepDots(current: step, count: Self.stepCount)
-                    Spacer()
-                    if step > 0 { Button("Back") { step -= 1 }.buttonStyle(GhostButtonStyle()) }
-                    if step < Self.stepCount - 1 {
-                        Button("Continue") { step += 1 }.buttonStyle(PrimaryButtonStyle()).keyboardShortcut(.defaultAction)
-                    } else {
-                        Button("Done") {
-                            settings.onboardingDone = true
-                            finish()
+            if step == 0 {
+                welcome
+            } else {
+                VStack(alignment: .leading, spacing: Theme.Space.l) {
+                    Group {
+                        switch step {
+                        case 1: whatIsRead
+                        case 2: permission
+                        case 3: sharing
+                        default: chooseApps
                         }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .keyboardShortcut(.defaultAction)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+                    HStack(spacing: Theme.Space.s) {
+                        progress
+                        Spacer()
+                        Button("Back") { step -= 1 }.buttonStyle(GhostButtonStyle())
+                        if step < Self.stepCount - 1 {
+                            Button("Continue") { step += 1 }.buttonStyle(PrimaryButtonStyle()).keyboardShortcut(.defaultAction)
+                        } else {
+                            Button("Done") {
+                                settings.onboardingDone = true
+                                finish()
+                            }
+                            .buttonStyle(PrimaryButtonStyle())
+                            .keyboardShortcut(.defaultAction)
+                        }
                     }
                 }
+                .frame(maxWidth: 760)
+                .padding(.horizontal, 40)
+                .padding(.top, Theme.titlebarInset + Theme.Space.l)
+                .padding(.bottom, Theme.windowPadding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: Theme.contentMaxWidth)
-            .padding(.horizontal, Theme.windowPadding + Theme.Space.s)
-            .padding(.top, Theme.titlebarInset + Theme.Space.l)
-            .padding(.bottom, Theme.windowPadding)
         }
         .foregroundStyle(Theme.textPrimary)
         .font(Theme.Typo.body)
@@ -81,14 +85,86 @@ struct OnboardingView: View {
         }
     }
 
+    private var progress: some View {
+        HStack(spacing: 10) {
+            Text(String(format: "%02d  /  %02d", step + 1, Self.stepCount))
+                .font(Theme.Typo.monoSmall)
+                .foregroundStyle(Theme.textSecondary)
+            StepDots(current: step, count: Self.stepCount)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Theme.cardFill, in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.border))
+        .accessibilityElement(children: .combine)
+    }
+
     private var welcome: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.l) {
-            ConstellationMark().frame(width: 120, height: 64)
-            stepHeader(
-                "Welcome to Constellation",
-                "Your daily time entries, mostly written for you.",
-                info: "It reads the text in the apps you choose, cleans out private details on this Mac, and keeps it encrypted here. You decide what is shared."
-            )
+        HStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: Theme.Space.l) {
+                Text("Less admin. More orbit.")
+                    .font(Theme.Typo.sectionHeader)
+                    .kerning(1.2)
+                    .foregroundStyle(Theme.accent)
+                    .textCase(.uppercase)
+                Text("Welcome to Constellation")
+                    .font(Theme.Typo.windowTitle)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Your daily time entries, mostly written for you.")
+                    .font(Theme.Typo.subtitle)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                ConstellationDivider()
+                Text("A little less remembering. The timesheet is written from the work you already did, and you decide what leaves this Mac.")
+                    .font(Theme.Typo.subtitle)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: Theme.Space.l)
+                progress
+                Button("Continue") { step = 1 }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+                Text("Made for your Mac")
+                    .font(Theme.Typo.sectionHeader)
+                    .kerning(1.1)
+                    .foregroundStyle(Theme.textTertiary)
+                    .textCase(.uppercase)
+            }
+            .padding(.leading, 40)
+            .padding(.trailing, 12)
+            .padding(.top, Theme.titlebarInset + 12)
+            .padding(.bottom, 28)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+
+            ZStack(alignment: .bottomLeading) {
+                Theme.welcomePanel
+                PlanetPortrait()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                LinearGradient(colors: [.clear, Theme.welcomePanel.opacity(0.92)], startPoint: .center, endPoint: .bottom)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Constellation  /  001")
+                        .font(Theme.Typo.sectionHeader)
+                        .kerning(1.1)
+                        .foregroundStyle(Theme.textTertiary)
+                        .textCase(.uppercase)
+                    Text("Find your time. Keep your focus.")
+                        .font(.system(size: 18, weight: .regular))
+                    Text("A quieter way to keep track.")
+                        .font(Theme.Typo.sectionHeader)
+                        .kerning(1.1)
+                        .foregroundStyle(Theme.textSecondary)
+                        .textCase(.uppercase)
+                }
+                .padding(24)
+            }
+            .frame(maxWidth: 380)
+            .frame(maxHeight: .infinity)
+            .background(Theme.welcomePanel)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .padding(.top, Theme.titlebarInset)
+            .padding(.trailing, 20)
+            .padding(.bottom, 20)
         }
     }
 
@@ -208,7 +284,7 @@ struct OnboardingView: View {
     }
 }
 
-/// Progress as small stars: the current one bright and joined to the rest by a hairline.
+/// Five dots. The current step is the accent.
 private struct StepDots: View {
     let current: Int
     let count: Int
@@ -217,9 +293,8 @@ private struct StepDots: View {
         HStack(spacing: 6) {
             ForEach(0..<count, id: \.self) { index in
                 Circle()
-                    .fill(index == current ? Theme.accent : Theme.textTertiary.opacity(index < current ? 0.9 : 0.5))
-                    .frame(width: index == current ? 8 : 6, height: index == current ? 8 : 6)
-                    .shadow(color: index == current ? Theme.accent.opacity(0.6) : .clear, radius: 4)
+                    .fill(index == current ? Theme.accent : Theme.border)
+                    .frame(width: 6, height: 6)
             }
         }
         .accessibilityElement()

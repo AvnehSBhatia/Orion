@@ -19,9 +19,9 @@ enum ShellPlace: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .today: "sun.max"
-        case .outbox: "tray.full"
-        case .apps: "app.badge"
-        case .settings: "gearshape"
+        case .outbox: "tray"
+        case .apps: "rectangle.on.rectangle"
+        case .settings: "gearshape.2"
         }
     }
 
@@ -69,7 +69,7 @@ struct ShellView: View {
             SpaceBackground()
             HStack(spacing: 0) {
                 sidebar
-                Rectangle().fill(Color.white.opacity(0.08)).frame(width: 1)
+                Rectangle().fill(Theme.border).frame(width: 1)
                 detail
             }
         }
@@ -85,13 +85,16 @@ struct ShellView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.s) {
-            VStack(alignment: .leading, spacing: 2) {
-                ConstellationMark().frame(width: 64, height: 28).accessibilityHidden(true)
-                Text("Constellation").font(.system(size: 15, weight: .semibold))
-                Text("On this Mac").font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .center, spacing: 10) {
+                ConstellationMark().frame(width: 22, height: 22).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Constellation").font(.system(size: 14, weight: .semibold))
+                    Text("On this Mac").font(Theme.Typo.monoSmall).foregroundStyle(Theme.textTertiary)
+                }
             }
-            .padding(.bottom, Theme.Space.s)
+            .padding(.horizontal, 14)
+            .padding(.bottom, Theme.Space.m)
 
             ForEach(ShellPlace.allCases) { place in
                 sidebarRow(place)
@@ -100,11 +103,11 @@ struct ShellView: View {
             Spacer(minLength: Theme.Space.l)
             captureControl
         }
-        .padding(.horizontal, Theme.Space.m)
+        .padding(.horizontal, 12)
         .padding(.top, Theme.titlebarInset + Theme.Space.s)
         .padding(.bottom, Theme.Space.l)
-        .frame(width: 212)
-        .background(Color.black.opacity(0.22))
+        .frame(width: Theme.sidebarWidth)
+        .background(Theme.sidebar)
     }
 
     private func sidebarRow(_ place: ShellPlace) -> some View {
@@ -113,28 +116,24 @@ struct ShellView: View {
         return Button {
             navigation.place = place
         } label: {
-            HStack(spacing: Theme.Space.s) {
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(selected ? Theme.accent : Color.clear)
-                    .frame(width: 2, height: 16)
+            HStack(spacing: 12) {
                 Image(systemName: place.symbol)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 13, weight: selected ? .semibold : .regular))
                     .frame(width: 16)
-                    .foregroundStyle(selected ? Theme.textPrimary : Theme.textSecondary)
                 Text(place.label)
-                    .foregroundStyle(selected ? Theme.textPrimary : Theme.textSecondary)
+                    .font(.system(size: 14, weight: selected ? .semibold : .regular))
                 Spacer(minLength: 4)
                 if badge > 0 {
                     Text("\(badge)")
-                        .font(Theme.Typo.caption.weight(.semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(Theme.warning)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Theme.textTertiary)
                 }
             }
-            .padding(.vertical, 6)
-            .padding(.trailing, 8)
+            .foregroundStyle(selected ? Color.white : Theme.textSecondary)
+            .padding(.horizontal, 14)
+            .frame(height: 44)
             .contentShape(Rectangle())
-            .background(selected ? Color.white.opacity(0.07) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+            .background(selected ? Theme.selectedNav : Color.clear, in: RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .keyboardShortcut(place.shortcut, modifiers: [.command])
@@ -154,7 +153,7 @@ struct ShellView: View {
     private var captureControl: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
             HStack(spacing: Theme.Space.s) {
-                GlowDot(color: dotColor, size: 8)
+                GlowDot(color: dotColor, size: 6)
                 Text(headline).font(Theme.Typo.bodyStrong)
             }
             Text(captureDetail)
@@ -163,10 +162,10 @@ struct ShellView: View {
                 .fixedSize(horizontal: false, vertical: true)
             captureButton
         }
-        .padding(Theme.Space.m)
+        .padding(Theme.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-        .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Color.white.opacity(0.08)))
+        .background(Theme.cardFill, in: RoundedRectangle(cornerRadius: Theme.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius).strokeBorder(Theme.border))
     }
 
     @ViewBuilder private var captureButton: some View {
@@ -176,7 +175,10 @@ struct ShellView: View {
                 Button("Turn On") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle(small: true))
             }
         case .paused:
-            Button("Resume") { settings.resume() }.buttonStyle(PrimaryButtonStyle(small: true))
+            Button { settings.resume() } label: {
+                Label("Resume", systemImage: "play.fill")
+            }
+            .buttonStyle(GhostButtonStyle(small: true))
         case .on:
             Menu {
                 Button("For 1 Hour") { settings.pause(for: 3600) }
@@ -185,7 +187,7 @@ struct ShellView: View {
                 Text("Pause")
             }
             .menuStyle(.button)
-            .buttonStyle(PrimaryButtonStyle(small: true))
+            .buttonStyle(GhostButtonStyle(small: true))
             .menuIndicator(.hidden)
             .fixedSize()
         }
@@ -231,7 +233,8 @@ struct ShellView: View {
                     onOutbox: { navigation.place = .outbox },
                     onApps: { navigation.place = .apps },
                     onSettings: { navigation.place = .settings },
-                    onBaseline: { showBaseline = true }
+                    onBaseline: { showBaseline = true },
+                    macFooter: "\(headline) · \(captureDetail)"
                 )
             }
             page(.outbox) {

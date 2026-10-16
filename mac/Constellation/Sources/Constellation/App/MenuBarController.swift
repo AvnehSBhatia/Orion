@@ -26,7 +26,7 @@ import SwiftUI
         "baseline": (CGSize(width: 640, height: 600), CGSize(width: 520, height: 460)),
         "outbox": (CGSize(width: 780, height: 720), CGSize(width: 580, height: 520)),
         "apps": (CGSize(width: 680, height: 720), CGSize(width: 560, height: 520)),
-        "welcome": (CGSize(width: 620, height: 560), CGSize(width: 560, height: 500)),
+        "welcome": (CGSize(width: 980, height: 640), CGSize(width: 860, height: 560)),
         "debug": (CGSize(width: 1040, height: 480), CGSize(width: 820, height: 360)),
         "shell": (CGSize(width: 980, height: 740), CGSize(width: 800, height: 560)),
         "shell-today": (CGSize(width: 980, height: 740), CGSize(width: 800, height: 560)),

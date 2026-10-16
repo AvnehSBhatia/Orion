@@ -35,7 +35,8 @@ struct AppPickerView: View {
                 title: appsOnly ? "Apps" : "Apps and Privacy",
                 subtitle: appsOnly
                     ? "Turn on the apps you work in. Browsers share only the tab title and address. Everything else on this Mac stays unread."
-                    : "Every app starts off. Browsers share only the tab title and address."
+                    : "Every app starts off. Browsers share only the tab title and address.",
+                eyebrow: appsOnly ? "Workspace / Apps" : nil
             ) {
                 if !appsOnly {
                     IconButton(symbol: "gauge.with.dots.needle.33percent", help: "Open the debug view", action: showDebug)
@@ -57,7 +58,7 @@ struct AppPickerView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .background(Theme.fieldFill, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-                .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Color.white.opacity(0.12)))
+                .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Theme.border))
             }
         } content: {
             if appsOnly {
@@ -112,17 +113,40 @@ struct AppPickerView: View {
     // MARK: Apps
 
     private var appsTab: some View {
-        GlassCard(padding: 0) {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(shown.enumerated()), id: \.element.id) { index, entry in
-                    if index > 0 { Divider().overlay(Color.white.opacity(0.05)) }
-                    AppRow(entry: entry, isOn: binding(for: entry))
-                }
-                if shown.isEmpty {
-                    EmptyState(title: "No apps found", message: "Try another name.")
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            GlassCard(padding: 0) {
+                LazyVStack(spacing: 0) {
+                    columnHeader
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, entry in
+                        Divider().overlay(Theme.border)
+                        AppRow(entry: entry, isOn: binding(for: entry))
+                    }
+                    if shown.isEmpty {
+                        EmptyState(title: "No apps found", message: "Try another name.")
+                    }
                 }
             }
+            Text("Only enabled apps are read. Everything else on this Mac stays unread.")
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textTertiary)
         }
+    }
+
+    private var columnHeader: some View {
+        HStack(spacing: Theme.Space.m) {
+            Text("Application")
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("Verification")
+                .frame(width: 130, alignment: .leading)
+            Text("Capture")
+                .frame(width: 56, alignment: .trailing)
+        }
+        .font(Theme.Typo.sectionHeader)
+        .kerning(0.8)
+        .foregroundStyle(Theme.textTertiary)
+        .textCase(.uppercase)
+        .padding(.horizontal, Theme.Space.l)
+        .padding(.vertical, 10)
     }
 
     private func binding(for entry: AppEntry) -> Binding<Bool> {
@@ -143,16 +167,18 @@ private struct AppRow: View {
                 if let subtitle { Text(subtitle).font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary).lineLimit(1) }
             }
             Spacer(minLength: Theme.Space.s)
-            badge
+            badge.frame(width: 130, alignment: .leading)
             Toggle("", isOn: $isOn)
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .labelsHidden()
                 .disabled(entry.support == .blocked)
                 .accessibilityLabel("Read \(entry.name)")
+                .frame(width: 56, alignment: .trailing)
         }
         .padding(.horizontal, Theme.Space.l)
         .padding(.vertical, 9)
+        .background(isOn ? Theme.selectedNav : Color.clear)
     }
 
     private var subtitle: String? {
@@ -180,6 +206,7 @@ private struct AppRow: View {
 
 struct RedactionSettings: View {
     @ObservedObject var settings: Settings
+    var includeAlwaysReplaced = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.l) {
@@ -195,15 +222,17 @@ struct RedactionSettings: View {
                     PrivacySwitch(title: "Phone numbers", detail: "Become [PHONE]", isOn: $settings.redactPhones)
                     PrivacySwitch(title: "Street addresses", detail: "Become [ADDRESS]", isOn: $settings.redactAddresses)
                     PrivacySwitch(title: "People's names", detail: "Become [Person 1], [Person 2]", isOn: $settings.maskNames)
-                    PrivacySwitch(title: "Private network addresses", detail: "10.x and 192.168.x become [IP]", isOn: $settings.redactPrivateIPs)
+                    PrivacySwitch(title: "Private network addresses", detail: "Become [IP]", isOn: $settings.redactPrivateIPs)
                 }
             }
-            SectionHeader(title: "Always replaced")
-            GlassCard {
-                VStack(alignment: .leading, spacing: Theme.Space.s) {
-                    ForEach(["Card numbers", "Social Security numbers", "Passwords and password fields", "API keys and tokens"], id: \.self) { item in
-                        Label(item, systemImage: "lock.fill")
-                            .foregroundStyle(Theme.textSecondary)
+            if includeAlwaysReplaced {
+                SectionHeader(title: "Always replaced")
+                GlassCard {
+                    VStack(alignment: .leading, spacing: Theme.Space.s) {
+                        ForEach(["Card numbers", "Social Security numbers", "Passwords and password fields", "API keys and tokens"], id: \.self) { item in
+                            Label(item, systemImage: "lock.fill")
+                                .foregroundStyle(Theme.textSecondary)
+                        }
                     }
                 }
             }
@@ -219,9 +248,11 @@ struct SkipRulesSettings: View {
             SectionHeader(title: "Always skip these domains",
                           info: "One per line. A word with no dot matches any domain containing it, e.g. \"bank\".")
             RulesEditor(lines: $settings.skipDomains, placeholder: "chase.com\nbank\nmyhealth.example.org")
+            Text("One domain per line").font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
             SectionHeader(title: "Always skip windows containing",
                           info: "One word or phrase per line. A window whose title or text contains one is never captured.")
             RulesEditor(lines: $settings.skipWords, placeholder: "Payroll\nMedical\nPersonal")
+            Text("One phrase per line").font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
         }
     }
 }
@@ -267,6 +298,6 @@ private struct RulesEditor: View {
         .padding(Theme.Space.s)
         .frame(height: 130)
         .background(Theme.fieldFill, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-        .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Color.white.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Theme.border))
     }
 }

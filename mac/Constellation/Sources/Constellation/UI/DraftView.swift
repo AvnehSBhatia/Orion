@@ -14,20 +14,24 @@ struct DraftView: View {
     var onApps: () -> Void = {}
     var onSettings: () -> Void = {}
     var onBaseline: (() -> Void)? = nil
+    var macFooter: String? = nil
 
     var body: some View {
         SpaceScreen(embedded: embedded) {
             WindowHeader(
                 title: "Today",
                 detail: Date().formatted(.dateTime.weekday(.wide).month(.wide).day()),
-                subtitle: promise
+                subtitle: promise,
+                eyebrow: "Workspace / Today",
+                statusLabel: connected ? "Connected" : "Not connected",
+                statusColor: connected ? Theme.success : Theme.warning
             ) {
                 if model.loading { ProgressView().controlSize(.small) }
                 IconButton(symbol: "arrow.clockwise", help: "Refresh") { Task { await model.refresh() } }
             }
             if let draft = model.draft, !draft.entries.isEmpty {
                 HStack(spacing: Theme.Space.s) {
-                    StatusPill(icon: "clock", text: draft.totalMinutes.asDuration, color: Theme.star)
+                    StatusPill(icon: "clock", text: draft.totalMinutes.asDuration, color: Theme.accent)
                     StatusPill(icon: "list.bullet", text: "\(keptCount(draft)) \(keptCount(draft) == 1 ? "entry" : "entries")")
                     StatusPill(icon: "star", text: pendingLabel, color: model.pendingCount > 0 ? Theme.warning : Theme.success)
                 }
@@ -37,18 +41,8 @@ struct DraftView: View {
             }
         } content: {
             cue
-            if let draft = model.draft, draft.entries.isEmpty {
-                EmptyState(title: "Nothing on today's timesheet yet", message: emptyMessage)
-            }
-            ForEach(model.draft?.entries ?? []) { entry in
-                EntryCard(entry: entry, model: model, clients: directory.list.clients)
-                    .id("\(entry.id)-\(entry.status)-\(entry.edited)-\(entry.narrative)-\(entry.minutes)-\(entry.clientId ?? "")")
-            }
-            if let draft = model.draft, !draft.entries.isEmpty { DoneForToday(model: model) }
-            if onBaseline != nil {
-                Button("Compare with your usual timesheet") { onBaseline?() }
-                    .buttonStyle(LinkButtonStyle())
-            }
+            timesheet
+            if embedded, let macFooter { macStatus(macFooter) }
         }
         .task { await model.refresh() }
     }
@@ -57,6 +51,7 @@ struct DraftView: View {
     private var promise: String {
         guard let draft = model.draft else { return "Your timesheet, written from the work you already did." }
         if draft.entries.isEmpty {
+            if !connected { return "Your timesheet, written from the work you already did." }
             return "Approving a batch in the Outbox is what fills this page. You confirm the day. You do not rewrite it."
         }
         let names = clientNames(in: draft)
@@ -93,6 +88,97 @@ struct DraftView: View {
         if !appsChosen { return "No apps are turned on, so nothing is being read." }
         if !connected { return "This Mac is not connected yet, so finished work cannot be drafted into a timesheet." }
         return "Keep working in an app you turned on. When a stretch finishes and you approve it, the entry appears here."
+    }
+
+    @ViewBuilder private var timesheet: some View {
+        if let draft = model.draft, !draft.entries.isEmpty {
+            ForEach(draft.entries) { entry in
+                EntryCard(entry: entry, model: model, clients: directory.list.clients)
+                    .id("\(entry.id)-\(entry.status)-\(entry.edited)-\(entry.narrative)-\(entry.minutes)-\(entry.clientId ?? "")")
+            }
+            DoneForToday(model: model)
+            baselineLink
+        } else if !connected {
+            awaitingConnection
+        } else if model.draft != nil || model.error != nil {
+            emptyTimesheet
+        }
+    }
+
+    private var awaitingConnection: some View {
+        GlassCard {
+            VStack(spacing: Theme.Space.m) {
+                Text("Your daily timesheet")
+                    .font(Theme.Typo.sectionHeader)
+                    .kerning(1.1)
+                    .foregroundStyle(Theme.textTertiary)
+                    .textCase(.uppercase)
+                Text("Awaiting connection")
+                    .font(Theme.Typo.sectionHeader)
+                    .kerning(1.1)
+                    .foregroundStyle(Theme.warning)
+                    .textCase(.uppercase)
+                OrbitalIllustration()
+                    .frame(maxWidth: 264, minHeight: 140, maxHeight: 160)
+                Text("A little space for your day.")
+                    .font(.system(size: 16))
+                Text("Today’s timesheet will appear here once this Mac is connected.")
+                    .font(Theme.Typo.subtitle)
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                baselineLink
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Theme.Space.m)
+        }
+    }
+
+    private var emptyTimesheet: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            GlassCard {
+                VStack(spacing: Theme.Space.m) {
+                    OrbitalIllustration()
+                        .frame(maxWidth: 220, minHeight: 120, maxHeight: 140)
+                    Text("Nothing on today's timesheet yet")
+                        .font(Theme.Typo.bodyStrong)
+                    Text(emptyMessage)
+                        .font(Theme.Typo.subtitle)
+                        .foregroundStyle(Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 440)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Space.s)
+            }
+            baselineLink
+        }
+    }
+
+    @ViewBuilder private var baselineLink: some View {
+        if onBaseline != nil {
+            Button("Compare with your usual timesheet") { onBaseline?() }
+                .buttonStyle(LinkButtonStyle())
+        }
+    }
+
+    private func macStatus(_ line: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.m) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("On this Mac")
+                    .font(Theme.Typo.sectionHeader)
+                    .kerning(1.1)
+                    .foregroundStyle(Theme.textTertiary)
+                    .textCase(.uppercase)
+                Text("Constellation").font(Theme.Typo.bodyStrong)
+            }
+            Spacer(minLength: Theme.Space.s)
+            Text(line)
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .multilineTextAlignment(.trailing)
+        }
+        .padding(.top, Theme.Space.s)
     }
 
     @ViewBuilder private var cue: some View {

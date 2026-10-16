@@ -1,11 +1,11 @@
+import AppKit
 import SwiftUI
 
 // Shared building blocks. Every screen is made of these, so the look stays in one place.
 
 // MARK: Screen
 
-/// A window's content: space background, a pinned header (optional), and a
-/// centered, scrolling column at most `Theme.contentMaxWidth` wide.
+/// A window's content: canvas background, a pinned header (optional), and a column.
 struct SpaceScreen<Header: View, Content: View>: View {
     var maxWidth: CGFloat = Theme.contentMaxWidth
     var scrolls = true
@@ -19,7 +19,7 @@ struct SpaceScreen<Header: View, Content: View>: View {
             if !embedded { SpaceBackground() }
             VStack(spacing: 0) {
                 column { header }
-                    .padding(.top, embedded ? Theme.Space.l : Theme.titlebarInset + Theme.Space.s)
+                    .padding(.top, embedded ? Theme.pageTop : Theme.titlebarInset + Theme.Space.s)
                 if scrolls {
                     ScrollView {
                         column { content }
@@ -44,38 +44,65 @@ struct SpaceScreen<Header: View, Content: View>: View {
 
     private func column<C: View>(@ViewBuilder _ inner: () -> C) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.l) { inner() }
-            .frame(maxWidth: maxWidth, alignment: .leading)
-            .padding(.horizontal, Theme.windowPadding)
+            .frame(maxWidth: embedded ? .infinity : maxWidth, alignment: .leading)
+            .padding(.horizontal, embedded ? Theme.pageInset : Theme.windowPadding)
             .frame(maxWidth: .infinity)
     }
 }
 
-/// Title, optional small secondary text after it, trailing controls, and a constellation underline.
+/// Eyebrow, title, subtitle, and an optional connection status.
 struct WindowHeader<Trailing: View>: View {
     let title: String
     var detail: String?
     var subtitle: String?
+    var eyebrow: String? = nil
+    var statusLabel: String? = nil
+    var statusColor: Color = Theme.textTertiary
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.s) {
-            HStack(alignment: .firstTextBaseline, spacing: Theme.Space.s) {
+            if eyebrow != nil || statusLabel != nil {
+                HStack(alignment: .center, spacing: Theme.Space.s) {
+                    if let eyebrow {
+                        Text(eyebrow.uppercased())
+                            .font(Theme.Typo.sectionHeader)
+                            .kerning(1.1)
+                            .foregroundStyle(Theme.textTertiary)
+                    }
+                    Spacer(minLength: Theme.Space.s)
+                    if let statusLabel {
+                        HStack(spacing: 6) {
+                            Circle().fill(statusColor).frame(width: 5, height: 5)
+                            Text(statusLabel.uppercased())
+                                .font(Theme.Typo.sectionHeader)
+                                .kerning(0.8)
+                                .foregroundStyle(statusColor)
+                        }
+                    }
+                }
+            }
+            HStack(alignment: .firstTextBaseline, spacing: Theme.Space.m) {
                 Text(title).font(Theme.Typo.windowTitle)
-                if let detail { Text(detail).font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary) }
+                if let detail {
+                    Text(detail).font(Theme.Typo.subtitle).foregroundStyle(Theme.textSecondary)
+                }
                 Spacer(minLength: Theme.Space.s)
                 trailing
             }
             if let subtitle {
-                Text(subtitle).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .font(Theme.Typo.subtitle)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            ConstellationDivider()
         }
     }
 }
 
 extension WindowHeader where Trailing == EmptyView {
-    init(title: String, detail: String? = nil, subtitle: String? = nil) {
-        self.init(title: title, detail: detail, subtitle: subtitle) { EmptyView() }
+    init(title: String, detail: String? = nil, subtitle: String? = nil, eyebrow: String? = nil, statusLabel: String? = nil, statusColor: Color = Theme.textTertiary) {
+        self.init(title: title, detail: detail, subtitle: subtitle, eyebrow: eyebrow, statusLabel: statusLabel, statusColor: statusColor) { EmptyView() }
     }
 }
 
@@ -87,7 +114,6 @@ struct GlassCard<Content: View>: View {
     var emphasis: Emphasis = .normal
     var padding: CGFloat = Theme.cardPadding
     @ViewBuilder var content: Content
-    @State private var hovering = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
@@ -95,19 +121,17 @@ struct GlassCard<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(shape.fill(reduceTransparency ? Theme.cardSolid : (hovering ? Theme.cardFillHover : Theme.cardFill)))
+            .background(shape.fill(reduceTransparency ? Theme.cardSolid : Theme.cardFill))
             .overlay {
                 switch emphasis {
                 case .dashed:
-                    shape.strokeBorder(Theme.textTertiary.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                    shape.strokeBorder(Theme.textTertiary.opacity(0.55), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
                 case .warning:
-                    shape.strokeBorder(Theme.warning.opacity(0.35), lineWidth: 1)
+                    shape.strokeBorder(Theme.warning.opacity(0.45), lineWidth: 1)
                 case .normal:
-                    shape.strokeBorder(hovering ? Theme.cardBorderHover : Theme.cardBorder, lineWidth: 1)
+                    shape.strokeBorder(Theme.border, lineWidth: 1)
                 }
             }
-            .shadow(color: emphasis == .warning ? Theme.warning.opacity(0.18) : .clear, radius: 14)
-            .onHover { hovering = $0 }
     }
 }
 
@@ -122,7 +146,7 @@ struct InsetPanel<Content: View>: View {
             .padding(Theme.Space.m)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Theme.inset, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-            .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Color.white.opacity(0.06)))
+            .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Theme.border))
     }
 }
 
@@ -169,7 +193,7 @@ struct StarBadge: View {
         case .accepted: StarShape().fill(Theme.success)
         case .needsReview: StarShape().stroke(Theme.warning, lineWidth: 1.3)
         case .noClient: StarShape().stroke(Theme.textTertiary, style: StrokeStyle(lineWidth: 1, dash: [2, 1.6]))
-        case .sent: Image(systemName: "sparkle").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.line)
+        case .sent: Image(systemName: "sparkle").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.accent)
         case .rejected: Image(systemName: "star.slash").font(.system(size: 11)).foregroundStyle(Theme.textTertiary)
         }
     }
@@ -189,18 +213,18 @@ struct StarBadge: View {
         case .accepted: Theme.success
         case .needsReview: Theme.warning
         case .noClient, .rejected: Theme.textTertiary
-        case .sent: Theme.line
+        case .sent: Theme.accent
         }
     }
 }
 
-/// A small dot with a soft glow: green connected or on, amber waiting, red off.
+/// A small status dot. Paused and waiting use amber.
 struct GlowDot: View {
     let color: Color
     var size: CGFloat = 8
 
     var body: some View {
-        Circle().fill(color).frame(width: size, height: size).shadow(color: color.opacity(0.7), radius: size * 0.6)
+        Circle().fill(color).frame(width: size, height: size)
     }
 }
 
@@ -218,8 +242,8 @@ struct StatusPill: View {
         .foregroundStyle(color)
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(Color.white.opacity(0.06), in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.08)))
+        .background(Theme.buttonFill, in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.border))
     }
 }
 
@@ -235,7 +259,8 @@ struct Chip: View {
             .foregroundStyle(color)
             .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background(Color.white.opacity(0.06), in: Capsule())
+            .background(Theme.buttonFill, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.border))
     }
 }
 
@@ -247,11 +272,11 @@ struct PrimaryButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(small ? Theme.Typo.caption.weight(.semibold) : Theme.Typo.bodyStrong)
+            .font(small ? Theme.Typo.caption.weight(.semibold) : Font.system(size: 13, weight: .semibold))
             .foregroundStyle(Theme.onAccent)
-            .padding(.horizontal, small ? 10 : 14)
-            .padding(.vertical, small ? 4 : 7)
-            .background(Theme.accent.opacity(configuration.isPressed ? 0.8 : 1), in: RoundedRectangle(cornerRadius: Theme.controlRadius))
+            .padding(.horizontal, small ? 12 : 16)
+            .padding(.vertical, small ? 6 : 11)
+            .background(Theme.accent.opacity(configuration.isPressed ? 0.82 : 1), in: RoundedRectangle(cornerRadius: Theme.controlRadius))
             .opacity(isEnabled ? 1 : 0.4)
             .contentShape(Rectangle())
     }
@@ -261,20 +286,17 @@ struct GhostButtonStyle: ButtonStyle {
     var small = false
     var color: Color = Theme.textPrimary
     @Environment(\.isEnabled) private var isEnabled
-    @State private var hovering = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(small ? Theme.Typo.caption.weight(.medium) : Theme.Typo.body.weight(.medium))
+            .font(small ? Theme.Typo.caption.weight(.semibold) : Font.system(size: 13, weight: .semibold))
             .foregroundStyle(color)
-            .padding(.horizontal, small ? 10 : 14)
-            .padding(.vertical, small ? 4 : 7)
-            .background(Color.white.opacity(configuration.isPressed ? 0.12 : (hovering ? 0.08 : 0.04)),
-                        in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-            .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Color.white.opacity(0.14)))
+            .padding(.horizontal, small ? 12 : 16)
+            .padding(.vertical, small ? 6 : 11)
+            .background(Theme.buttonFill.opacity(configuration.isPressed ? 0.7 : 1), in: RoundedRectangle(cornerRadius: Theme.controlRadius))
+            .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Theme.border))
             .opacity(isEnabled ? 1 : 0.4)
             .contentShape(Rectangle())
-            .onHover { hovering = $0 }
     }
 }
 
@@ -315,7 +337,7 @@ struct IconButtonStyle: ButtonStyle {
         configuration.label
             .foregroundStyle(color)
             .frame(width: 28, height: 28)
-            .background(Circle().fill(Color.white.opacity(configuration.isPressed ? 0.14 : (hovering ? 0.08 : 0))))
+            .background(Circle().fill(Theme.buttonFill.opacity(configuration.isPressed ? 1 : (hovering ? 0.9 : 0))))
             .contentShape(Circle())
             .onHover { hovering = $0 }
     }
@@ -335,7 +357,7 @@ struct SectionHeader: View {
             Text(title.uppercased())
                 .font(Theme.Typo.sectionHeader)
                 .kerning(0.8)
-                .foregroundStyle(Theme.textSecondary)
+                .foregroundStyle(Theme.textTertiary)
             if let count { Chip(text: "\(count)", color: countColor) }
             if let info { InfoButton(text: info) }
             Spacer(minLength: 0)
@@ -362,46 +384,42 @@ struct InfoButton: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(width: 280, alignment: .leading)
                 .padding(Theme.Space.l)
+                .background(Theme.cardFill)
                 .preferredColorScheme(.dark)
         }
     }
 }
 
-/// A few dots joined by hairlines, under titles and between sections.
-struct ConstellationDivider: View {
+/// A one-pixel rule between regions.
+struct Hairline: View {
     var body: some View {
-        Canvas { context, size in
-            let points = [0.0, 0.06, 0.13, 0.19].enumerated().map { index, x in
-                CGPoint(x: x * min(size.width, 600) + 1.5, y: size.height / 2 + (index.isMultiple(of: 2) ? -2 : 2))
-            }
-            var path = Path()
-            path.addLines(points)
-            context.stroke(path, with: .color(Theme.line.opacity(0.35)), lineWidth: 0.5)
-            for (index, point) in points.enumerated() {
-                let r = index == 1 ? 1.6 : 1.1
-                context.fill(Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2)),
-                             with: .color(Theme.star.opacity(index == 1 ? 0.9 : 0.6)))
-            }
-            // A hairline continuing faintly to the edge.
-            var tail = Path()
-            tail.move(to: CGPoint(x: points.last!.x + 6, y: size.height / 2))
-            tail.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-            context.stroke(tail, with: .color(Color.white.opacity(0.06)), lineWidth: 0.5)
-        }
-        .frame(height: 10)
-        .accessibilityHidden(true)
+        Rectangle().fill(Theme.border).frame(height: 1).accessibilityHidden(true)
     }
 }
 
-/// The one thing to do next. One sentence, one button, so a screen never ends without a way forward.
+/// A short accent rule under a welcome line.
+struct ConstellationDivider: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 1)
+            .fill(Theme.accent)
+            .frame(width: 36, height: 2)
+            .accessibilityHidden(true)
+    }
+}
+
+/// The one thing to do next. One sentence, one button.
 struct NextStepBanner: View {
     let message: String
     let button: String
+    var icon: String = "exclamationmark.triangle"
     let action: () -> Void
 
     var body: some View {
-        GlassCard(emphasis: .warning) {
+        GlassCard {
             HStack(alignment: .center, spacing: Theme.Space.m) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.warning)
                 Text(message)
                     .font(Theme.Typo.body)
                     .foregroundStyle(Theme.textPrimary)
@@ -413,14 +431,14 @@ struct NextStepBanner: View {
     }
 }
 
-/// A small constellation drawing, a title, and one line.
+/// A small mark, a title, and one line.
 struct EmptyState: View {
     let title: String
     let message: String
 
     var body: some View {
         VStack(spacing: Theme.Space.m) {
-            ConstellationMark().frame(width: 90, height: 48)
+            ConstellationMark().frame(width: 36, height: 34)
             Text(title).font(Theme.Typo.bodyStrong)
             Text(message).font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary).multilineTextAlignment(.center)
         }
@@ -429,37 +447,141 @@ struct EmptyState: View {
     }
 }
 
-/// Five stars joined by faint lines: empty states and the welcome screen.
+/// The constellation mark: two lilac strokes.
 struct ConstellationMark: View {
     var body: some View {
-            Canvas { context, size in
-                let points = [CGPoint(x: 0.1, y: 0.7), CGPoint(x: 0.35, y: 0.3), CGPoint(x: 0.6, y: 0.55), CGPoint(x: 0.9, y: 0.2), CGPoint(x: 0.75, y: 0.85)]
-                    .map { CGPoint(x: $0.x * size.width, y: $0.y * size.height) }
+        Canvas { context, size in
+            let scale = min(size.width / 31.3277, size.height / 30.4515)
+            let origin = CGPoint(
+                x: (size.width - 31.3277 * scale) / 2,
+                y: (size.height - 30.4515 * scale) / 2
+            )
+            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                CGPoint(x: origin.x + x * scale, y: origin.y + y * scale)
+            }
+            var first = Path()
+            first.move(to: point(30.6639, 0.348997))
+            first.addLine(to: point(21.0639, 18.6099))
+            first.addLine(to: point(10.2639, 4.26204))
+            first.addLine(to: point(0.663853, 22.5229))
+            var second = Path()
+            second.move(to: point(10.2639, 4.26204))
+            second.addLine(to: point(13.8639, 30.349))
+            let style = StrokeStyle(lineWidth: max(1.25, 1.5 * scale), lineCap: .round, lineJoin: .round)
+            context.stroke(first, with: .color(Theme.accent), style: style)
+            context.stroke(second, with: .color(Theme.accent), style: style)
+        }
+        .accessibilityLabel("Constellation")
+    }
+}
+
+/// Two orbits, a lilac body, and one point. Drawn from the design paths.
+struct OrbitalIllustration: View {
+    var body: some View {
+        Canvas { context, size in
+            let scale = min(size.width / 264.696, size.height / 184.661)
+            let origin = CGPoint(
+                x: (size.width - 264.696 * scale) / 2,
+                y: (size.height - 184.661 * scale) / 2
+            )
+            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                CGPoint(x: origin.x + x * scale, y: origin.y + y * scale)
+            }
+            func curve(_ start: (CGFloat, CGFloat), _ curves: [(CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, CGFloat)]) -> Path {
                 var path = Path()
-                path.addLines(Array(points.prefix(4)))
-                path.move(to: points[2])
-                path.addLine(to: points[4])
-                context.stroke(path, with: .color(Theme.line.opacity(0.4)), lineWidth: 0.7)
-                for (index, point) in points.enumerated() {
-                    let r = index == 1 ? 2.4 : 1.6
-                    context.fill(Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2)),
-                                 with: .color(Theme.star.opacity(0.85)))
+                path.move(to: point(start.0, start.1))
+                for curve in curves {
+                    path.addCurve(
+                        to: point(curve.4, curve.5),
+                        control1: point(curve.0, curve.1),
+                        control2: point(curve.2, curve.3)
+                    )
+                }
+                path.closeSubpath()
+                return path
+            }
+            let outer = curve(
+                (264.298, 32.894),
+                [
+                    (269.81, 58.8244, 217.347, 91.9462, 147.119, 106.874),
+                    (76.8906, 121.801, 15.4914, 112.881, 9.97976, 86.9511),
+                    (4.46809, 61.0207, 56.9311, 27.8989, 127.159, 12.9715),
+                    (197.387, -1.95596, 258.786, 6.96368, 264.298, 32.894),
+                ]
+            )
+            let inner = curve(
+                (178.335, 146.268),
+                [
+                    (164.37, 180.833, 117.765, 194.597, 74.2387, 177.011),
+                    (30.7128, 159.426, 6.74901, 117.15, 20.7141, 82.5849),
+                    (34.6791, 48.0202, 81.2847, 34.256, 124.811, 51.8416),
+                    (168.337, 69.4272, 192.3, 111.703, 178.335, 146.268),
+                ]
+            )
+            let stroke = StrokeStyle(lineWidth: max(1.25, 2 * scale), lineCap: .round, lineJoin: .round)
+            context.stroke(outer, with: .color(Theme.border), style: stroke)
+            context.stroke(inner, with: .color(Theme.selectedNav), style: stroke)
+            let bodyRect = CGRect(
+                x: point(130 - 32, 90 - 32).x,
+                y: point(130 - 32, 90 - 32).y,
+                width: 64 * scale,
+                height: 64 * scale
+            )
+            context.fill(
+                Path(ellipseIn: bodyRect),
+                with: .linearGradient(
+                    Gradient(colors: [Theme.accent, Theme.planetMid, Theme.canvas]),
+                    startPoint: CGPoint(x: bodyRect.minX, y: bodyRect.midY),
+                    endPoint: CGPoint(x: bodyRect.maxX, y: bodyRect.midY)
+                )
+            )
+            let dot = 5 * scale
+            let dotOrigin = point(222.5, 57.5)
+            context.fill(
+                Path(ellipseIn: CGRect(x: dotOrigin.x - dot / 2, y: dotOrigin.y - dot / 2, width: dot, height: dot)),
+                with: .color(Theme.accent)
+            )
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// The welcome portrait. Falls back to the orbital drawing if the image is missing.
+struct PlanetPortrait: View {
+    var body: some View {
+        Group {
+            if let image = Self.load() {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else {
+                ZStack {
+                    Theme.welcomePanel
+                    OrbitalIllustration().padding(24)
                 }
             }
-            .accessibilityHidden(true)
+        }
+        .accessibilityLabel("Constellation")
+    }
+
+    private static func load() -> NSImage? {
+        guard let url = Bundle.module.url(forResource: "planet", withExtension: "jpg") else { return nil }
+        return NSImage(contentsOf: url)
     }
 }
 
 // MARK: Fields
 
 extension View {
-    /// A text field look that fits the theme: soft fill, hairline border, accent focus ring.
+    /// A text field look that fits the theme: solid fill, hairline border.
     func spaceField() -> some View {
         textFieldStyle(.plain)
             .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.vertical, 8)
             .background(Theme.fieldFill, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-            .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Color.white.opacity(0.12)))
+            .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Theme.border))
     }
 
     /// A capsule look for dropdown menus (client picker).
@@ -468,7 +590,7 @@ extension View {
             .fixedSize()
             .padding(.horizontal, 10)
             .padding(.vertical, 3)
-            .background(Color.white.opacity(0.07), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.14)))
+            .background(Theme.buttonFill, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.border))
     }
 }

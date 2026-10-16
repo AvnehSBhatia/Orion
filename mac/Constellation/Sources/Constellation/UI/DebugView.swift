@@ -48,7 +48,7 @@ struct DebugView: View {
                             }
                             .font(Theme.Typo.sectionHeader)
                             .foregroundStyle(Theme.textTertiary)
-                            Divider().overlay(Color.white.opacity(0.08))
+                            Divider().overlay(Theme.border)
                             ForEach(stats.sortedRows) { row in
                                 GridRow {
                                     Text(row.name).foregroundStyle(Theme.textPrimary)

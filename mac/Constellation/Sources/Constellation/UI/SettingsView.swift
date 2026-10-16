@@ -11,21 +11,47 @@ struct SettingsView: View {
     var showWelcome: () -> Void
 
     @State private var confirmDelete = false
+    @State private var tab: Tab = .connection
+
+    private enum Tab: String, CaseIterable, Identifiable {
+        case connection = "Connection & redaction"
+        case privacy = "Privacy & exclusions"
+        var id: String { rawValue }
+    }
 
     var body: some View {
-        SpaceScreen(maxWidth: 720, embedded: true) {
+        SpaceScreen(embedded: true) {
             WindowHeader(
                 title: "Settings",
-                subtitle: "Connect this Mac, choose what is redacted, and see that capture is behaving."
+                subtitle: tab == .connection
+                    ? "Connect this Mac, choose when work leaves, and see what is replaced."
+                    : "What is always replaced, and the windows this Mac never reads.",
+                eyebrow: "Workspace / Settings",
+                statusLabel: sender.isConnected ? "Connected" : "Not connected",
+                statusColor: sender.isConnected ? Theme.success : Theme.warning
             )
+            Picker("Section", selection: $tab) {
+                ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
         } content: {
-            connection
-            sharing
-            RedactionSettings(settings: settings)
-            SkipRulesSettings(settings: settings)
-            howItWorks
-            diagnostics
-            delete
+            switch tab {
+            case .connection:
+                connection
+                sharing
+                RedactionSettings(settings: settings, includeAlwaysReplaced: false)
+                howItWorks
+                diagnostics
+                delete
+            case .privacy:
+                privateAddresses
+                safeguards
+                SkipRulesSettings(settings: settings)
+                Text("App-level capture preferences are managed in Apps.")
+                    .font(Theme.Typo.caption)
+                    .foregroundStyle(Theme.textTertiary)
+            }
         }
         .alert("Delete all data?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive, action: deleteAll)
@@ -67,6 +93,46 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var privateAddresses: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            SectionHeader(title: "Private network addresses")
+            GlassCard {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Private network addresses")
+                        Text("Become [IP]").font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
+                    }
+                    Spacer(minLength: Theme.Space.s)
+                    Toggle("", isOn: $settings.redactPrivateIPs)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .labelsHidden()
+                        .accessibilityLabel("Private network addresses")
+                }
+            }
+        }
+    }
+
+    private var safeguards: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.s) {
+            SectionHeader(title: "Sensitive content", info: "These are replaced on this Mac before anything is saved. They cannot be turned off.")
+            GlassCard {
+                VStack(alignment: .leading, spacing: Theme.Space.m) {
+                    safeguard("Sensitive numbers", "Card numbers and Social Security numbers are always replaced.")
+                    safeguard("Password fields", "Passwords and password fields are never kept.")
+                    safeguard("Protected fields", "API keys and tokens are always replaced.")
+                }
+            }
+        }
+    }
+
+    private func safeguard(_ title: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label(title, systemImage: "lock.fill").font(Theme.Typo.bodyStrong)
+            Text(detail).font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
         }
     }
 

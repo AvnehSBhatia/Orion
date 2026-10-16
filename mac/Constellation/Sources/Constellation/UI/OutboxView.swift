@@ -20,29 +20,49 @@ struct OutboxView: View {
         SpaceScreen(embedded: embedded) {
             WindowHeader(
                 title: "Outbox",
-                subtitle: "This is everything that would leave this Mac. Approve a batch, and it becomes time on Today."
+                subtitle: "This is everything that would leave this Mac. Approve a batch, and it becomes time on Today.",
+                eyebrow: "Workspace / Outbox",
+                statusLabel: sender.isConnected ? "Connected" : "Not connected",
+                statusColor: connectionColor
             )
         } content: {
             cues
             NowCard(model: model, settings: settings)
             if embedded {
                 modeReminder
-                if sender.isConnected { connectionStatus }
             } else {
                 modeRow
                 ConnectionCard(sender: sender, settings: settings, directory: sender.directory)
             }
+            stageCards
+            if !sender.isConnected, model.toReview.isEmpty, model.approved.isEmpty, model.sent.isEmpty {
+                VStack(spacing: Theme.Space.s) {
+                    OrbitalIllustration().frame(maxWidth: 180, minHeight: 100, maxHeight: 120)
+                    Text("Nothing leaves without a connection.")
+                        .font(Theme.Typo.subtitle)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, Theme.Space.s)
+            }
+            if embedded, sender.isConnected { connectionStatus }
             if !model.available {
                 Label("The encrypted store is unavailable, so there is nothing to show.", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Theme.warning)
             }
-            BatchSection(title: "Waiting for Review", empty: "Nothing waiting. When a stretch of work finishes, it lands here. Approving it writes today's timesheet.", batches: model.toReview,
-                         kind: .review, model: model, connected: sender.isConnected, editing: $editing)
-            BatchSection(title: "Approved", empty: "Nothing approved yet.", batches: model.approved,
-                         kind: .approved, model: model, connected: sender.isConnected, editing: $editing)
-            BatchSection(title: "Sent", empty: "Nothing sent yet.",
-                         batches: showAllSent ? model.sent : Array(model.sent.prefix(Self.sentCollapsed)),
-                         kind: .sent, model: model, connected: sender.isConnected, editing: $editing, total: model.sent.reduce(0) { $0 + $1.items.count })
+            if !model.toReview.isEmpty {
+                BatchSection(title: "Waiting for Review", empty: "", batches: model.toReview,
+                             kind: .review, model: model, connected: sender.isConnected, editing: $editing)
+            }
+            if !model.approved.isEmpty {
+                BatchSection(title: "Approved", empty: "", batches: model.approved,
+                             kind: .approved, model: model, connected: sender.isConnected, editing: $editing)
+            }
+            if !model.sent.isEmpty {
+                BatchSection(title: "Sent", empty: "",
+                             batches: showAllSent ? model.sent : Array(model.sent.prefix(Self.sentCollapsed)),
+                             kind: .sent, model: model, connected: sender.isConnected, editing: $editing, total: sentItemCount)
+            }
             if model.sent.count > Self.sentCollapsed {
                 Button(showAllSent ? "Show Fewer" : "Show All \(model.sent.count) Sent Batches") { showAllSent.toggle() }
                     .buttonStyle(LinkButtonStyle())
@@ -85,17 +105,74 @@ struct OutboxView: View {
         }
     }
 
-    /// In the main window, connection and the sharing mode live in Settings. This line says which mode is on.
+    /// In the main window, connection and the sharing mode live in Settings. This chip says which mode is on.
     private var modeReminder: some View {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.m) {
+        HStack(alignment: .center, spacing: Theme.Space.m) {
+            Text(settings.outboxMode == .reviewFirst ? "Review first" : "Log only")
+                .font(Theme.Typo.caption.weight(.semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Theme.buttonFill, in: Capsule())
+                .overlay(Capsule().strokeBorder(Theme.border))
             Text(settings.outboxMode == .reviewFirst
-                 ? "Review first. Your company keeps nothing until you approve it."
-                 : "Log only. A finished batch is approved on its own.")
+                 ? "Your company keeps nothing until you approve it."
+                 : "A finished batch is approved on its own.")
                 .font(Theme.Typo.caption)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: Theme.Space.s)
             Button("Change") { openSettings() }.buttonStyle(LinkButtonStyle())
+        }
+    }
+
+    private var reviewCount: Int { model.toReview.reduce(0) { $0 + $1.items.count } }
+    private var approvedCount: Int { model.approved.reduce(0) { $0 + $1.items.count } }
+    private var sentItemCount: Int { model.sent.reduce(0) { $0 + $1.items.count } }
+
+    private var stageCards: some View {
+        HStack(alignment: .top, spacing: Theme.Space.m) {
+            stageCard(
+                title: "Waiting for review",
+                count: reviewCount,
+                symbol: "square.stack.3d.up",
+                empty: "Nothing waiting. When a stretch of work finishes, it lands here."
+            )
+            stageCard(
+                title: "Approved",
+                count: approvedCount,
+                symbol: "checkmark.circle",
+                empty: "Nothing approved yet."
+            )
+            stageCard(
+                title: "Sent",
+                count: sentItemCount,
+                symbol: "paperplane",
+                empty: "Nothing sent yet."
+            )
+        }
+    }
+
+    private func stageCard(title: String, count: Int, symbol: String, empty: String) -> some View {
+        GlassCard {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                HStack(spacing: Theme.Space.s) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.textSecondary)
+                    Text(title).font(Theme.Typo.bodyStrong)
+                    Spacer(minLength: Theme.Space.s)
+                    Text("\(count)")
+                        .font(.system(size: 20, weight: .regular, design: .monospaced))
+                        .foregroundStyle(count > 0 && title == "Waiting for review" ? Theme.warning : Theme.textPrimary)
+                }
+                if count == 0 {
+                    Text(empty)
+                        .font(Theme.Typo.caption)
+                        .foregroundStyle(Theme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 
@@ -200,8 +277,15 @@ private struct NowCard: View {
                 }
                 Spacer(minLength: Theme.Space.s)
                 switch settings.state {
-                case .off: Button("Turn On") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle(small: true))
-                case .paused: Button("Resume") { settings.resume() }.buttonStyle(PrimaryButtonStyle(small: true))
+                case .off:
+                    if settings.policy.captureEnabled {
+                        Button("Turn On") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle(small: true))
+                    }
+                case .paused:
+                    Button { settings.resume() } label: {
+                        Label("Resume", systemImage: "play.fill")
+                    }
+                    .buttonStyle(GhostButtonStyle(small: true))
                 case .on: EmptyView()
                 }
             }
@@ -672,7 +756,7 @@ private struct EditTextSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
-            Text("Edit Text").font(Theme.Typo.windowTitle)
+            Text("Edit Text").font(Theme.Typo.sheetTitle)
             HStack(spacing: 6) {
                 Text("\(item.record.appName) · \(timeRange(item.record.startedAt, item.record.endedAt))")
                     .foregroundStyle(Theme.textSecondary)
@@ -683,7 +767,7 @@ private struct EditTextSheet: View {
                 .scrollContentBackground(.hidden)
                 .padding(Theme.Space.s)
                 .background(Theme.fieldFill, in: RoundedRectangle(cornerRadius: Theme.controlRadius))
-                .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Color.white.opacity(0.12)))
+                .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Theme.border))
                 .frame(minHeight: 260)
             HStack {
                 Spacer()

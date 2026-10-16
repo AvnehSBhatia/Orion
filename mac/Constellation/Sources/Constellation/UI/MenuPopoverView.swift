@@ -33,7 +33,7 @@ struct MenuPopoverView: View {
                     if let minutes = drafts.draft?.totalMinutes, minutes > 0, cue?.place != .today {
                         Text("Today so far: \(minutes.asDuration)")
                             .font(Theme.Typo.caption)
-                            .foregroundStyle(Theme.star)
+                            .foregroundStyle(Theme.accent)
                     }
                 }
             }
@@ -62,7 +62,7 @@ struct MenuPopoverView: View {
                 }
             }
 
-            ConstellationDivider()
+            Hairline()
 
             Button { actions.open(cue?.place ?? .today) } label: {
                 HStack(spacing: Theme.Space.s) {
@@ -80,7 +80,7 @@ struct MenuPopoverView: View {
             .buttonStyle(MenuRowStyle())
             .help(cue.map { "Opens \($0.place.label)" } ?? "Opens Today")
 
-            ConstellationDivider()
+            Hairline()
 
             HStack {
                 Spacer(minLength: Theme.Space.s)
@@ -158,8 +158,8 @@ private struct MenuRowStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(Color.white.opacity(configuration.isPressed ? 0.1 : (hovering ? 0.06 : 0)),
-                        in: RoundedRectangle(cornerRadius: 6))
+            .background(Theme.selectedNav.opacity(configuration.isPressed ? 1 : (hovering ? 0.85 : 0)),
+                        in: RoundedRectangle(cornerRadius: 8))
             .onHover { hovering = $0 }
     }
 }
