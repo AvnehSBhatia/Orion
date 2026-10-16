@@ -193,6 +193,8 @@ const CASES: Case[] = [
     member: "skip" as never,
     admin: "skip" as never,
   },
+  // The codebase agent for GitHub Actions: public; sending anything with it takes a token.
+  { key: "GET /api/downloads/ctx-sync.mjs", call: () => ({ url: "/api/downloads/ctx-sync.mjs" }), anon: (res) => expect([200, 404]).toContain(res.status), otherOrg: "skip", member: "skip" as never, admin: "skip" as never },
   { key: "GET /api/downloads/mac/install.sh", call: () => ({ url: "/api/downloads/mac/install.sh" }), anon: 200, otherOrg: "skip", member: "skip" as never, admin: "skip" as never },
   { key: "GET /api/health", call: () => ({ url: "/api/health" }), anon: (res) => expect([200, 503]).toContain(res.status), otherOrg: "skip", member: "skip" as never, admin: "skip" as never, pending: true },
   {

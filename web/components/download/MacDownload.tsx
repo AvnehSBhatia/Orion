@@ -111,6 +111,18 @@ export function MacDownload() {
           </p>
         )}
       </section>
+
+      <section className="mt-8">
+        <h2 className="text-[17px] font-semibold text-ink">Claude Code and GitHub</h2>
+        <p className="mt-2 leading-relaxed">
+          Nothing to download. Sign in to Orion and open Settings: <span className="text-ink">Connect Claude Code</span> gives you one command
+          that hands your coding agent the team&apos;s context, and <span className="text-ink">Connect GitHub</span> (admins) gives you a workflow
+          file that tells Orion what each push to main changed.
+        </p>
+        <a href="/settings#claude-code" className="mt-3 inline-block text-[14px] text-ink underline underline-offset-4">
+          Open Settings
+        </a>
+      </section>
     </>
   );
 }

@@ -45,7 +45,8 @@ export function PageFrame({
         <AccountMenu className="ml-auto" />
       </header>
       <div className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-6 md:grid-cols-[200px_minmax(0,1fr)] md:px-8 md:py-10">
-        <div>
+        {/* min-w-0: on a phone the section links scroll in their row instead of widening the page. */}
+        <div className="min-w-0">
           <h1 className="text-[26px] font-semibold tracking-[-0.03em]">{title}</h1>
           {description && <p className="mt-1 text-[14px] text-muted">{description}</p>}
           {sections && sections.length > 0 && (

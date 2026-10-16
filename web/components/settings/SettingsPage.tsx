@@ -7,6 +7,7 @@ import { CopyButton, CopyField } from "@/components/ui/CopyButton";
 import { field, FieldError, Notice, Panel, PrimaryButton, SecondaryButton } from "@/components/ui/form";
 import { API, api, statusOf } from "@/lib/api/client";
 import type { CreatedToken, DeviceCode, TokenInfo } from "@/lib/api/types";
+import { syncWorkflow } from "@/lib/githubSync";
 import { settingsError } from "@/lib/notLive";
 import { ago, shortDate, useNow } from "@/lib/time";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
@@ -16,6 +17,7 @@ const SECTIONS = [
   { id: "password", label: "Password" },
   { id: "mac", label: "Connect your Mac" },
   { id: "claude-code", label: "Connect Claude Code" },
+  { id: "github", label: "Connect GitHub" },
   { id: "data", label: "Your data" },
 ];
 
@@ -26,6 +28,7 @@ export function SettingsPage() {
       <PasswordPanel />
       <MacPanel />
       <ClaudeCodePanel />
+      <GitHubPanel />
       <DataPanel />
     </PageFrame>
   );
@@ -371,6 +374,93 @@ function ClaudeCodePanel() {
             </li>
           ))}
         </ul>
+      )}
+    </Panel>
+  );
+}
+
+/**
+ * Connects a repo: an admin's token (so each commit is credited to its git author, not to whoever made the token),
+ * stored as the repo's ORION_TOKEN secret, and a workflow that runs the codebase agent on every push.
+ */
+function GitHubPanel() {
+  const { me } = useSession();
+  const [repo, setRepo] = useState("");
+  const [branch, setBranch] = useState("main");
+  const [created, setCreated] = useState<CreatedToken | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const create = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      setCreated(await api.tokens.create(`GitHub: ${repo.trim() || "repo"}`));
+    } catch (err) {
+      setError(settingsError(err, "create a token"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const workflow = syncWorkflow(branch.trim() || "main");
+  return (
+    <Panel
+      id="github"
+      title="Connect GitHub"
+      description="Every push to a repo's main branch tells Orion what engineering changed, so work items, briefs and coding agents stay current. Private paths stay on GitHub."
+    >
+      {!me.admin ? (
+        <p className="text-[14px] text-muted">Ask an admin to connect your repos, so each commit is credited to the person who wrote it.</p>
+      ) : (
+        <>
+          <form onSubmit={create} className="flex flex-wrap items-end gap-3">
+            <label className="block min-w-[200px] flex-1 text-sm text-muted">
+              Repository
+              <input className={field} value={repo} onChange={(e) => setRepo(e.target.value)} maxLength={80} placeholder="acme/web" />
+            </label>
+            <label className="block w-32 text-sm text-muted">
+              Branch
+              <input className={field} value={branch} onChange={(e) => setBranch(e.target.value)} maxLength={80} />
+            </label>
+            <PrimaryButton type="submit" disabled={busy}>
+              {busy ? "Creating…" : "Create token"}
+            </PrimaryButton>
+          </form>
+
+          {created && (
+            <ol className="mt-5 min-w-0 list-decimal space-y-4 rounded-xl border border-ink/40 bg-bg p-4 pl-9 text-[14px] text-muted" role="status">
+              <li className="min-w-0">
+                In the repo on GitHub, open Settings, Secrets and variables, Actions, and add a repository secret named{" "}
+                <code className="font-mono text-ink">ORION_TOKEN</code> with this value. It is shown only once.
+                <div className="mt-2">
+                  <CopyField value={created.token} label="Copy the token" />
+                </div>
+              </li>
+              <li className="min-w-0">
+                Add this file as <code className="font-mono text-ink">.github/workflows/orion-sync.yml</code> and push it to {branch.trim() || "main"}.
+                <div className="mt-2 min-w-0 overflow-hidden rounded-lg border border-line-strong bg-panel">
+                  <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-1.5">
+                    <span className="truncate font-mono text-[12px] text-faint">orion-sync.yml</span>
+                    <CopyButton text={workflow} label="Copy the workflow" />
+                  </div>
+                  <pre className="max-h-72 w-full overflow-auto p-3 font-mono text-[12px] leading-relaxed text-ink">{workflow}</pre>
+                </div>
+              </li>
+              <li>
+                Optional: keep folders out of Orion with a line like <code className="font-mono text-ink">+./src/secret/</code> in the repo&apos;s root{" "}
+                <code className="font-mono text-ink">.gitignore</code>.
+              </li>
+            </ol>
+          )}
+        </>
+      )}
+
+      {error && (
+        <div className="mt-4">
+          <Notice kind="error">{error}</Notice>
+        </div>
       )}
     </Panel>
   );

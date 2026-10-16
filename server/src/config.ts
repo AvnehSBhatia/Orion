@@ -82,6 +82,10 @@ export const config = {
   get dataDir(): string {
     return process.env.DATA_DIR || "data";
   },
+  /** The codebase agent as one file (`npm run build` in codebase-agent/), served for GitHub Actions to run. */
+  get agentBundle(): string {
+    return process.env.CODEBASE_AGENT_BUNDLE || `${process.cwd()}/../codebase-agent/dist/ctx-sync.mjs`;
+  },
   /** Built Mac app releases served by /api/downloads/mac (see `downloads/mac.ts`). Not in the data backups. */
   get downloadsDir(): string {
     return process.env.DOWNLOADS_DIR || `${this.dataDir}/downloads`;
