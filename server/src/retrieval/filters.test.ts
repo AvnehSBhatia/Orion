@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readGraph } from "@/graph/view";
 import { deps, extracted, memoryStore } from "@/test/helpers";
-import { buildContext, findNodes } from "./context";
+import { askedStatuses, buildContext, findNodes } from "./context";
 import { filterParams, matchingIds } from "./filters";
 
 describe("matchingIds on the seed graph", () => {
@@ -66,6 +66,24 @@ describe("buildContext", () => {
     expect(ctx.slice(0, 3).map((n) => n.id)).toEqual(mine);
     expect(ctx.slice(0, 3).every((n) => n.why.startsWith("for you"))).toBe(true);
     expect(new Set(ctx.map((n) => n.id)).size).toBe(ctx.length);
+  });
+});
+
+describe("a question that names a status", () => {
+  it("reads the statuses it asks about", () => {
+    expect(askedStatuses("what is blocked right now?")).toEqual(["blocked"]);
+    expect(askedStatuses("anything at risk or stuck?")).toEqual(["blocked", "at_risk"]);
+    expect(askedStatuses("how is the launch going")).toEqual([]);
+  });
+
+  it("puts every item with that status first", async () => {
+    const store = memoryStore({ seed: true });
+    const { embedder } = deps(store);
+    const blocked = readGraph(store).nodes.filter((n) => n.status === "blocked").map((n) => n.id);
+    expect(blocked.length).toBeGreaterThan(0);
+    const ctx = (await buildContext(store, embedder, { userId: "sam", q: "what is blocked right now?" })).items;
+    expect(new Set(ctx.slice(0, blocked.length).map((n) => n.id))).toEqual(new Set(blocked.slice(0, 6)));
+    expect(ctx[0].why).toBe("blocked, as asked");
   });
 });
 

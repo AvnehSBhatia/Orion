@@ -21,6 +21,20 @@ export const SOURCES = { matches: 4, perNode: 1, max: 8 } as const;
 /** Blockers, feeders, and parents are expanded from this many leading query hits (plus any for-you items). */
 export const NEIGHBORS = { fromHits: 2 } as const;
 
+/** Items with a status the question names lead the context, newest first, up to this many. */
+export const ASKED_STATUS_MAX = 6;
+
+const STATUS_WORDS: [PublicNode["status"], RegExp][] = [
+  ["blocked", /\b(blocked|blockers?|blocking|stuck)\b/i],
+  ["at_risk", /\b(at[- ]risk|risks?|risky|slipping|behind)\b/i],
+  ["done", /\b(done|shipped|finished|completed?)\b/i],
+];
+
+/** The statuses a question asks about: "what is blocked right now?" asks for blocked work. */
+export function askedStatuses(q: string): PublicNode["status"][] {
+  return STATUS_WORDS.filter(([, re]) => re.test(q)).map(([status]) => status);
+}
+
 export type ContextItem = PublicNode & { why: string };
 export type ContextSource = Source & { why: string };
 export type Context = { items: ContextItem[]; sources: ContextSource[] };
@@ -146,6 +160,18 @@ export async function buildContext(
     }
   };
 
+  // A question that names a status gets every item with it first: ranked by meaning, the one blocked item can land
+  // eleventh of twelve, and the model then answered that nothing was blocked.
+  const graph = readGraph(store);
+  const asked = askedStatuses(q);
+  if (asked.length) {
+    const withStatus = graph.nodes
+      .filter((n) => asked.includes(n.status))
+      .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+      .map((n) => ({ ...n, why: "" }));
+    add(withStatus, ASKED_STATUS_MAX, (n) => `${n.status.replace("_", " ")}, as asked`);
+  }
+
   // "What changed" is answered by the hits (person-weighted, freshness-heavy) and the latest lane, not by standing work.
   const mine = lens.q && (lens.q.recent || lens.q.specificity >= SPECIFIC) ? 0 : forYou;
   if (mine) add(nodesFrom(store, lens, mine, { withQuery: false }), mine, (n) => `for you, ${ago(n.updatedAt, now)}`);
@@ -166,7 +192,6 @@ export async function buildContext(
   const leadIds = new Set([...forYouIds, ...hitList.slice(0, NEIGHBORS.fromHits).map((n) => n.id)]);
   const top = [...out.values()].filter((n) => leadIds.has(n.id));
 
-  const graph = readGraph(store);
   const byId = new Map<string, PublicNode>(graph.nodes.map((n) => [n.id, n]));
   const linked = (id: string): { other: string; e: Edge }[] =>
     graph.edges

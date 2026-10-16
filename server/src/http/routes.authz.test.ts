@@ -183,6 +183,17 @@ const CASES: Case[] = [
   { key: "GET /api/orgs/[orgId]/settings", call: () => ({ params: { orgId: ORG } }), member: 200 },
   { key: "PATCH /api/orgs/[orgId]/settings", call: () => ({ params: { orgId: ORG }, body: { excludedHosts: ["mail.google.com"] } }), adminOnly: true, admin: 200 },
   { key: "GET /api/orgs/[orgId]/usage", call: () => ({ params: { orgId: ORG } }), adminOnly: true, pending: true },
+  // The Mac app download: public, so a new teammate can install before signing in. No release in the test folder.
+  { key: "GET /api/downloads/mac/latest", call: () => ({ url: "/api/downloads/mac/latest" }), anon: 404, otherOrg: "skip", member: "skip" as never, admin: "skip" as never },
+  {
+    key: "GET /api/downloads/mac/[file]",
+    call: () => ({ url: "/api/downloads/mac/Constellation-0.1.0.zip", params: { file: "Constellation-0.1.0.zip" } }),
+    anon: 404,
+    otherOrg: "skip",
+    member: "skip" as never,
+    admin: "skip" as never,
+  },
+  { key: "GET /api/downloads/mac/install.sh", call: () => ({ url: "/api/downloads/mac/install.sh" }), anon: 200, otherOrg: "skip", member: "skip" as never, admin: "skip" as never },
   { key: "GET /api/health", call: () => ({ url: "/api/health" }), anon: (res) => expect([200, 503]).toContain(res.status), otherOrg: "skip", member: "skip" as never, admin: "skip" as never, pending: true },
   {
     key: "GET /api/sources/[id]",

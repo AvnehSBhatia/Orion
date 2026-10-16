@@ -62,6 +62,9 @@ function skipScrub() {
 
 const ACTION_ICONS = [TrendingUp, CircleAlert, Megaphone];
 
+/** Where the composer sits on the hero: just below the middle, or lower on a short screen so the title fits above it. */
+const HERO_DOCK_BOTTOM = "min(calc(50% - 28px), calc(100% - var(--dock, 240px) - 210px))";
+
 export function AppShell() {
   const { me, signOut } = useSession();
   const [phase, setPhase] = useState<Phase>(initialPhase);
@@ -550,7 +553,9 @@ export function AppShell() {
         <div
           className="pointer-events-none absolute inset-x-0 z-10 px-6 text-center"
           style={{
-            bottom: "calc(50% + 232px)",
+            // Above the composer and its prompts (--dock, measured), and never under them on a phone, where the prompts
+            // stack and make the dock tall.
+            bottom: `max(calc(${HERO_DOCK_BOTTOM} + 20px + var(--dock, 240px) + 16px), min(calc(50% + 232px), calc(100% - 190px)))`,
             opacity: "var(--title)",
             filter: "blur(calc((1 - var(--title)) * 12px))",
             transform: "translateY(calc((1 - var(--title)) * -28px))",
@@ -558,8 +563,9 @@ export function AppShell() {
         >
           <h1 className="orion-wordmark font-display text-[clamp(88px,15vw,168px)] leading-[0.84] font-normal tracking-[-0.035em]">Orion</h1>
           <p className="orion-wordmark mx-auto mt-5 max-w-xl text-[15px] leading-relaxed tracking-[0.01em] text-balance text-muted [animation-delay:180ms]">
-            {user ? `Hi ${user.name.split(" ")[0]}. Ask what your team is working on.` : "Ask what your team is working on."} The map shows the
-            rest.
+            {user ? `Hi ${user.name.split(" ")[0]}. Ask what your team is working on.` : "Ask what your team is working on."}
+            {/* One line on a phone: a second one sits under the composer. */}
+            <span className="hidden sm:inline"> The map shows the rest.</span>
           </p>
         </div>
 
@@ -567,7 +573,7 @@ export function AppShell() {
           ref={dockRef}
           className="absolute left-1/2 z-30 w-[min(560px,calc(100%-32px))]"
           style={{
-            bottom: "calc((1 - var(--chat)) * (50% - 28px) + 20px)",
+            bottom: `calc((1 - var(--chat)) * ${HERO_DOCK_BOTTOM} + 20px)`,
             transform: "translateX(-50%) scale(calc(0.97 + 0.03 * var(--chat)))",
           }}
         >
