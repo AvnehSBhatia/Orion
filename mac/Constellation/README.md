@@ -15,7 +15,7 @@ swift test                          # 103 tests (plus on-demand live tests): Out
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
 
-When it starts, Terminal prints "Constellation is running" and stays busy. That is normal: the app lives in the menu bar, not in the Terminal. On first run, or while the Accessibility permission is missing, the **welcome screens** open; after that, the Apps window opens on every launch. On a MacBook with a full menu bar, macOS can hide the eye icon behind the camera notch; the Apps window has the same on/off, pause, and debug controls. Quit with Ctrl+C in Terminal or Quit in the menu.
+When it starts, Terminal prints "Constellation is running" and stays busy. That is normal: the app lives in the menu bar, not in the Terminal. On first run, or while the Accessibility permission is missing, the **welcome screens** open, and finishing them opens the window on Apps. After that, the window stays closed until you click the eye. On a MacBook with a full menu bar, macOS can hide the eye behind the camera notch. The window's sidebar has the same on, pause, and off controls. Quit with Ctrl+C in Terminal or Quit in the menu.
 
 ## What M1 does
 
@@ -26,7 +26,7 @@ When it starts, Terminal prints "Constellation is running" and stays busy. That 
 - **Browsers** (Safari, Chrome and other Chromium browsers, Firefox): tab title plus **domain and path only**. Query strings, fragments, user names, passwords, and ports are dropped before anything is kept. Page text is never read.
 - **Private windows** are skipped before anything else is read: by title ("Private Browsing", "Incognito"), which catches Safari, and by the toolbar's profile button ("Incognito", "Guest", "InPrivate"), which catches Chrome incognito and guest windows and Edge InPrivate. Chrome keeps a normal page title in incognito, so the title alone missed it. Both verified by hand in M1.
 - **Segmentation** into activity records: a new record when the app, window title, or browser page changes, or after a 2 minute gap. Within a record only new lines are kept, up to 4,000 chars.
-- **Debug view** ("Debug view…"): per app, captures, characters (last and average), title length, whether a URL was found, read time (last, average, max), last trigger, and skips with the reason. **Counts only**: no text, titles, or URLs are shown.
+- **Capture diagnostics** (Settings): per app, captures, characters (last and average), title length, whether a URL was found, read time (last, average, max), last trigger, and skips with the reason. **Counts only**: no text, titles, or URLs are shown.
 
 ## Redaction (M2)
 
@@ -40,14 +40,14 @@ Runs on the capture queue, right after a window is read and before anything reac
 | `[SSN]` | 123-45-6789 style, skipping numbers never issued |
 | `[ADDRESS]` | (on by default) Street addresses, found by Apple's on-device data detector (the one Mail and Messages use) |
 | `[SECRET]` | API keys and tokens (sk-, ghp_, github_pat_, AKIA, xox, Bearer, JWTs), and long random strings (24+ characters, letters and digits mixed, high entropy), which also catches document ids in browser paths |
-| `[IP]` | Private network addresses, only if turned on in the Apps window |
+| `[IP]` | Private network addresses, only if turned on in Settings |
 | `[Person 1]` | People's names, only if "Replace people's names" is on. Found on the device with Apple's NaturalLanguage framework. The same name gets the same number for the session |
 
 **Links in text** (titles, window text, Outbox edits) are cut to domain and path, the same rule as browser addresses: `https://site.com/reset?token=abc#x` becomes `site.com/reset`, because query strings and fragments can carry tokens.
 
 Each line's result is remembered (keyed by a SHA-256 of the line, so no unredacted text is held), so a window read again only pays for new lines: about 40 ms the first time a full window is seen, under 1 ms after. Delete all clears this cache too.
 
-**The person chooses** (Apps window, Privacy): email addresses, phone numbers, and street addresses can each be turned off, and email addresses can keep their company part. Card numbers, SSNs, and API keys and tokens are always replaced, with no switch. There is no company-wide override. Choices apply to text captured from then on.
+**The person chooses** (Settings): email addresses, phone numbers, and street addresses can each be turned off, and email addresses can keep their company part. Card numbers, SSNs, and API keys and tokens are always replaced, with no switch. There is no company-wide override. Choices apply to text captured from then on.
 
 Look-alikes that are kept, each with a test: version strings, dates, card-shaped numbers that fail Luhn, IPs (when off), build numbers, money, ISBNs, long words, file paths, camelCase identifiers, `user@localhost`, and "sk-" inside a word. Hex commit hashes and UUIDs are treated as secrets, on purpose: they can be session or document ids.
 
@@ -55,7 +55,7 @@ The debug view adds a **Redactions** count per app. Text is still never shown th
 
 ## Outbox (M5)
 
-Nothing is kept by the backend until it has appeared in the Outbox and been approved (spec 2.5, 9). Batches waiting for approval are sent only to be summarized, and the backend must not keep them. Open the Outbox from the menu bar popover.
+Nothing is kept by the backend until it has appeared in the Outbox and been approved (spec 2.5, 9). Batches waiting for approval are sent only to be summarized, and the backend must not keep them. Open the Outbox from the menu bar eye, or from the sidebar.
 
 - A record goes to the Outbox when it **closes**: you open another email, window, or page, you **leave the app** (even for an app that isn't captured, such as Terminal or this Outbox), or 2 minutes pass with no new capture. Records left open when the app quit are closed at the next launch. Coming back to the window you just left within 5 minutes (say, after a look at the Outbox) continues its record rather than adding a duplicate, as long as it hasn't been approved or edited.
 - The card at the top says whether anything new can arrive: **Capture is off** or **Paused** (with Turn on / Resume), or **Capturing now** with the title of the record still being written (title only; its text appears once it closes).
@@ -84,7 +84,7 @@ Sends **approved** Outbox items to the backend. Request and response shapes are 
 
 All screens share one dark "space" theme: `Sources/Constellation/UI/Theme/` holds the tokens (`Theme.swift`: colors, spacing, type), the star field background (`SpaceBackground.swift`, a fixed-seed Canvas with no animation, so it costs nothing when idle), and the components every screen uses (`Components.swift`: GlassCard, StarBadge, StatusPill, GlowDot, Chip, Primary/Ghost/Icon buttons, SectionHeader, InfoButton, ConstellationDivider, EmptyState). Windows have a transparent title bar with content running under it, are always dark, and have default and minimum sizes in `MenuBarController.sizes`. On-screen text follows the macOS style: Title Case for buttons, menu items, window titles, and section names; sentence case for descriptions and switches; a period only on full sentences. When no client list has synced yet, Outbox items say "Clients not synced" rather than "No client".
 
-The menu bar eye opens a popover (status, Pause, the windows, Delete all, **Quit Constellation**). Command-Q also quits while a Constellation window is in front.
+The menu bar eye opens a popover: status, Pause, the one next step (connect, approve, confirm today's timesheet, or choose apps), and **Quit Constellation**. That step opens the single window. The sidebar is Today, Outbox, Apps, and Settings. Delete all data is at the bottom of Settings. Command-Q also quits while a Constellation window is in front.
 
 Text contrast is at least 4.5:1 on every surface (tertiary text is 56% opacity rather than 50% for that reason). Reduce Transparency swaps translucent cards for solid ones.
 
@@ -123,7 +123,7 @@ Each work block is matched to a client **on the Mac**, and only the client's id 
 
 ## Daily draft review
 
-"Today's draft…" in the menu shows the time entries the backend drafted from today's sent work blocks (`GET /v1/drafts/today`, with the Mac's time zone). For each entry the person can:
+Today, in the window, shows the time entries the backend drafted from today's sent work blocks (`GET /v1/drafts/today`, with the Mac's time zone). For each entry the person can:
 
 - change the **client** (picker from the synced client list, or "No client"),
 - change the **time** (5 minute steps, 1 minute to 24 hours) and the **description**,
@@ -189,14 +189,14 @@ It fails if the label is gone. Without the variable it is skipped.
 
 ## Check it by hand
 
-1. Run it. On first run the welcome screens open; finish them (or skip to the end with Continue). Afterwards the Apps window opens, and the menu bar shows the eye.
-2. Turn on Mail and Safari in the list, then switch on **Capture** at the top of the window. The icon becomes an eye.
-3. Click **Debug view** and switch between Mail and Safari. Each switch adds captures (app switch, then re-read). Mail shows characters; Safari shows 0 characters, a title length, and URL yes.
+1. Run it. On first run the welcome screens open; finish them (or skip to the end with Continue). The window opens on Apps, and the menu bar shows the eye.
+2. Turn on Mail and Safari in the list. Capture is at the bottom of the sidebar, and in the menu bar popover. Turn it on. The icon becomes an eye.
+3. Open Settings and look at Capture diagnostics. Switch between Mail and Safari. Each switch adds captures (app switch, then re-read). Mail shows characters; Safari shows 0 characters, a title length, and URL yes.
 4. Open a Safari private window (Shift+Cmd+N) or a Chrome incognito window (Shift+Cmd+N in Chrome) with a page loaded. The row should show skips with "private window" and no new captures.
-5. Add a word to "Always skip windows containing" that appears in an open email: that window shows "skipped word" skips.
-6. "Pause for 1 hour": no new captures. "Resume": captures come back.
+5. In Settings, add a word to "Always skip windows containing" that appears in an open email: that window shows "skipped word" skips.
+6. Pause for 1 hour from the sidebar or the menu bar: no new captures. Resume: captures come back.
 7. Quit and start again: "Records saved (encrypted)" keeps its count.
-8. "Delete all captured data": records and counts go to 0, also after a restart.
+8. Settings, Delete all data: records and counts go to 0, also after a restart.
 
 ## Tests
 

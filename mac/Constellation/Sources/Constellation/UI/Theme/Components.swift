@@ -9,15 +9,17 @@ import SwiftUI
 struct SpaceScreen<Header: View, Content: View>: View {
     var maxWidth: CGFloat = Theme.contentMaxWidth
     var scrolls = true
+    /// Inside the main window the shell paints the background and the sidebar.
+    var embedded = false
     @ViewBuilder var header: Header
     @ViewBuilder var content: Content
 
     var body: some View {
         ZStack(alignment: .top) {
-            SpaceBackground()
+            if !embedded { SpaceBackground() }
             VStack(spacing: 0) {
                 column { header }
-                    .padding(.top, Theme.titlebarInset + Theme.Space.s)
+                    .padding(.top, embedded ? Theme.Space.l : Theme.titlebarInset + Theme.Space.s)
                 if scrolls {
                     ScrollView {
                         column { content }
@@ -388,6 +390,26 @@ struct ConstellationDivider: View {
         }
         .frame(height: 10)
         .accessibilityHidden(true)
+    }
+}
+
+/// The one thing to do next. One sentence, one button, so a screen never ends without a way forward.
+struct NextStepBanner: View {
+    let message: String
+    let button: String
+    let action: () -> Void
+
+    var body: some View {
+        GlassCard(emphasis: .warning) {
+            HStack(alignment: .center, spacing: Theme.Space.m) {
+                Text(message)
+                    .font(Theme.Typo.body)
+                    .foregroundStyle(Theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: Theme.Space.s)
+                Button(button, action: action).buttonStyle(PrimaryButtonStyle(small: true))
+            }
+        }
     }
 }
 

@@ -13,6 +13,7 @@ struct AppPickerView: View {
 
     @ObservedObject var settings: Settings
     @ObservedObject var engine: CaptureEngine
+    var appsOnly = false
     let showDebug: () -> Void
     @State private var tab: Tab = .apps
     @State private var apps: [AppEntry] = []
@@ -29,17 +30,26 @@ struct AppPickerView: View {
     }
 
     var body: some View {
-        SpaceScreen {
-            WindowHeader(title: "Apps and Privacy", subtitle: "Every app starts off. Browsers share only the tab title and address.") {
-                IconButton(symbol: "gauge.with.dots.needle.33percent", help: "Open the debug view", action: showDebug)
+        SpaceScreen(embedded: appsOnly) {
+            WindowHeader(
+                title: appsOnly ? "Apps" : "Apps and Privacy",
+                subtitle: appsOnly
+                    ? "Turn on the apps you work in. Browsers share only the tab title and address. Everything else on this Mac stays unread."
+                    : "Every app starts off. Browsers share only the tab title and address."
+            ) {
+                if !appsOnly {
+                    IconButton(symbol: "gauge.with.dots.needle.33percent", help: "Open the debug view", action: showDebug)
+                }
             }
-            captureRow
-            Picker("Section", selection: $tab) {
-                ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            if !appsOnly { captureRow }
+            if !appsOnly {
+                Picker("Section", selection: $tab) {
+                    ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            if tab == .apps {
+            if appsOnly || tab == .apps {
                 HStack(spacing: Theme.Space.s) {
                     Image(systemName: "magnifyingglass").foregroundStyle(Theme.textTertiary)
                     TextField("Search apps", text: $search).textFieldStyle(.plain)
@@ -50,10 +60,14 @@ struct AppPickerView: View {
                 .overlay(RoundedRectangle(cornerRadius: Theme.controlRadius).strokeBorder(Color.white.opacity(0.12)))
             }
         } content: {
-            switch tab {
-            case .apps: appsTab
-            case .privacy: privacyTab
-            case .rules: rulesTab
+            if appsOnly {
+                appsTab
+            } else {
+                switch tab {
+                case .apps: appsTab
+                case .privacy: RedactionSettings(settings: settings)
+                case .rules: SkipRulesSettings(settings: settings)
+                }
             }
         }
         .onAppear { apps = AppCatalog.load() }
@@ -115,49 +129,6 @@ struct AppPickerView: View {
         Binding(get: { settings.allowed.contains(entry.id) }, set: { settings.setAllowed(entry.id, $0) })
     }
 
-    // MARK: Privacy
-
-    private var privacyTab: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.l) {
-            SectionHeader(title: "Replaced before anything is kept",
-                          info: "These are replaced on this Mac, before anything is saved or sent. Changes apply to what's captured from now on.")
-            GlassCard {
-                VStack(alignment: .leading, spacing: Theme.Space.m) {
-                    PrivacySwitch(title: "Email addresses", detail: "Become [EMAIL]", isOn: $settings.redactEmails)
-                    PrivacySwitch(title: "Keep the company part", detail: "Shows [EMAIL]@acme.com instead of [EMAIL]", isOn: $settings.keepEmailDomain)
-                        .padding(.leading, 28)
-                        .disabled(!settings.redactEmails)
-                        .opacity(settings.redactEmails ? 1 : 0.5)
-                    PrivacySwitch(title: "Phone numbers", detail: "Become [PHONE]", isOn: $settings.redactPhones)
-                    PrivacySwitch(title: "Street addresses", detail: "Become [ADDRESS]", isOn: $settings.redactAddresses)
-                    PrivacySwitch(title: "People's names", detail: "Become [Person 1], [Person 2]", isOn: $settings.maskNames)
-                    PrivacySwitch(title: "Private network addresses", detail: "10.x and 192.168.x become [IP]", isOn: $settings.redactPrivateIPs)
-                }
-            }
-            SectionHeader(title: "Always replaced")
-            GlassCard {
-                VStack(alignment: .leading, spacing: Theme.Space.s) {
-                    ForEach(["Card numbers", "Social Security numbers", "Passwords and password fields", "API keys and tokens"], id: \.self) { item in
-                        Label(item, systemImage: "lock.fill")
-                            .foregroundStyle(Theme.textSecondary)
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: Rules
-
-    private var rulesTab: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.l) {
-            SectionHeader(title: "Always skip these domains",
-                          info: "One per line. A word with no dot matches any domain containing it, e.g. \"bank\".")
-            RulesEditor(lines: $settings.skipDomains, placeholder: "chase.com\nbank\nmyhealth.example.org")
-            SectionHeader(title: "Always skip windows containing",
-                          info: "One word or phrase per line. A window whose title or text contains one is never captured.")
-            RulesEditor(lines: $settings.skipWords, placeholder: "Payroll\nMedical\nPersonal")
-        }
-    }
 }
 
 private struct AppRow: View {
@@ -197,12 +168,60 @@ private struct AppRow: View {
         case .verified:
             StarBadge(kind: .accepted, label: "Verified").help("Measured in testing: text comes through.")
         case .unverified:
-            StarBadge(kind: .needsReview, label: "Unverified").help("Not measured yet. Check the debug view to see what comes through.")
+            StarBadge(kind: .needsReview, label: "Unverified").help("Not measured yet. Counts for this app are in Settings, under Capture diagnostics.")
         case .blocked:
             Label("Blocked", systemImage: "nosign")
                 .font(Theme.Typo.caption.weight(.medium))
                 .foregroundStyle(Theme.danger)
                 .help("Password managers and system settings are never read.")
+        }
+    }
+}
+
+struct RedactionSettings: View {
+    @ObservedObject var settings: Settings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.l) {
+            SectionHeader(title: "Replaced before anything is kept",
+                          info: "These are replaced on this Mac, before anything is saved or sent. Changes apply to what's captured from now on.")
+            GlassCard {
+                VStack(alignment: .leading, spacing: Theme.Space.m) {
+                    PrivacySwitch(title: "Email addresses", detail: "Become [EMAIL]", isOn: $settings.redactEmails)
+                    PrivacySwitch(title: "Keep the company part", detail: "Shows [EMAIL]@acme.com instead of [EMAIL]", isOn: $settings.keepEmailDomain)
+                        .padding(.leading, 28)
+                        .disabled(!settings.redactEmails)
+                        .opacity(settings.redactEmails ? 1 : 0.5)
+                    PrivacySwitch(title: "Phone numbers", detail: "Become [PHONE]", isOn: $settings.redactPhones)
+                    PrivacySwitch(title: "Street addresses", detail: "Become [ADDRESS]", isOn: $settings.redactAddresses)
+                    PrivacySwitch(title: "People's names", detail: "Become [Person 1], [Person 2]", isOn: $settings.maskNames)
+                    PrivacySwitch(title: "Private network addresses", detail: "10.x and 192.168.x become [IP]", isOn: $settings.redactPrivateIPs)
+                }
+            }
+            SectionHeader(title: "Always replaced")
+            GlassCard {
+                VStack(alignment: .leading, spacing: Theme.Space.s) {
+                    ForEach(["Card numbers", "Social Security numbers", "Passwords and password fields", "API keys and tokens"], id: \.self) { item in
+                        Label(item, systemImage: "lock.fill")
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct SkipRulesSettings: View {
+    @ObservedObject var settings: Settings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.l) {
+            SectionHeader(title: "Always skip these domains",
+                          info: "One per line. A word with no dot matches any domain containing it, e.g. \"bank\".")
+            RulesEditor(lines: $settings.skipDomains, placeholder: "chase.com\nbank\nmyhealth.example.org")
+            SectionHeader(title: "Always skip windows containing",
+                          info: "One word or phrase per line. A window whose title or text contains one is never captured.")
+            RulesEditor(lines: $settings.skipWords, placeholder: "Payroll\nMedical\nPersonal")
         }
     }
 }

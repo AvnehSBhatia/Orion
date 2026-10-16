@@ -5,20 +5,37 @@ import SwiftUI
 struct DebugView: View {
     @ObservedObject var stats: DebugStats
     @ObservedObject var engine: CaptureEngine
+    var embedded = false
 
     var body: some View {
-        SpaceScreen(maxWidth: 1000) {
-            WindowHeader(title: "Debug", detail: "Counts only") {
-                InfoButton(text: "Captured text is redacted, then saved encrypted on this Mac. It is never shown here, logged, or sent from this view.")
+        if embedded {
+            VStack(alignment: .leading, spacing: Theme.Space.l) {
+                pills
+                table
             }
-            HStack(spacing: Theme.Space.s) {
-                StatusPill(icon: "circle.fill", text: statusText, color: statusColor)
-                StatusPill(icon: "lock.fill",
-                           text: "\(stats.recordCount) \(stats.storeAvailable ? "records saved" : "records in memory (store unavailable)")")
-                StatusPill(icon: "textformat", text: "\(stats.storedChars) characters saved")
+        } else {
+            SpaceScreen(maxWidth: 1000) {
+                WindowHeader(title: "Debug", detail: "Counts only") {
+                    InfoButton(text: "Captured text is redacted, then saved encrypted on this Mac. It is never shown here, logged, or sent from this view.")
+                }
+                pills
+            } content: {
+                table
             }
-        } content: {
-            GlassCard {
+        }
+    }
+
+    private var pills: some View {
+        HStack(spacing: Theme.Space.s) {
+            StatusPill(icon: "circle.fill", text: statusText, color: statusColor)
+            StatusPill(icon: "lock.fill",
+                       text: "\(stats.recordCount) \(stats.storeAvailable ? "records saved" : "records in memory (store unavailable)")")
+            StatusPill(icon: "textformat", text: "\(stats.storedChars) characters saved")
+        }
+    }
+
+    private var table: some View {
+        GlassCard {
                 if stats.sortedRows.isEmpty {
                     EmptyState(title: "No captures yet", message: "Switch to an app you turned on.")
                 } else {
@@ -53,7 +70,6 @@ struct DebugView: View {
                         .padding(.bottom, Theme.Space.xs)
                     }
                 }
-            }
         }
     }
 

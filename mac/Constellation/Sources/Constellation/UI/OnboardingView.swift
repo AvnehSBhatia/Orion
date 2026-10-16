@@ -174,7 +174,7 @@ struct OnboardingView: View {
             stepHeader(
                 "Choose Your Apps",
                 "Every app starts off.",
-                info: "The eye in your menu bar always shows whether capture is on, paused, or off. Pause and Delete All Data are one click away there."
+                info: "The eye in your menu bar always shows whether capture is on, paused, or off. Pause is there. Delete all data is in Settings."
             )
             GlassCard {
                 VStack(alignment: .leading, spacing: Theme.Space.m) {

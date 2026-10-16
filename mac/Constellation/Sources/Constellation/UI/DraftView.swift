@@ -6,39 +6,115 @@ import SwiftUI
 struct DraftView: View {
     @ObservedObject var model: DraftModel
     @ObservedObject var directory: ClientDirectory
+    var embedded = false
+    var batchesWaiting = 0
+    var connected = true
+    var appsChosen = true
+    var onOutbox: () -> Void = {}
+    var onApps: () -> Void = {}
+    var onSettings: () -> Void = {}
+    var onBaseline: (() -> Void)? = nil
 
     var body: some View {
-        SpaceScreen {
+        SpaceScreen(embedded: embedded) {
             WindowHeader(
-                title: "Today's Draft",
+                title: "Today",
                 detail: Date().formatted(.dateTime.weekday(.wide).month(.wide).day()),
-                subtitle: "Review each entry, then accept, edit, or reject it."
+                subtitle: promise
             ) {
                 if model.loading { ProgressView().controlSize(.small) }
                 IconButton(symbol: "arrow.clockwise", help: "Refresh") { Task { await model.refresh() } }
             }
-            if let draft = model.draft {
+            if let draft = model.draft, !draft.entries.isEmpty {
                 HStack(spacing: Theme.Space.s) {
-                    StatusPill(icon: "clock", text: draft.totalMinutes.asDuration, color: Theme.textPrimary)
-                    StatusPill(icon: "list.bullet", text: "\(draft.entries.count) \(draft.entries.count == 1 ? "entry" : "entries")")
-                    let pending = draft.entries.filter { $0.status == .pending }.count
-                    StatusPill(icon: "star", text: "\(pending) to review", color: pending > 0 ? Theme.warning : Theme.textSecondary)
+                    StatusPill(icon: "clock", text: draft.totalMinutes.asDuration, color: Theme.star)
+                    StatusPill(icon: "list.bullet", text: "\(keptCount(draft)) \(keptCount(draft) == 1 ? "entry" : "entries")")
+                    StatusPill(icon: "star", text: pendingLabel, color: model.pendingCount > 0 ? Theme.warning : Theme.success)
                 }
             }
             if let error = model.error {
                 Label(error, systemImage: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
             }
         } content: {
+            cue
             if let draft = model.draft, draft.entries.isEmpty {
-                EmptyState(title: "Nothing yet today", message: "Entries appear here once work blocks have been sent.")
+                EmptyState(title: "Nothing on today's timesheet yet", message: emptyMessage)
             }
             ForEach(model.draft?.entries ?? []) { entry in
                 EntryCard(entry: entry, model: model, clients: directory.list.clients)
                     .id("\(entry.id)-\(entry.status)-\(entry.edited)-\(entry.narrative)-\(entry.minutes)-\(entry.clientId ?? "")")
             }
             if let draft = model.draft, !draft.entries.isEmpty { DoneForToday(model: model) }
+            if onBaseline != nil {
+                Button("Compare with your usual timesheet") { onBaseline?() }
+                    .buttonStyle(LinkButtonStyle())
+            }
         }
         .task { await model.refresh() }
+    }
+
+    /// What this page is for, in the state the person is actually in.
+    private var promise: String {
+        guard let draft = model.draft else { return "Your timesheet, written from the work you already did." }
+        if draft.entries.isEmpty {
+            return "Approving a batch in the Outbox is what fills this page. You confirm the day. You do not rewrite it."
+        }
+        let names = clientNames(in: draft)
+        let who = names.isEmpty
+            ? "with no client yet"
+            : "for \(names.prefix(3).joined(separator: ", "))\(names.count > 3 ? " +\(names.count - 3)" : "")"
+        if model.exported != nil {
+            return "\(draft.totalMinutes.asDuration) \(who). This day is finished, and the CSV is the record."
+        }
+        if model.pendingCount == 0 {
+            return "\(draft.totalMinutes.asDuration) \(who). Every entry is reviewed. Done for today locks it."
+        }
+        return "\(draft.totalMinutes.asDuration) \(who). Confirm what is right. The writing is already done."
+    }
+
+    private var pendingLabel: String {
+        model.pendingCount > 0 ? "\(model.pendingCount) to confirm" : "All confirmed"
+    }
+
+    private func keptCount(_ draft: Draft) -> Int {
+        draft.entries.filter { $0.status != .rejected }.count
+    }
+
+    private func clientNames(in draft: Draft) -> [String] {
+        var seen = Set<String>()
+        return draft.entries.filter { $0.status != .rejected }.compactMap { entry -> String? in
+            guard let id = entry.clientId, seen.insert(id).inserted else { return nil }
+            return directory.list.clients.first { $0.id == id }?.name ?? "A client"
+        }
+    }
+
+    private var emptyMessage: String {
+        if batchesWaiting > 0 { return "Work is waiting in the Outbox. Approve it, and it shows up here as time by client." }
+        if !appsChosen { return "No apps are turned on, so nothing is being read." }
+        if !connected { return "This Mac is not connected yet, so finished work cannot be drafted into a timesheet." }
+        return "Keep working in an app you turned on. When a stretch finishes and you approve it, the entry appears here."
+    }
+
+    @ViewBuilder private var cue: some View {
+        if batchesWaiting > 0 {
+            NextStepBanner(
+                message: "\(batchesWaiting) \(batchesWaiting == 1 ? "item is" : "items are") still on this Mac. Approving \(batchesWaiting == 1 ? "it" : "them") writes today's timesheet.",
+                button: "Review in Outbox",
+                action: onOutbox
+            )
+        } else if !connected {
+            NextStepBanner(
+                message: "Connect this Mac. Until you do, today's timesheet cannot arrive.",
+                button: "Connect",
+                action: onSettings
+            )
+        } else if !appsChosen {
+            NextStepBanner(
+                message: "Turn on the apps you work in. Nothing else on this Mac is read.",
+                button: "Choose apps",
+                action: onApps
+            )
+        }
     }
 }
 

@@ -7,23 +7,36 @@ struct OutboxView: View {
     @ObservedObject var model: OutboxModel
     @ObservedObject var settings: Settings
     @ObservedObject var sender: Sender
+    var embedded = false
+    var draftPending = 0
+    var openSettings: () -> Void = {}
+    var openToday: () -> Void = {}
     @State private var editing: OutboxItem?
     @State private var showAllSent = false
 
     static let sentCollapsed = 5
 
     var body: some View {
-        SpaceScreen {
-            WindowHeader(title: "Outbox", subtitle: "Your company's AI summarizes each batch. Nothing is kept until you approve it.")
+        SpaceScreen(embedded: embedded) {
+            WindowHeader(
+                title: "Outbox",
+                subtitle: "This is everything that would leave this Mac. Approve a batch, and it becomes time on Today."
+            )
         } content: {
+            cues
             NowCard(model: model, settings: settings)
-            modeRow
-            ConnectionCard(sender: sender, settings: settings, directory: sender.directory)
+            if embedded {
+                modeReminder
+                if sender.isConnected { connectionStatus }
+            } else {
+                modeRow
+                ConnectionCard(sender: sender, settings: settings, directory: sender.directory)
+            }
             if !model.available {
                 Label("The encrypted store is unavailable, so there is nothing to show.", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(Theme.warning)
             }
-            BatchSection(title: "Waiting for Review", empty: "Nothing to review.", batches: model.toReview,
+            BatchSection(title: "Waiting for Review", empty: "Nothing waiting. When a stretch of work finishes, it lands here. Approving it writes today's timesheet.", batches: model.toReview,
                          kind: .review, model: model, connected: sender.isConnected, editing: $editing)
             BatchSection(title: "Approved", empty: "Nothing approved yet.", batches: model.approved,
                          kind: .approved, model: model, connected: sender.isConnected, editing: $editing)
@@ -69,6 +82,79 @@ struct OutboxView: View {
                  : "Batches are approved as soon as they close, and listed here as a log.")
                 .font(Theme.Typo.caption)
                 .foregroundStyle(Theme.textSecondary)
+        }
+    }
+
+    /// In the main window, connection and the sharing mode live in Settings. This line says which mode is on.
+    private var modeReminder: some View {
+        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.m) {
+            Text(settings.outboxMode == .reviewFirst
+                 ? "Review first. Your company keeps nothing until you approve it."
+                 : "Log only. A finished batch is approved on its own.")
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: Theme.Space.s)
+            Button("Change") { openSettings() }.buttonStyle(LinkButtonStyle())
+        }
+    }
+
+    /// A single line so the Outbox never hides whether this Mac is connected.
+    private var connectionStatus: some View {
+        HStack(spacing: Theme.Space.s) {
+            GlowDot(color: connectionColor, size: 7)
+            Text(connectionText)
+                .font(Theme.Typo.caption)
+                .foregroundStyle(Theme.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: Theme.Space.s)
+            Button("Send now") { sender.sendNow() }
+                .buttonStyle(LinkButtonStyle())
+                .disabled(sender.state == .connecting || sender.state == .sending)
+        }
+    }
+
+    private var connectionText: String {
+        let host = sender.destination ?? settings.backendURL
+        switch sender.state {
+        case .connecting: return "Connecting…"
+        case .sending: return "Sending · \(host)"
+        case .failed: return "Connected · \(host) · last send failed"
+        case .connected:
+            let last = sender.lastSentAt.map { "last sent \($0.formatted(date: .omitted, time: .shortened))" } ?? "nothing sent yet"
+            return "Connected · \(host) · \(last)"
+        case .notConnected: return "Not connected"
+        }
+    }
+
+    private var connectionColor: Color {
+        switch sender.state {
+        case .connected: Theme.success
+        case .sending, .connecting, .failed: Theme.warning
+        case .notConnected: Theme.danger
+        }
+    }
+
+    @ViewBuilder private var cues: some View {
+        if settings.consentPending, sender.isConnected {
+            NextStepBanner(
+                message: "Accept your company's monitoring notice. Nothing is sent until you do.",
+                button: "Read it in Settings",
+                action: openSettings
+            )
+        } else if !sender.isConnected {
+            NextStepBanner(
+                message: "This Mac is not connected. Approved batches wait here until it is.",
+                button: "Connect",
+                action: openSettings
+            )
+        } else if model.toReview.isEmpty, draftPending > 0 {
+            NextStepBanner(
+                message: "Nothing else is waiting to leave. Today's timesheet is ready to confirm.",
+                button: "Open Today",
+                action: openToday
+            )
         }
     }
 }
@@ -134,7 +220,7 @@ private struct NowCard: View {
 // MARK: Connection
 
 /// One card: a glowing dot and one line of status; the address is editable only after Edit.
-private struct ConnectionCard: View {
+struct ConnectionCard: View {
     @ObservedObject var sender: Sender
     @ObservedObject var settings: Settings
     @ObservedObject var directory: ClientDirectory
@@ -420,7 +506,7 @@ private struct BatchRow: View {
             Text("Couldn't get a summary. \(message)").font(Theme.Typo.caption).foregroundStyle(Theme.warning)
                 .fixedSize(horizontal: false, vertical: true)
         } else if !connected {
-            Text("Connect to the backend to see a summary of this batch.")
+            Text("Connect this Mac to see a summary of this batch.")
                 .font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
         }
     }

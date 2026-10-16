@@ -80,15 +80,13 @@ import CaptureCore
 
         print("""
         Constellation is running. Look for the eye icon at the top right of your menu bar.
-        If your menu bar is full, macOS may hide it behind the camera notch; the Apps window has the same controls.
+        If your menu bar is full, macOS may hide the eye behind the camera notch. Click it when you can: the popover opens the window, and the window has the same on, pause, and off controls.
         Press Ctrl+C here, or choose Quit Constellation in the menu bar popover, to stop.
         """)
-        // First run, or no permission yet: the welcome screens. Otherwise the apps
-        // window, since a menu bar app has no window of its own.
+        // First run, or no permission yet: the welcome screens, then the window on Apps.
+        // After that the app stays in the menu bar until there is something to do.
         if !settings.onboardingDone || !AXIsProcessTrusted() {
             menuBar?.showWelcome()
-        } else {
-            menuBar?.showApps()
         }
     }
 }

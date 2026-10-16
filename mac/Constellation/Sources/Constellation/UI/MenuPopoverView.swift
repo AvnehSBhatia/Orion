@@ -1,22 +1,25 @@
+import CaptureCore
 import SwiftUI
 
-/// What opens from the menu bar eye: the status in big type with a glowing dot,
-/// one Pause button, the windows, Delete all, and Quit.
+/// What opens from the menu bar eye: whether capture is on, the one thing
+/// that needs you, and Quit. The window itself holds Today, Outbox, Apps, and Settings.
 struct MenuPopoverView: View {
+    struct Cue {
+        var title: String
+        var detail: String
+        var place: ShellPlace
+    }
+
     struct Actions {
-        var openDraft: () -> Void
-        var openBaseline: () -> Void
-        var openOutbox: () -> Void
-        var openApps: () -> Void
-        var openWelcome: () -> Void
-        var openDebug: () -> Void
-        var deleteAll: () -> Void
+        var open: (ShellPlace) -> Void
         var quit: () -> Void
     }
 
     @ObservedObject var settings: Settings
     @ObservedObject var engine: CaptureEngine
     @ObservedObject var outbox: OutboxModel
+    @ObservedObject var drafts: DraftModel
+    @ObservedObject var sender: Sender
     let actions: Actions
 
     var body: some View {
@@ -27,13 +30,20 @@ struct MenuPopoverView: View {
                     Text(headline).font(.system(size: 20, weight: .semibold))
                     Text(detail).font(Theme.Typo.caption).foregroundStyle(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let minutes = drafts.draft?.totalMinutes, minutes > 0, cue?.place != .today {
+                        Text("Today so far: \(minutes.asDuration)")
+                            .font(Theme.Typo.caption)
+                            .foregroundStyle(Theme.star)
+                    }
                 }
             }
 
             HStack(spacing: Theme.Space.s) {
                 switch engine.status.state {
                 case .off:
-                    Button("Turn On") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle())
+                    if settings.policy.captureEnabled {
+                        Button("Turn On") { settings.captureOn = true }.buttonStyle(PrimaryButtonStyle())
+                    }
                 case .paused:
                     Button("Resume") { settings.resume() }.buttonStyle(PrimaryButtonStyle())
                     Button("Turn Off") { settings.captureOn = false }.buttonStyle(GhostButtonStyle())
@@ -54,24 +64,25 @@ struct MenuPopoverView: View {
 
             ConstellationDivider()
 
-            VStack(alignment: .leading, spacing: 2) {
-                row("Today's Draft", symbol: "list.bullet.rectangle", action: actions.openDraft)
-                row("Baseline", symbol: "calendar", action: actions.openBaseline)
-                row("Outbox", symbol: "tray.and.arrow.up", badge: outbox.toReviewCount, action: actions.openOutbox)
-                row("Apps and Privacy", symbol: "app.badge.checkmark", action: actions.openApps)
-                row("Welcome and Permission", symbol: "hand.wave", action: actions.openWelcome)
-                row("Debug", symbol: "gauge.with.dots.needle.33percent", action: actions.openDebug)
+            Button { actions.open(cue?.place ?? .today) } label: {
+                HStack(spacing: Theme.Space.s) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(cue?.detail ?? "Today, Outbox, Apps, Settings").font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
+                        Text(cue?.title ?? "Open Constellation").font(Theme.Typo.bodyStrong)
+                    }
+                    Spacer(minLength: Theme.Space.s)
+                    Image(systemName: "arrow.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.accent)
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 8)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(MenuRowStyle())
+            .help(cue.map { "Opens \($0.place.label)" } ?? "Opens Today")
 
             ConstellationDivider()
 
             HStack {
-                Button(role: .destructive, action: actions.deleteAll) {
-                    Label("Delete All Data", systemImage: "trash")
-                }
-                .buttonStyle(LinkButtonStyle(color: Theme.danger))
-                .fixedSize()
-                .help("Deletes every record, the Outbox, and the encryption key at once.")
                 Spacer(minLength: Theme.Space.s)
                 Button(action: actions.quit) {
                     Label("Quit Constellation", systemImage: "power")
@@ -91,19 +102,24 @@ struct MenuPopoverView: View {
         .preferredColorScheme(.dark)
     }
 
-    private func row(_ title: String, symbol: String, badge: Int = 0, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: Theme.Space.s) {
-                Image(systemName: symbol).frame(width: 18).foregroundStyle(Theme.textSecondary)
-                Text(title)
-                Spacer()
-                if badge > 0 { Chip(text: "\(badge) to review", color: Theme.warning) }
-            }
-            .padding(.vertical, 5)
-            .padding(.horizontal, 6)
-            .contentShape(Rectangle())
+    /// The single next step, in the order that unblocks the timesheet.
+    private var cue: Cue? {
+        if !sender.isConnected {
+            return Cue(title: "Connect this Mac", detail: "Opens Settings", place: .settings)
         }
-        .buttonStyle(MenuRowStyle())
+        if outbox.toReviewCount > 0 {
+            let n = outbox.toReviewCount
+            return Cue(title: "\(n) to approve", detail: "Opens Outbox", place: .outbox)
+        }
+        if drafts.pendingCount > 0 {
+            let minutes = drafts.draft?.totalMinutes ?? 0
+            let title = minutes > 0 ? "Confirm \(minutes.asDuration)" : "Confirm today's timesheet"
+            return Cue(title: title, detail: "Opens Today", place: .today)
+        }
+        if settings.allowed.isEmpty {
+            return Cue(title: "Choose which apps are read", detail: "Opens Apps", place: .apps)
+        }
+        return nil
     }
 
     private var headline: String {
