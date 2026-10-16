@@ -6,16 +6,50 @@ Menu bar app that reads on-screen text from apps the user turns on, redacts it o
 
 ## Run it
 
+The window on screen is the binary you last launched. Paste this in Terminal from any folder. It finds that binary, updates the checkout it came from, builds, and opens the new one. The sidebar says **Orion**, next to three stars.
+
 ```sh
-cd ~/Documents/constellation-mac/mac/Constellation
+set -eu
+pid=""
+bin=""
+while IFS= read -r row; do
+  row=${row#"${row%%[![:space:]]*}"}
+  [ -n "$row" ] || continue
+  one=${row%% *}
+  cmd=${row#"$one"}
+  cmd=${cmd#"${cmd%%[![:space:]]*}"}
+  case "$cmd" in
+    */.build/release/Constellation|*/.build/debug/Constellation)
+      if [ -x "$cmd" ]; then pid=$one; bin=$cmd; break; fi ;;
+  esac
+done << EOF
+$(ps -axo pid=,command=)
+EOF
+if [ -n "$bin" ]; then
+  pkg=$(cd "$(dirname "$bin")/../.." && pwd)
+else
+  found=$(find "$HOME" -maxdepth 6 -path '*/mac/Constellation/Package.swift' -print 2>/dev/null | head -n 1)
+  pkg=$(dirname "$found")
+fi
+root=$(git -C "$pkg" rev-parse --show-toplevel)
+echo "Repo: $root"
+git -C "$root" fetch origin cursor/mac-shell-nav-caef
+git -C "$root" switch cursor/mac-shell-nav-caef
+git -C "$root" pull --ff-only origin cursor/mac-shell-nav-caef
+git -C "$root" log -1 --oneline
+grep -q 'Text("Orion")' "$root/mac/Constellation/Sources/Constellation/UI/ShellView.swift"
+cd "$root/mac/Constellation"
 swift build -c release
-.build/release/Constellation        # from Terminal, which already has Accessibility permission
-swift test                          # 103 tests (plus on-demand live tests): Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause
+if [ -n "$pid" ]; then kill "$pid" || true; fi
+sleep 1
+exec ./.build/release/Constellation
 ```
+
+`swift test` from `mac/Constellation` runs the suite (Outbox, store, redaction, segmentation, dedupe, browser URLs, exclusions, pause).
 
 M1 runs as a plain executable, not an .app bundle, so it uses the Accessibility permission of the terminal it starts from. Packaging, signing, and its own permission come in M8.
 
-When it starts, Terminal prints "Constellation is running" and stays busy. That is normal: the process lives in the menu bar, and the window opens in front. On first run, or while the Accessibility permission is missing, the **welcome screens** open, and finishing them opens the window on Apps. Later launches open the window on Today. Until this Mac is allowed, connected, and has apps turned on, Setup is listed in the sidebar under the four pages. Hide removes it. Show setup steps brings it back. The Outbox counts are one bar, not three separate cards. The eye in the menu bar opens it again. On a MacBook with a full menu bar, macOS can hide that eye behind the camera notch, which is why the window opens on its own. The window's sidebar has the same on, pause, and off controls. Quit with Ctrl+C in Terminal or Quit in the menu.
+When it starts, Terminal prints "Orion is running" and stays busy. That is normal: the process lives in the menu bar, and the window opens in front. On first run, or while the Accessibility permission is missing, the **welcome screens** open, and finishing them opens the window on Apps. Later launches open the window on Today. Until this Mac is allowed, connected, and has apps turned on, Setup is listed in the sidebar under the four pages. Hide removes it. Show setup steps brings it back. The Outbox counts are one bar, not three separate cards. The eye in the menu bar opens it again. On a MacBook with a full menu bar, macOS can hide that eye behind the camera notch, which is why the window opens on its own. The window's sidebar has the same on, pause, and off controls. Quit with Ctrl+C in Terminal or Quit in the menu.
 
 ## What M1 does
 
@@ -134,7 +168,7 @@ Edited descriptions go through the person's redaction choices before they're sen
 ### Mock backend
 
 ```sh
-node ~/Documents/constellation-mac/mac/mock-backend/server.mjs     # port 8787, no packages needed
+node mac/mock-backend/server.mjs     # from the repo root. Port 8787, no packages needed
 ```
 
 It implements register, work blocks, clients, today's draft, reviews, and delete my data per the contract, prints one line per received block (app, times, size, redaction count), warns if anything that looks like an unredacted email, phone number, or key arrives, and saves everything to `mac/mock-backend/data/` (git ignored) so you can read exactly what arrived. Registered devices survive a restart of the mock.
