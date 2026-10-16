@@ -104,9 +104,9 @@ import SwiftUI
 
     private func updateIcon(_ status: CaptureStatus) {
         let (symbol, label): (String, String) = switch status.state {
-        case .on: ("eye", "Constellation: capture on")
-        case .paused: ("pause.circle", "Constellation: paused")
-        case .off: ("eye.slash", "Constellation: capture off")
+        case .on: ("eye", "Orion: capture on")
+        case .paused: ("pause.circle", "Orion: paused")
+        case .off: ("eye.slash", "Orion: capture off")
         }
         let image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
         image?.isTemplate = true
@@ -117,7 +117,7 @@ import SwiftUI
     // MARK: Windows
 
     private func showShell() {
-        show("shell", title: "Constellation", shellView)
+        show("shell", title: "Orion", shellView)
     }
 
     private var shellView: ShellView {
@@ -136,7 +136,7 @@ import SwiftUI
     }
 
     @objc func showWelcome() {
-        show("welcome", title: "Welcome to Constellation", OnboardingView(
+        show("welcome", title: "Welcome to Orion", OnboardingView(
             settings: settings,
             openApps: { [weak self] in self?.show(.apps) },
             finish: { [weak self] in

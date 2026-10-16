@@ -4,7 +4,7 @@ import SwiftUI
 
 // MARK: Screen
 
-/// A window's content: canvas background, a pinned header (optional), and a column.
+/// A window's content: canvas background, a header that leaves while you scroll, and a column.
 struct SpaceScreen<Header: View, Content: View>: View {
     var maxWidth: CGFloat = Theme.contentMaxWidth
     var scrolls = true
@@ -13,19 +13,47 @@ struct SpaceScreen<Header: View, Content: View>: View {
     @ViewBuilder var header: Header
     @ViewBuilder var content: Content
 
+    @State private var headerShown = true
+    @State private var headerHeight: CGFloat = 0
+    @State private var scrollOffset: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
+    @State private var viewportHeight: CGFloat = 0
+
     var body: some View {
         ZStack(alignment: .top) {
             if !embedded { SpaceBackground() }
             VStack(spacing: 0) {
                 column { header }
-                    .padding(.top, embedded ? Theme.pageTop : Theme.titlebarInset + Theme.Space.s)
+                    .padding(.top, headerShown ? topInset : 0)
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear.preference(key: HeaderHeightKey.self, value: geo.size.height)
+                        }
+                    }
+                    .frame(height: barHeight, alignment: .top)
+                    .clipped()
+                    .opacity(headerShown ? 1 : 0)
+                    .accessibilityHidden(!headerShown)
                 if scrolls {
                     ScrollView {
                         column { content }
-                            .padding(.top, Theme.Space.l)
+                            .padding(.top, headerShown ? Theme.Space.l : Theme.pageTop)
                             .padding(.bottom, Theme.windowPadding)
+                            .background {
+                                GeometryReader { geo in
+                                    Color.clear
+                                        .preference(key: ScrollOffsetKey.self, value: geo.frame(in: .named("pageScroll")).minY)
+                                        .preference(key: ContentHeightKey.self, value: geo.size.height)
+                                }
+                            }
                     }
+                    .coordinateSpace(name: "pageScroll")
                     .scrollIndicators(.automatic)
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear.preference(key: ViewportHeightKey.self, value: geo.size.height)
+                        }
+                    }
                 } else {
                     column { content }
                         .padding(.top, Theme.Space.l)
@@ -33,6 +61,22 @@ struct SpaceScreen<Header: View, Content: View>: View {
                     Spacer(minLength: 0)
                 }
             }
+            .animation(.easeInOut(duration: 0.22), value: headerShown)
+        }
+        .onPreferenceChange(HeaderHeightKey.self) { height in
+            if height > 1 { headerHeight = height }
+        }
+        .onPreferenceChange(ScrollOffsetKey.self) { value in
+            scrollOffset = value
+            refreshHeader()
+        }
+        .onPreferenceChange(ContentHeightKey.self) { value in
+            contentHeight = value
+            refreshHeader()
+        }
+        .onPreferenceChange(ViewportHeightKey.self) { value in
+            viewportHeight = value
+            refreshHeader()
         }
         .foregroundStyle(Theme.textPrimary)
         .font(Theme.Typo.body)
@@ -41,12 +85,56 @@ struct SpaceScreen<Header: View, Content: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var topInset: CGFloat {
+        embedded ? Theme.pageTop : Theme.titlebarInset + Theme.Space.s
+    }
+
+    /// Nil until the bar has been measured, so the first layout uses its real height.
+    private var barHeight: CGFloat? {
+        if !headerShown { return 0 }
+        return headerHeight > 1 ? headerHeight : nil
+    }
+
+    /// Hide once the page has actually moved, and only when the list is still scrollable without the bar. Show again at the top.
+    private func refreshHeader() {
+        guard scrolls else { return }
+        let stillScrollsWhenHidden = contentHeight > viewportHeight + headerHeight + 48
+        let stillScrollsNow = contentHeight > viewportHeight + 48
+        let next: Bool
+        if headerShown {
+            next = !(stillScrollsWhenHidden && scrollOffset < -28)
+        } else {
+            next = scrollOffset > -8 || !stillScrollsNow
+        }
+        if next != headerShown { headerShown = next }
+    }
+
     private func column<C: View>(@ViewBuilder _ inner: () -> C) -> some View {
         VStack(alignment: .leading, spacing: Theme.Space.l) { inner() }
             .frame(maxWidth: embedded ? .infinity : maxWidth, alignment: .leading)
             .padding(.horizontal, embedded ? Theme.pageInset : Theme.windowPadding)
             .frame(maxWidth: .infinity)
     }
+}
+
+private struct HeaderHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct ScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct ContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct ViewportHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 /// Eyebrow, title, subtitle, and an optional connection status.
@@ -439,7 +527,7 @@ struct EmptyState: View {
 struct ConstellationMark: View {
     var body: some View {
         PlanetArt(compact: true)
-            .accessibilityLabel("Constellation")
+            .accessibilityLabel("Orion")
     }
 }
 
@@ -459,11 +547,11 @@ struct PlanetPortrait: View {
             PlanetArt(compact: false)
                 .padding(36)
         }
-        .accessibilityLabel("Constellation")
+        .accessibilityLabel("Orion")
     }
 }
 
-/// A geometric C with one point in the counter. One stroke, one dot, no shading.
+/// Orion's belt: three stars on a short diagonal. The middle one is the bright star.
 struct PlanetArt: View {
     var compact = false
 
@@ -471,30 +559,20 @@ struct PlanetArt: View {
         Canvas { context, size in
             let side = min(size.width, size.height)
             let origin = CGPoint(x: (size.width - side) / 2, y: (size.height - side) / 2)
-            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-                CGPoint(x: origin.x + side * x / 100, y: origin.y + side * y / 100)
+            let radius = side * (compact ? 0.105 : 0.09)
+            let middle = side * (compact ? 0.135 : 0.115)
+            let stars: [(CGFloat, CGFloat, CGFloat, Color)] = [
+                (28, 62, radius, Theme.textPrimary),
+                (50, 50, middle, Theme.accent),
+                (72, 38, radius, Theme.textPrimary),
+            ]
+            for (x, y, r, color) in stars {
+                let center = CGPoint(x: origin.x + side * x / 100, y: origin.y + side * y / 100)
+                context.fill(
+                    Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)),
+                    with: .color(color)
+                )
             }
-
-            var letter = Path()
-            letter.move(to: point(70, 24))
-            letter.addLine(to: point(42, 24))
-            letter.addCurve(to: point(24, 42), control1: point(28, 24), control2: point(24, 32))
-            letter.addLine(to: point(24, 58))
-            letter.addCurve(to: point(42, 76), control1: point(24, 68), control2: point(28, 76))
-            letter.addLine(to: point(70, 76))
-
-            context.stroke(
-                letter,
-                with: .color(Theme.textPrimary),
-                style: StrokeStyle(lineWidth: side * 0.12, lineCap: .round, lineJoin: .round)
-            )
-
-            let dot = side * (compact ? 0.11 : 0.08)
-            let center = point(54, 50)
-            context.fill(
-                Path(ellipseIn: CGRect(x: center.x - dot, y: center.y - dot, width: dot * 2, height: dot * 2)),
-                with: .color(Theme.accent)
-            )
         }
     }
 }

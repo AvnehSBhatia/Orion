@@ -105,7 +105,7 @@ struct OnboardingView: View {
                 Text("Less admin. More orbit.")
                     .font(Theme.Typo.caption)
                     .foregroundStyle(Theme.textSecondary)
-                Text("Welcome to Constellation")
+                Text("Welcome to Orion")
                     .font(Theme.Typo.windowTitle)
                     .tracking(-0.3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -140,7 +140,7 @@ struct OnboardingView: View {
                     .clipped()
                 LinearGradient(colors: [.clear, Theme.welcomePanel.opacity(0.92)], startPoint: .center, endPoint: .bottom)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Constellation  /  001")
+                    Text("Orion  /  001")
                         .font(Theme.Typo.sectionHeader)
                         .kerning(1.1)
                         .foregroundStyle(Theme.textTertiary)

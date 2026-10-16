@@ -12,11 +12,11 @@ enum AppFont {
 
     private static let registered: Void = {
         guard let url = fontFileURL() else {
-            print("Constellation typeface: system font. Figtree was not next to the app.")
+            print("Orion typeface: system font. Figtree was not next to the app.")
             return
         }
         CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
-        print("Constellation typeface: Figtree.")
+        print("Orion typeface: Figtree.")
     }()
 
     /// Safe to call more than once. Views also call it the first time they draw text.

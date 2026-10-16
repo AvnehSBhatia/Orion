@@ -87,7 +87,7 @@ struct ShellView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center, spacing: 8) {
                 ConstellationMark().frame(width: 18, height: 18).accessibilityHidden(true)
-                Text("Constellation").font(Theme.Typo.wordmark)
+                Text("Orion").font(Theme.Typo.wordmark)
             }
             .padding(.horizontal, 10)
             .padding(.bottom, 14)

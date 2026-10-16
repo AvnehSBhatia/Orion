@@ -68,7 +68,7 @@ struct MenuPopoverView: View {
                 HStack(spacing: Theme.Space.s) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(cue?.detail ?? "Today, Outbox, Apps, Settings").font(Theme.Typo.caption).foregroundStyle(Theme.textTertiary)
-                        Text(cue?.title ?? "Open Constellation").font(Theme.Typo.bodyStrong)
+                        Text(cue?.title ?? "Open Orion").font(Theme.Typo.bodyStrong)
                     }
                     Spacer(minLength: Theme.Space.s)
                     Image(systemName: "arrow.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.accent)
@@ -85,12 +85,12 @@ struct MenuPopoverView: View {
             HStack {
                 Spacer(minLength: Theme.Space.s)
                 Button(action: actions.quit) {
-                    Label("Quit Constellation", systemImage: "power")
+                    Label("Quit Orion", systemImage: "power")
                 }
                 .buttonStyle(GhostButtonStyle(small: true))
                 .fixedSize()
                 .keyboardShortcut("q")
-                .help("Stops capturing and quits Constellation (⌘Q).")
+                .help("Stops capturing and quits Orion (⌘Q).")
             }
         }
         .padding(Theme.Space.l + 2)

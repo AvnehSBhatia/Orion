@@ -157,7 +157,7 @@ struct DraftView: View {
                     .kerning(0.6)
                     .foregroundStyle(Theme.textTertiary)
                     .textCase(.uppercase)
-                Text("Constellation").font(Theme.Typo.bodyStrong)
+                Text("Orion").font(Theme.Typo.bodyStrong)
             }
             Spacer(minLength: Theme.Space.s)
             Text(line)

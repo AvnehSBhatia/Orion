@@ -43,7 +43,7 @@ import CaptureCore
         let menu = NSMenu()
         let appItem = NSMenuItem()
         appItem.submenu = NSMenu()
-        appItem.submenu?.addItem(withTitle: "Quit Constellation", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu?.addItem(withTitle: "Quit Orion", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(appItem)
         let editItem = NSMenuItem()
         let edit = NSMenu(title: "Edit")
@@ -80,11 +80,12 @@ import CaptureCore
         sender.start()
 
         print("""
-        Constellation is running, and its window should be in front.
-        This build has a rounded page panel and a light Turn On pill. If the title still says WORKSPACE above it, this is an older copy: quit, then pull and rebuild.
+        Orion is running, and its window should be in front.
+        The sidebar says Orion, next to three stars. Scroll a page and the title bar leaves. Scroll back to the top and it returns.
+        If the sidebar still says Constellation, this is an older copy: quit, then pull and rebuild.
         Setup is listed in the sidebar, under Today, Outbox, Apps, and Settings.
         The eye in the menu bar opens that window again. On a MacBook, a full menu bar can hide the eye behind the camera notch, so the window also opens whenever you start the app.
-        Press Ctrl+C here, or choose Quit Constellation in the menu bar popover, to stop.
+        Press Ctrl+C here, or choose Quit Orion in the menu bar popover, to stop.
         """)
         // First run, or no permission yet: the welcome screens, then the window on Apps.
         // After that the window still opens. The menu bar eye is easy to lose under the notch.
