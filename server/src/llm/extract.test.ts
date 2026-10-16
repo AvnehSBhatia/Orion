@@ -74,6 +74,36 @@ describe("LlmExtractor", () => {
     expect(out.nodes.every((n) => n.sellable === null)).toBe(true);
   });
 
+  it("drops junk to-dos and links the model writes", async () => {
+    const node = { label: "Q4 search campaign", type: "campaign", domain: "marketing", summary: "s", owner: null, status: "on_track" };
+    const links = [
+      { title: "DuckDuckGo – Protection. Privacy. Peace of mind.", url: "https://duckduckgo.com/" },
+      { title: "q4 budget - Google Search", url: "https://www.google.com/search?q=q4+budget" },
+      { title: "New Tab", url: "chrome://newtab/" },
+      { title: "Budget doc", url: "notes" },
+      { title: "Campaign", url: "https://ads.google.com/aw/campaigns" },
+      { title: "Campaign again", url: "https://ads.google.com/aw/campaigns/#top" },
+    ];
+    const { llm } = fakeLlm([
+      jsonTurn({
+        nodes: [
+          { ...node, todo: "Update 230.", readLinks: links },
+          { ...node, label: "Acme renewal", todo: "Send the renewal quote to Acme by Friday.", readLinks: [] },
+        ],
+        edges: [],
+      }),
+    ]);
+    const out = await new LlmExtractor(llm).fromCapture({ url: "u", title: "t", text: "h" }, []);
+    expect(out.nodes[0]).toMatchObject({ todo: null, readLinks: [{ title: "Campaign", url: "https://ads.google.com/aw/campaigns" }] });
+    expect(out.nodes[1].todo).toBe("Send the renewal quote to Acme by Friday.");
+  });
+
+  it("drops junk to-dos from code cards", async () => {
+    const { llm } = fakeLlm([jsonTurn({ nodes: [card({ todo: "Update 257." })], edges: [] })]);
+    const out = await new LlmExtractor(llm).fromCode({ repo: "r", commitSha: "s", files: [{ path: "a.ts", diff: "+x" }] }, []);
+    expect(out.nodes[0].todo).toBeNull();
+  });
+
   it("maps code cards to engineering and keeps in-progress work unsellable", async () => {
     const { llm, requests } = fakeLlm([
       jsonTurn({ nodes: [card({}), card({ label: "Voice mode v2", release: "in_progress", sellable: true, status: "unknown" })], edges: [] }),

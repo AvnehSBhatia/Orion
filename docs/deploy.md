@@ -104,14 +104,14 @@ Keep the dashboard and the API on sibling subdomains of one registrable domain (
 
 Accounts are created with `server/scripts/account.ts` on the box. It writes `auth.db` and the org file directly, so run it where the server's `DATA_DIR` is.
 
-The org id becomes the file name `orgs/<org>.db`: lowercase letters, digits and dashes. The user id is the person's id in the graph (for example a first name).
+The org id becomes the file name `orgs/<org>.db`: lowercase letters, digits and dashes. The user id is the person's id in the graph (for example a first name). Ids are not shown in the app: `--org-name` is the org's display name (used when the command creates the org) and `--name` is the person's. Either one left out defaults to its id in title case (`acme` becomes "Acme"). `--org-description` is optional and sets what the org does; admins can edit it later.
 
 Docker:
 
 ```sh
 docker compose -f deploy/docker-compose.yml exec server \
   node_modules/.bin/tsx scripts/account.ts create \
-  --username mina --password 'a-long-passphrase' --org acme --user mina --name "Mina Park" --admin
+  --username mina --password 'a-long-passphrase' --org acme --org-name "Acme Inc" --user mina --name "Mina Park" --admin
 ```
 
 systemd:
@@ -119,7 +119,7 @@ systemd:
 ```sh
 cd /opt/orion/server
 sudo -u orion -H env DATA_DIR=/var/lib/orion/data node_modules/.bin/tsx --env-file=/etc/orion/orion.env \
-  scripts/account.ts create --username mina --password 'a-long-passphrase' --org acme --user mina --name "Mina Park" --admin
+  scripts/account.ts create --username mina --password 'a-long-passphrase' --org acme --org-name "Acme Inc" --user mina --name "Mina Park" --admin
 ```
 
 Notes:

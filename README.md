@@ -49,7 +49,7 @@ Every API route needs a sign-in (set `AUTH_DISABLED=true` in `server/.env` for a
 
 ```sh
 cd server
-npx tsx scripts/account.ts create --username mina --password '...' --org acme --user mina --admin
+npx tsx scripts/account.ts create --username mina --password '...' --org acme --org-name "Acme Inc" --user mina --name "Mina Park" --admin
 npx tsx scripts/account.ts token --username mina --label "claude code"   # API token for MCP, the extension, or CI
 ```
 
