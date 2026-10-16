@@ -3,19 +3,29 @@ import CoreText
 import SwiftUI
 
 /// Figtree, the geometric sans used for this window.
-/// The file is registered from beside the executable. A missing file uses the system font, so the window still opens.
+/// Four static faces are registered from beside the executable. Missing files use the system font, so the window still opens.
 enum AppFont {
     static let regular: CGFloat = 400
     static let medium: CGFloat = 500
     static let semibold: CGFloat = 600
     static let bold: CGFloat = 700
 
+    private static let faceFiles = [
+        "Figtree-Regular.ttf",
+        "Figtree-Medium.ttf",
+        "Figtree-SemiBold.ttf",
+        "Figtree-Bold.ttf",
+    ]
+
     private static let registered: Void = {
-        guard let url = fontFileURL() else {
+        let urls = fontFileURLs()
+        guard urls.count == faceFiles.count else {
             print("Orion typeface: system font. Figtree was not next to the app.")
             return
         }
-        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        for url in urls {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
         print("Orion typeface: Figtree.")
     }()
 
@@ -39,7 +49,8 @@ enum AppFont {
     }
 
     /// Swift packages place resources in a sibling bundle. `Bundle.module` quits the app when that bundle is not found, so this looks beside the executable instead.
-    private static func fontFileURL() -> URL? {
+    /// The faces are static files. The variable font's only PostScript name is Figtree-Light, and SwiftUI then logs "Unable to update NSCTFontDescriptor" for every line.
+    private static func fontFileURLs() -> [URL] {
         let manager = FileManager.default
         var roots: [URL] = []
         if let executable = Bundle.main.executableURL {
@@ -50,24 +61,21 @@ enum AppFont {
 
         var seen = Set<String>()
         for root in roots where seen.insert(root.path).inserted {
-            if let match = fontFile(in: root, manager) { return match }
+            if let match = fontFiles(in: root, manager) { return match }
             guard let items = try? manager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) else { continue }
             for item in items where item.pathExtension == "bundle" {
-                if let match = fontFile(in: item, manager) { return match }
+                if let match = fontFiles(in: item, manager) { return match }
             }
         }
-        return nil
+        return []
     }
 
-    private static func fontFile(in directory: URL, _ manager: FileManager) -> URL? {
-        let relative = [
-            "Fonts/Figtree-Variable.ttf",
-            "Figtree-Variable.ttf",
-            "Resources/Fonts/Figtree-Variable.ttf",
-        ]
-        for path in relative {
-            let url = directory.appendingPathComponent(path)
-            if manager.fileExists(atPath: url.path) { return url }
+    private static func fontFiles(in directory: URL, _ manager: FileManager) -> [URL]? {
+        let folders = ["Fonts", "Resources/Fonts", ""]
+        for folder in folders {
+            let base = folder.isEmpty ? directory : directory.appendingPathComponent(folder)
+            let urls = faceFiles.map { base.appendingPathComponent($0) }
+            if urls.allSatisfy({ manager.fileExists(atPath: $0.path) }) { return urls }
         }
         return nil
     }
