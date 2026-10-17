@@ -42,7 +42,7 @@ How Orion protects customer data, for security reviews and vendor questionnaires
 
 ## Sign-in and access control
 
-- People sign in with a username and password. There is no SSO or two-factor sign-in yet.
+- People sign in with their email (or username) and a password. A forgotten password is reset with a one-time link sent by email, valid for 24 hours. There is no SSO or two-factor sign-in yet.
 - **Sessions** are HttpOnly cookies (Secure in production, SameSite=Lax) that expire after 30 days. There is no idle timeout.
 - **Sign-in protection:** 10 failed sign-ins for one IP address and username within 15 minutes block more tries for a while. Sign-ins for unknown usernames take as long as real ones.
 - **Tokens:**
@@ -79,10 +79,14 @@ Orion records security events for each organization, and admins can review them:
 - settings changes
 - Mac device connections
 - notice acceptance, with its version
-- data deletions
-- admins viewing Orion as another person
+- data deletions and data exports
+- admins viewing or acting as another person
+- someone opening another person's Mac text or screenshot
+- organization profile changes
+- coding-assistant (MCP) tool calls, by tool name
+- invite and password-reset emails
 
-The audit log is kept when an organization is deleted.
+Events hold ids, field names and counts, never captured text. Admins can export the log as CSV. Events are kept for 400 days, including after an organization is deleted, and then removed.
 
 ## Privacy controls
 

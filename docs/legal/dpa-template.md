@@ -80,7 +80,7 @@ Details can follow in stages.
 
 ## 10. Return and deletion
 
-When the Agreement ends, Customer may export its data for 30 days. After that, the Processor deletes Customer Personal Data from the live system within 30 days. Encrypted backups age out within 35 days after that. Data the law requires the Processor to keep stays protected under this DPA. The audit log of security events may be kept after deletion.
+When the Agreement ends, Customer may export its data (each person's data and the time entries) for 30 days. After that, the Processor deletes Customer Personal Data from the live system within 30 days. Encrypted backups age out within 35 days after that. Data the law requires the Processor to keep stays protected under this DPA. The audit log of security events may be kept after deletion.
 
 ## 11. Audits
 
@@ -110,7 +110,7 @@ A summary of the Security Overview:
   - Sessions that expire after 30 days. API tokens that can expire and can be revoked. CI tokens that can only send commits. Mac device tokens limited to the Mac app's API.
   - CSRF protection, rate limits, and sign-in throttling.
 - **Server access:** SSH only, a firewall that allows only SSH, HTTP and HTTPS, automatic security updates.
-- **Logging:** an audit log of sign-ins, token and account changes, settings changes, device connections, notice acceptances, deletions, and admins viewing Orion as another person.
+- **Logging:** an audit log of sign-ins, token and account changes, settings changes, device connections, notice acceptances, deletions, data exports, admins viewing or acting as another person, opening another person's Mac text or screenshots, and coding-assistant tool calls. Kept 400 days; exportable as CSV.
 - **Availability:** daily backups with integrity checks, encrypted offsite copies kept 35 days, a monthly restore drill, and health and disk alerts.
 - **Minimization:** the Outbox, where people review what is sent. Blocked sites. Configurable retention (defaults: Mac text 14 days, documents 90 days, screenshots 14 days).
 - **AI providers:** every call denies data collection. Model calls also require zero data retention and use pinned hosts. Customer data isn't used for training. Search embeddings are made on the Processor's server by default.

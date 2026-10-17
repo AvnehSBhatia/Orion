@@ -55,7 +55,7 @@ An admin can connect a GitHub repository. Orion then creates a token that can on
 - questions you ask in chat and dashboards you save. Orion does not keep a chat history on the server.
 - sign-in times, API tokens and Mac devices you connect (labeled, with a random install id, not your computer's name)
 - your acceptance of the monitoring notice, with its version and time
-- an audit log of security events: sign-ins, failed sign-ins, sign-outs, token and account changes, invites, password changes and resets, settings changes, device connections, consent, deletions, and admins viewing Orion as someone else
+- an audit log of security events: sign-ins, failed sign-ins, sign-outs, token and account changes, invites, password changes and resets, settings changes, device connections, consent, deletions, data exports, admins viewing Orion as someone else, someone opening another person's Mac text or screenshot, and coding-assistant tool calls. It holds ids and counts, not captured text
 
 **Technical data.** Our server and proxy logs record IP addresses, browser user agents and request paths, for security and fixing problems. They are not meant to hold captured text.
 
@@ -109,10 +109,10 @@ Your employer can change most of these in Orion's settings. The defaults are:
 | Work items | Until your organization deletes them |
 | Captured text on your Mac | 30 days, or until you delete it |
 | Account data | Until the account is deleted |
-| Audit log | Kept, including after an organization is deleted |
+| Audit log | 400 days, including after an organization is deleted |
 | Backups | Up to 35 days after data leaves the live system |
 
-When your employer stops using Orion, we delete its data within 30 days of the contract ending, unless they ask for an export first.
+When your employer stops using Orion, we delete its data within 30 days of the contract ending. Before that, admins can export each person's data and the time entries.
 
 ## Your rights
 
