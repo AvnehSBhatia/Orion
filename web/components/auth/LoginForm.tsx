@@ -12,7 +12,6 @@ export function LoginForm({ error, onSignedIn }: { error?: string; onSignedIn: (
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(error ?? "");
-  const [forgot, setForgot] = useState(false);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -70,14 +69,7 @@ export function LoginForm({ error, onSignedIn }: { error?: string; onSignedIn: (
         </PrimaryButton>
       </form>
       <div className="mt-6 space-y-3 text-[13px] text-muted">
-        <button type="button" onClick={() => setForgot((v) => !v)} aria-expanded={forgot} className="underline-offset-4 hover:text-ink hover:underline">
-          Forgot your password?
-        </button>
-        {forgot && (
-          <p className="rounded-lg border border-line bg-panel px-3 py-2.5 leading-relaxed">
-            Ask an admin in your org for a reset link (Admin, People, Reset link). It works once and expires in 24 hours.
-          </p>
-        )}
+        <p>Forgot your password? Ask an admin. They can make a reset link from Admin, People.</p>
         <p>
           New to Orion? Ask your admin for an invite link.{" "}
           <Link href="/privacy" className="underline-offset-4 hover:text-ink hover:underline">

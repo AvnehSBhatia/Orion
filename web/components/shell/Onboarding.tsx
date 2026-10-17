@@ -11,8 +11,6 @@ import { Check, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-const EXTENSION_URL = process.env.NEXT_PUBLIC_ORION_EXTENSION_URL || "";
-
 type Step = { id: string; title: string; body: React.ReactNode; done: boolean; href?: string; action?: string; adminOnly?: boolean };
 
 export function Onboarding({ org, users, activity }: { org: OrgSummary | null; users: User[]; activity: ActivityResponse | null }) {
@@ -32,17 +30,12 @@ export function Onboarding({ org, users, activity }: { org: OrgSummary | null; u
   const sources = activity?.sources ?? [];
   const steps: Step[] = [
     {
-      id: "extension",
-      title: "Install the Orion extension and sign in",
-      body: (
-        <>
-          Each person picks the tabs, windows, or screens Orion may read. Captures start showing up here within a minute.
-          {!EXTENSION_URL && " Ask your admin for the install link."}
-        </>
-      ),
+      id: "mac",
+      title: "Install Orion on your Mac and connect it",
+      body: "One Terminal command installs it. Each person turns on the apps Orion may read and approves what it sends; work shows up here within minutes.",
       done: (activity?.counts.sources ?? 0) > 0,
-      href: EXTENSION_URL || undefined,
-      action: "Get the extension",
+      href: "/download",
+      action: "Get the Mac app",
     },
     {
       id: "invite",
@@ -63,15 +56,12 @@ export function Onboarding({ org, users, activity }: { org: OrgSummary | null; u
     },
     {
       id: "ci",
-      title: "Add the CI workflow",
-      body: (
-        <>
-          Copy <code className="font-mono text-[12px] text-ink">.github/workflows/ctx-sync.yml</code> into a repo and set{" "}
-          <code className="font-mono text-[12px] text-ink">BACKEND_URL</code>, <code className="font-mono text-[12px] text-ink">ORION_ORG_ID</code> and{" "}
-          <code className="font-mono text-[12px] text-ink">ORION_TOKEN</code>. Every push then turns commits into plain-English updates.
-        </>
-      ),
+      title: "Connect GitHub",
+      body: "Create a token for a repo and commit the workflow Orion shows you. Every push then turns commits into plain-English updates.",
       done: sources.some((s) => s.kind === "code"),
+      href: "/settings#github",
+      action: "Connect",
+      adminOnly: true,
     },
     {
       id: "profile",
@@ -93,7 +83,7 @@ export function Onboarding({ org, users, activity }: { org: OrgSummary | null; u
         Set up {org?.name ?? "your org"}
       </h1>
       <p className="mt-2 max-w-xl text-muted">
-        Nothing has been captured yet. Once people install the extension, their work shows up here as projects, owners, and what
+        Nothing has been captured yet. Once people install the Mac app, their work shows up here as projects, owners, and what
         changed.
       </p>
       <div className="mt-6 flex items-center gap-3" aria-label={`${done} of ${steps.length} steps done`}>

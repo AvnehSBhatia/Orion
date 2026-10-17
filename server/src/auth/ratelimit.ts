@@ -34,5 +34,7 @@ export class LoginLimiter {
   }
 }
 
-const g = globalThis as typeof globalThis & { __orionLoginLimiter?: LoginLimiter };
+const g = globalThis as typeof globalThis & { __orionLoginLimiter?: LoginLimiter; __orionForgotLimiter?: LoginLimiter };
 export const loginLimiter = (): LoginLimiter => (g.__orionLoginLimiter ??= new LoginLimiter());
+/** Self-service reset emails per account: 3 an hour, so nobody can flood a person's inbox from many IPs. */
+export const forgotLimiter = (): LoginLimiter => (g.__orionForgotLimiter ??= new LoginLimiter(3, 60 * 60_000));

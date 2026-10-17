@@ -23,7 +23,7 @@ export function orgDbPath(orgId: string): string {
 }
 
 /** The file is the truth: an org whose .db was deleted is gone, even if a handle to it is still cached. */
-export const orgExists = (orgId: string) => orgId === DEFAULT_ORG || fs.existsSync(orgDbPath(orgId));
+export const orgExists = (orgId: string) => (config.demoOrg && orgId === DEFAULT_ORG) || fs.existsSync(orgDbPath(orgId));
 
 const storeMethods = Object.entries(Object.getOwnPropertyDescriptors(Store.prototype))
   .filter(([k, d]) => k !== "constructor" && typeof d.value === "function")
@@ -46,7 +46,7 @@ function openStore(orgId: string): Store {
   if (store && !hasStoreMethods(store)) store = undefined;
   if (!store) {
     store = Store.open(orgDbPath(orgId));
-    if (orgId === DEFAULT_ORG) {
+    if (orgId === DEFAULT_ORG && config.demoOrg) {
       if (seedDemo(store)) console.log(`Seeded demo org into ${orgDbPath(orgId)}`);
       if (!store.getOrg()) store.saveOrg({ ...DEMO_ORG, createdAt: new Date().toISOString() });
     }
@@ -55,7 +55,7 @@ function openStore(orgId: string): Store {
   return store;
 }
 
-/** The org's SQLite file. Orgs are made with `createOrgStore` (POST /api/orgs); the demo org is seeded on first use. */
+/** The org's SQLite file. Orgs are made with `createOrgStore` (POST /api/orgs); the demo org (not in production) is seeded on first use. */
 export function getStore(orgId: string = DEFAULT_ORG): Store {
   if (!orgExists(orgId)) throw new HttpError(404, `unknown orgId "${orgId}". Create it with POST /api/orgs, or GET /api/orgs to list orgs.`);
   return openStore(orgId);
@@ -91,7 +91,7 @@ export function listOrgs(only?: string): OrgSummary[] {
   if (only !== undefined) return orgExists(only) ? [summarize(only)] : [];
   const dir = path.join(config.dataDir, "orgs");
   const onDisk = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".db")).map((f) => f.slice(0, -3)) : [];
-  return [...new Set([DEFAULT_ORG, ...onDisk])].sort().map(summarize);
+  return [...new Set([...(config.demoOrg ? [DEFAULT_ORG] : []), ...onDisk])].sort().map(summarize);
 }
 
 export function getEmbedder(): Embedder {

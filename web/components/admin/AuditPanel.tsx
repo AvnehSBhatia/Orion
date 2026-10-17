@@ -1,6 +1,7 @@
 "use client";
 
 import { Notice, Panel, SecondaryButton } from "@/components/ui/form";
+import { useSession } from "@/components/auth/session";
 import { api } from "@/lib/api/client";
 import type { AuditEvent } from "@/lib/api/types";
 import { settingsError } from "@/lib/notLive";
@@ -20,6 +21,12 @@ const ACTION: Record<string, string> = {
   invite_accepted: "Accepted an invite",
   settings_changed: "Changed org settings",
   data_deleted: "Deleted data",
+  viewed_as: "Viewed or acted as a colleague",
+  source_opened: "Opened a colleague's capture",
+  org_updated: "Changed the org profile",
+  mcp_tool_called: "Used an MCP tool",
+  data_exported: "Exported a person's data",
+  audit_exported: "Exported the audit log",
 };
 
 const when = (iso: string) =>
@@ -29,6 +36,19 @@ export function AuditPanel() {
   const [events, setEvents] = useState<AuditEvent[] | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const { me } = useSession();
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      await api.auditCsv(me.orgId ?? "org");
+      setError("");
+    } catch (err) {
+      setError(settingsError(err, "export the audit log"));
+    } finally {
+      setExporting(false);
+    }
+  };
   const load = useCallback(async () => {
     setBusy(true);
     try {
@@ -49,11 +69,16 @@ export function AuditPanel() {
   return (
     <Panel
       title="Audit log"
-      description="The last 100 security events in your org: sign-ins, tokens, account and settings changes, deletions."
+      description="The last 100 security events in your org: sign-ins, tokens, account and settings changes, views as a colleague, exports, deletions. Events are kept 400 days; the CSV has all of them."
       actions={
-        <SecondaryButton type="button" onClick={() => void load()} disabled={busy}>
-          {busy ? "Loading…" : "Refresh"}
-        </SecondaryButton>
+        <div className="flex gap-2">
+          <SecondaryButton type="button" onClick={() => void exportCsv()} disabled={exporting}>
+            {exporting ? "Exporting…" : "Export CSV"}
+          </SecondaryButton>
+          <SecondaryButton type="button" onClick={() => void load()} disabled={busy}>
+            {busy ? "Loading…" : "Refresh"}
+          </SecondaryButton>
+        </div>
       }
     >
       {error && (

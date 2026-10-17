@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getAuthDb } from "@/auth/db";
 import { createInviteAs, createInviteRequest, listInviteViews } from "@/auth/invites";
+import { getStore } from "@/http/deps";
 import { HttpError } from "@/http/error";
 import { preflight, readJson, requirePrincipal, route } from "@/http/route";
 
@@ -21,11 +22,14 @@ export const GET = route(
   { public: true },
 );
 
-/** A one-use invite link (7 days) the admin shares; `admin: true` makes the new account an admin. */
+/** A one-use invite link (7 days). `admin: true` makes the new account an admin. The admin copies the link. */
 export const POST = route(
   async (req: NextRequest) => {
     const p = adminCaller(req);
-    return createInviteAs(getAuthDb(), p, createInviteRequest.parse(await readJson(req, {})));
+    const body = createInviteRequest.parse(await readJson(req, {}));
+    const store = getStore(p.orgId);
+    const names = { orgName: store.getOrg()?.name ?? p.orgId, inviterName: store.getUser(p.userId)?.name ?? p.username };
+    return createInviteAs(getAuthDb(), p, body, names);
   },
   { public: true },
 );

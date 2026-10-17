@@ -7,7 +7,8 @@ const BUILT_IN: Record<string, [number, number]> = {
   "google/gemini-2.5-flash-lite": [0.1, 0.4],
   "google/gemini-2.5-flash": [0.3, 2.5],
   "deepseek/deepseek-v4-flash": [0.3, 1.2],
-  "deepseek/deepseek-v4.1-flash": [0.018, 0.684],
+  // DeepInfra fp8, the cheapest of the pinned hosts (MODEL_HOSTS in llm/http.ts).
+  "deepseek/deepseek-v4.1-flash": [0.14, 0.42],
   "deepseek/deepseek-v4-pro": [0.6, 2.4],
   "google/gemini-embedding-2": [0.2, 0],
   "upstage/solar-mini4": [0.05, 0.2],

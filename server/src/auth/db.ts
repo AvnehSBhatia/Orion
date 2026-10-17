@@ -6,7 +6,8 @@ import { randomInt, randomUUID } from "node:crypto";
 import { hashPassword, newId, newRawToken, sha256 } from "./crypto";
 
 /** session: the web app's cookie. api: MCP, the extension, CI. device: a connected Mac, valid only on /v1. */
-export type TokenKind = "session" | "api" | "device";
+/** session: web sign-in. api: MCP and scripts, acts as the person. device: a Mac, /v1 only. ci: GitHub sync, code ingest only. */
+export type TokenKind = "session" | "api" | "device" | "ci";
 
 export type Account = {
   username: string;
@@ -32,6 +33,9 @@ export type Invite = {
   orgId: string;
   admin: boolean;
   role: string | null;
+  /** Who it was sent to, when the admin gave an email (and their name). */
+  email: string | null;
+  name: string | null;
   createdBy: string;
   createdAt: string;
   expiresAt: string;
@@ -62,7 +66,7 @@ type AccountRow = {
   consent_at: string | null;
 };
 type TokenRow = { id: string; hash: string; username: string; kind: TokenKind; label: string; created_at: string; expires_at: string | null; last_used_at: string | null };
-type InviteRow = { id: string; hash: string; org_id: string; admin: number; role: string | null; created_by: string; created_at: string; expires_at: string; used_by: string | null };
+type InviteRow = { id: string; hash: string; org_id: string; admin: number; role: string | null; email: string | null; name: string | null; created_by: string; created_at: string; expires_at: string; used_by: string | null };
 
 const toAccount = (r: AccountRow): Account => ({
   username: r.username,
@@ -82,6 +86,8 @@ const toInvite = (r: InviteRow): Invite => ({
   orgId: r.org_id,
   admin: r.admin === 1,
   role: r.role,
+  email: r.email ?? null,
+  name: r.name ?? null,
   createdBy: r.created_by,
   createdAt: r.created_at,
   expiresAt: r.expires_at,
@@ -89,6 +95,7 @@ const toInvite = (r: InviteRow): Invite => ({
 });
 
 export const normalizeUsername = (u: string) => u.trim().toLowerCase();
+export const normalizeEmail = (e: string) => e.trim().toLowerCase();
 export const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{1,39}$/;
 export const MIN_PASSWORD = 8;
 
@@ -98,19 +105,19 @@ function addColumns(db: Database.Database, table: string, cols: Record<string, s
 }
 
 /**
- * Files made before device tokens existed have a CHECK that refuses kind 'device'. SQLite cannot alter a CHECK,
+ * Files made before device and CI tokens existed have a CHECK that refuses those kinds. SQLite cannot alter a CHECK,
  * so the table is rebuilt once, in one transaction, keeping every row (nothing references tokens).
  */
-function allowDeviceTokens(db: Database.Database): void {
+function allowTokenKinds(db: Database.Database): void {
   const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tokens'").get() as { sql: string } | undefined;
-  if (!row || row.sql.includes("'device'")) return;
+  if (!row || row.sql.includes("'ci'")) return;
   db.transaction(() => {
     db.exec(`
       CREATE TABLE tokens_new (
         id TEXT PRIMARY KEY,
         hash TEXT NOT NULL UNIQUE,
         username TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
-        kind TEXT NOT NULL CHECK (kind IN ('session', 'api', 'device')),
+        kind TEXT NOT NULL CHECK (kind IN ('session', 'api', 'device', 'ci')),
         label TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         expires_at TEXT,
@@ -147,7 +154,7 @@ export class AuthDb {
         id TEXT PRIMARY KEY,
         hash TEXT NOT NULL UNIQUE,
         username TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
-        kind TEXT NOT NULL CHECK (kind IN ('session', 'api', 'device')),
+        kind TEXT NOT NULL CHECK (kind IN ('session', 'api', 'device', 'ci')),
         label TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         expires_at TEXT,
@@ -199,7 +206,15 @@ export class AuthDb {
       consent_version: "INTEGER NOT NULL DEFAULT 0",
       consent_at: "TEXT",
     });
-    allowDeviceTokens(db);
+    addColumns(db, "invites", { email: "TEXT", name: "TEXT" });
+    allowTokenKinds(db);
+    // One account per email, so signing in with it is unambiguous. The code checks first (a clear 409); the index
+    // backs it. A file that already holds duplicates opens without it, and they are refused from then on.
+    try {
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS accounts_email ON accounts(email COLLATE NOCASE)");
+    } catch (err) {
+      console.warn("auth.db: two accounts share an email; sign-in with those emails is refused until one changes", err instanceof Error ? err.message : err);
+    }
   }
 
   static open(file: string): AuthDb {
@@ -218,10 +233,12 @@ export class AuthDb {
     if (!USERNAME_RE.test(username)) throw new Error("username must be 2-40 lowercase letters, digits, dots, dashes, or underscores");
     if (a.password.length < MIN_PASSWORD) throw new Error(`password must be at least ${MIN_PASSWORD} characters`);
     if (this.getAccount(username)) throw new Error(`username "${username}" is taken`);
+    const email = a.email ? normalizeEmail(a.email) : null;
+    if (email && this.accountByEmail(email)) throw new Error("another account already uses that email");
     const hash = await hashPassword(a.password);
     this.db
       .prepare("INSERT INTO accounts (username, password_hash, org_id, user_id, admin, created_at, email) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run(username, hash, a.orgId, a.userId, a.admin ? 1 : 0, new Date().toISOString(), a.email ?? null);
+      .run(username, hash, a.orgId, a.userId, a.admin ? 1 : 0, new Date().toISOString(), email);
     return this.getAccount(username)!;
   }
 
@@ -238,6 +255,12 @@ export class AuthDb {
     return r ? toAccount(r) : null;
   }
 
+  /** The account with this email (any case), or null. Null too when two share it (a file from before the index). */
+  accountByEmail(email: string): Account | null {
+    const rows = this.db.prepare("SELECT * FROM accounts WHERE email = ? COLLATE NOCASE LIMIT 2").all(normalizeEmail(email)) as AccountRow[];
+    return rows.length === 1 ? toAccount(rows[0]) : null;
+  }
+
   listAccounts(orgId: string): Account[] {
     return (this.db.prepare("SELECT * FROM accounts WHERE org_id = ? ORDER BY username").all(orgId) as AccountRow[]).map(toAccount);
   }
@@ -251,7 +274,7 @@ export class AuthDb {
     const u = normalizeUsername(username);
     this.transaction(() => {
       if (patch.admin !== undefined) this.db.prepare("UPDATE accounts SET admin = ? WHERE username = ?").run(patch.admin ? 1 : 0, u);
-      if (patch.email !== undefined) this.db.prepare("UPDATE accounts SET email = ? WHERE username = ?").run(patch.email, u);
+      if (patch.email !== undefined) this.db.prepare("UPDATE accounts SET email = ? WHERE username = ?").run(patch.email ? normalizeEmail(patch.email) : null, u);
       if (patch.disabled !== undefined) {
         this.db.prepare("UPDATE accounts SET disabled = ? WHERE username = ?").run(patch.disabled ? 1 : 0, u);
         if (patch.disabled) this.db.prepare("DELETE FROM tokens WHERE username = ?").run(u);
@@ -289,13 +312,13 @@ export class AuthDb {
 
   // Tokens
 
-  /** Returns the raw token; only its hash is stored. Sessions expire after 30 days, API tokens never. */
-  issueToken(username: string, kind: TokenKind, label = ""): { token: string; info: TokenInfo } {
+  /** Returns the raw token; only its hash is stored. Sessions expire after 30 days; other kinds at `expiresAt`, if given. */
+  issueToken(username: string, kind: TokenKind, label = "", expiresAt: string | null = null): { token: string; info: TokenInfo } {
     const raw = newRawToken();
     // A device's token id is its device_id, a UUID as the Mac contract says.
     const id = kind === "device" ? randomUUID() : newId();
     const now = new Date();
-    const expires = kind === "session" ? new Date(now.getTime() + SESSION_DAYS * DAY).toISOString() : null;
+    const expires = kind === "session" ? new Date(now.getTime() + SESSION_DAYS * DAY).toISOString() : expiresAt;
     this.db
       .prepare("INSERT INTO tokens (id, hash, username, kind, label, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(id, sha256(raw), normalizeUsername(username), kind, label.slice(0, 80), now.toISOString(), expires);
@@ -375,13 +398,24 @@ export class AuthDb {
   // Invites
 
   /** A one-use invite into an org. Returns the raw token (only its hash is stored). */
-  createInvite(i: { orgId: string; admin?: boolean; role?: string | null; createdBy: string }): { token: string; invite: Invite } {
+  createInvite(i: { orgId: string; admin?: boolean; role?: string | null; email?: string | null; name?: string | null; createdBy: string }): { token: string; invite: Invite } {
     const raw = newRawToken();
     const id = newId();
     const now = Date.now();
     this.db
-      .prepare("INSERT INTO invites (id, hash, org_id, admin, role, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(id, sha256(raw), i.orgId, i.admin ? 1 : 0, i.role ?? null, i.createdBy, new Date(now).toISOString(), new Date(now + INVITE_DAYS * DAY).toISOString());
+      .prepare("INSERT INTO invites (id, hash, org_id, admin, role, email, name, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(
+        id,
+        sha256(raw),
+        i.orgId,
+        i.admin ? 1 : 0,
+        i.role ?? null,
+        i.email ? normalizeEmail(i.email) : null,
+        i.name ?? null,
+        i.createdBy,
+        new Date(now).toISOString(),
+        new Date(now + INVITE_DAYS * DAY).toISOString(),
+      );
     return { token: raw, invite: this.inviteById(id)! };
   }
 

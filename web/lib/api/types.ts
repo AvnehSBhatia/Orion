@@ -183,6 +183,9 @@ export type Invite = {
   id: string;
   admin: boolean;
   role: string | null;
+  /** Who it was emailed to, and their name, when the admin gave them. */
+  email: string | null;
+  name: string | null;
   createdBy: string;
   createdAt: string;
   expiresAt: string;
@@ -190,12 +193,14 @@ export type Invite = {
 };
 
 export type CreatedInvite = { id: string; inviteUrl: string; expiresAt: string };
-export type InviteLookup = { orgName: string; expiresAt: string };
+export type InviteLookup = { orgName: string; expiresAt: string; email: string | null; name: string | null };
+export type ResetLink = { resetUrl: string; expiresAt: string };
 
 export type TokenInfo = {
   id: string;
   /** "device": a connected Mac; `label` is its model name. */
-  kind: "session" | "api" | "device";
+  /** "ci": a repo's GitHub sync, which may only send commits. */
+  kind: "session" | "api" | "device" | "ci";
   label: string;
   createdAt: string;
   expiresAt: string | null;
@@ -253,3 +258,26 @@ export type AdminAliasRule = {
 export type AliasRule = { id: string; pattern: string; client_id: string };
 
 export type PilotPerson = { user_id: string; name: string; accepted: number; edited: number; rejected: number; active_days: number };
+
+export type PrivacySummary = {
+  windowDays: number;
+  sent: { total: number; macApps: { app: string; count: number }[]; other: { kind: string; count: number }[] };
+  settings: {
+    retentionDays: number;
+    screenshotRetentionDays: number;
+    snippetRetentionDays: number;
+    auditRetentionDays: number;
+    macBrowserPageText: boolean;
+    screenshotVisibility: "author_and_admins" | "org";
+  };
+  events: { at: string; actor: string | null; action: string; what?: "text" | "screenshot" }[];
+  eventDays: number;
+};
+
+export type MyTimesheet = {
+  userId: string;
+  from: string;
+  to: string;
+  entries: { day: string; client: string; minutes: number; narrative: string; status: "proposed" | "accepted" | "edited" | "rejected" }[];
+  clients: { client: string; minutes: number; entries: number }[];
+};

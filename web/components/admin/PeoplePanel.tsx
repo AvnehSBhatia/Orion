@@ -2,6 +2,7 @@
 
 import { CopyField } from "@/components/ui/CopyButton";
 import { field, Notice, Panel, PrimaryButton, SecondaryButton } from "@/components/ui/form";
+import { useSession } from "@/components/auth/session";
 import { api } from "@/lib/api/client";
 import type { Account, CreatedInvite, Invite } from "@/lib/api/types";
 import { settingsError } from "@/lib/notLive";
@@ -41,6 +42,17 @@ export function PeoplePanel({ self }: { self: string }) {
     }
   };
 
+  const { me: session } = useSession();
+  const exportData = async (account: Account) => {
+    setMsg(null);
+    try {
+      await api.exportPerson(session.orgId ?? "", account.userId);
+      setMsg({ kind: "ok", text: `Downloaded ${account.name || account.username}'s data. The export is in the audit log.` });
+    } catch (err) {
+      setMsg({ kind: "error", text: settingsError(err, "export this person's data") });
+    }
+  };
+
   const resetLink = async (account: Account) => {
     setMsg(null);
     try {
@@ -63,7 +75,7 @@ export function PeoplePanel({ self }: { self: string }) {
         {reset && (
           <div className="mb-4 rounded-xl border border-ink/40 bg-bg p-4" role="status">
             <p className="text-[14px] text-ink">
-              Reset link for @{reset.username}. Send it to them privately; it works once and expires {shortDate(reset.expiresAt)}.
+              Reset link for @{reset.username}. Send it to them privately. It works once and expires {shortDate(reset.expiresAt)}.
             </p>
             <div className="mt-2">
               <CopyField value={reset.url} label="Copy the reset link" />
@@ -76,7 +88,7 @@ export function PeoplePanel({ self }: { self: string }) {
           <p className="text-[14px] text-faint">No accounts to show.</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-line">
-            <table className="w-full min-w-[720px] text-left text-[14px]">
+            <table className="w-full min-w-[820px] text-left text-[14px]">
               <thead>
                 <tr className="border-b border-line font-mono text-[11px] tracking-[0.08em] text-faint uppercase">
                   <th className="px-3 py-2 font-normal">Person</th>
@@ -120,6 +132,9 @@ export function PeoplePanel({ self }: { self: string }) {
                           <SecondaryButton type="button" disabled={a.disabled} onClick={() => resetLink(a)}>
                             Reset link
                           </SecondaryButton>
+                          <SecondaryButton type="button" onClick={() => exportData(a)}>
+                            Export data
+                          </SecondaryButton>
                           <SecondaryButton
                             type="button"
                             disabled={me}
@@ -144,6 +159,7 @@ export function PeoplePanel({ self }: { self: string }) {
 function InvitePanel({ invites, onChange }: { invites: Invite[] | null; onChange: () => Promise<void> }) {
   const [admin, setAdmin] = useState(false);
   const [role, setRole] = useState("");
+  const [name, setName] = useState("");
   const [created, setCreated] = useState<CreatedInvite | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
   const [busy, setBusy] = useState(false);
@@ -153,8 +169,10 @@ function InvitePanel({ invites, onChange }: { invites: Invite[] | null; onChange
     setBusy(true);
     setMsg(null);
     try {
-      setCreated(await api.invites.create({ admin, role: role.trim() || undefined }));
+      const invite = await api.invites.create({ admin, role: role.trim() || undefined, name: name.trim() || undefined });
+      setCreated(invite);
       setRole("");
+      setName("");
       setAdmin(false);
       await onChange();
     } catch (err) {
@@ -180,8 +198,16 @@ function InvitePanel({ invites, onChange }: { invites: Invite[] | null; onChange
   const used = (invites ?? []).filter((i) => i.usedBy);
 
   return (
-    <Panel id="invite" title="Invite people" description="Create a one-time link (valid 7 days). The person picks their own username and password.">
+    <Panel
+      id="invite"
+      title="Invite people"
+      description="A one-time link, valid 7 days. Copy it and send it to them. They pick their own username and password."
+    >
       <form onSubmit={create} className="flex flex-wrap items-end gap-3">
+        <label className="block min-w-[180px] flex-1 text-sm text-muted">
+          Their name (optional)
+          <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="Sam Kim" autoComplete="off" maxLength={80} />
+        </label>
         <label className="block min-w-[220px] flex-1 text-sm text-muted">
           Their role (optional)
           <input className={field} value={role} onChange={(e) => setRole(e.target.value)} placeholder="Account executive" maxLength={120} />
@@ -196,7 +222,7 @@ function InvitePanel({ invites, onChange }: { invites: Invite[] | null; onChange
       </form>
       {created && (
         <div className="mt-4 rounded-xl border border-ink/40 bg-bg p-4" role="status">
-          <p className="text-[14px] text-ink">Invite link ready. Send it to one person; it expires {shortDate(created.expiresAt)}.</p>
+          <p className="text-[14px] text-ink">Invite ready. Copy the link and send it to them. It works once and expires {shortDate(created.expiresAt)}.</p>
           <div className="mt-2">
             <CopyField value={created.inviteUrl} label="Copy the invite link" />
           </div>
@@ -218,9 +244,12 @@ function InvitePanel({ invites, onChange }: { invites: Invite[] | null; onChange
             <li key={i.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
               <div className="min-w-0 flex-1 text-[14px]">
                 <p className="text-ink">
-                  {i.role || "No role set"}
+                  {i.name || i.email || i.role || "No role set"}
                   {i.admin && <span className="ml-2 text-[12px] text-faint">Admin</span>}
                 </p>
+                {(i.name || i.email) && (i.role || (i.name && i.email)) && (
+                  <p className="text-[12px] text-muted">{[i.name ? i.email : null, i.role].filter(Boolean).join(" · ")}</p>
+                )}
                 <p className="text-[12px] text-faint">
                   By @{i.createdBy} {ago(i.createdAt)} · expires {shortDate(i.expiresAt)}
                 </p>

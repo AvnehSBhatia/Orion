@@ -2,11 +2,12 @@ import { z } from "zod";
 import { audit } from "@/audit/log";
 import type { Store } from "@/db/store";
 import { HttpError, tooManyRequests } from "@/http/error";
+import { titleFromId } from "@/lib/text";
 import { dummyHash, verifyPassword } from "./crypto";
 import { MIN_PASSWORD, normalizeUsername, type Account, type AuthDb } from "./db";
 import type { LoginLimiter } from "./ratelimit";
 
-export const loginRequest = z.object({ username: z.string().trim().min(1).max(40), password: z.string().min(1).max(200) });
+export const loginRequest = z.object({ username: z.string().trim().min(1).max(200), password: z.string().min(1).max(200) });
 
 export const userIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/, "userId must be lowercase letters, digits, and dashes");
 export const passwordSchema = z.string().min(MIN_PASSWORD, `password must be at least ${MIN_PASSWORD} characters`).max(200);
@@ -27,8 +28,15 @@ export type LoginResult = { token: string; orgId: string; userId: string; admin:
 /** The login response body (the same token is set as the session cookie). */
 export const loginBody = (r: LoginResult) => ({ token: r.token, orgId: r.orgId, userId: r.userId, admin: r.admin, username: r.username });
 
+/** 409 when another account (in any org) already uses the email. Emails are unique so they can sign in. */
+export function assertEmailFree(db: AuthDb, email: string | null | undefined, username?: string): void {
+  if (!email) return;
+  const holder = db.accountByEmail(email);
+  if (holder && holder.username !== username) throw new HttpError(409, "another account already uses that email");
+}
+
 /**
- * Checks the password and issues a session token. 429 after 10 failures per ip+username in 15 minutes; 403 for a
+ * Checks the password and issues a session token. 429 after 10 failures per ip+name in 15 minutes; 403 for a
  * disabled account (only once the password is right, so the status leaks nothing to a guesser).
  */
 export async function login(db: AuthDb, limiter: LoginLimiter, input: { username: string; password: string; ip: string }): Promise<LoginResult> {
@@ -41,7 +49,7 @@ export async function login(db: AuthDb, limiter: LoginLimiter, input: { username
   const account = stored ? db.getAccount(username) : null;
   if (!account || !ok) {
     limiter.fail(key);
-    audit(db, { orgId: account?.orgId ?? null, actor: null, action: "login_failed", target: username });
+    audit(db, { orgId: account?.orgId ?? null, actor: null, action: "login_failed", target: username.slice(0, 200) });
     throw new HttpError(401, "wrong username or password");
   }
   limiter.reset(key);
@@ -54,10 +62,10 @@ export async function login(db: AuthDb, limiter: LoginLimiter, input: { username
   return { token, orgId: account.orgId, userId: account.userId, admin: account.admin, username };
 }
 
-/** Adds the person to the org if they are not in it yet. Returns true when it created them. */
+/** Adds the person to the org if they are not in it yet, named from their id when no name is given. Returns true when it created them. */
 export function ensurePerson(store: Store, userId: string, name?: string, role?: string): boolean {
   if (store.getUser(userId)) return false;
-  store.saveUser({ id: userId, name: name || userId, role: role || "Member", teamDescription: "" });
+  store.saveUser({ id: userId, name: name?.trim() || titleFromId(userId), role: role || "Member", teamDescription: "" });
   return true;
 }
 
@@ -82,6 +90,7 @@ export async function createAccountIn(
 ): Promise<{ account: Account; created: boolean }> {
   const username = normalizeUsername(body.username);
   if (db.getAccount(username)) throw new HttpError(409, `username "${username}" is taken`);
+  assertEmailFree(db, body.email);
   const userId = body.userId ?? freeUserId(db, store, orgId, username);
   let account: Account;
   try {

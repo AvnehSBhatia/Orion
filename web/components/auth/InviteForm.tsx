@@ -26,7 +26,12 @@ export function InviteForm({ token }: { token: string }) {
     let alive = true;
     api.invites
       .lookup(token)
-      .then((invite) => alive && setLookup({ kind: "ok", invite }))
+      .then((invite) => {
+        if (!alive) return;
+        setLookup({ kind: "ok", invite });
+        // Fill in what the admin typed when they sent it.
+        setForm((f) => ({ ...f, name: f.name || invite.name || "", email: f.email || invite.email || "" }));
+      })
       .catch((err) => {
         if (!alive) return;
         const status = statusOf(err);
@@ -58,7 +63,8 @@ export function InviteForm({ token }: { token: string }) {
       router.replace("/");
     } catch (err) {
       const status = statusOf(err);
-      setError(status === 409 ? "That username is taken. Try another." : status === 404 || status === 410 ? "This invite has expired or was already used." : friendlyError(err, "join"));
+      const emailTaken = status === 409 && err instanceof Error && /email/i.test(err.message);
+      setError(emailTaken ? "Another account already uses that email." : status === 409 ? "That username is taken. Try another." : status === 404 || status === 410 ? "This invite has expired or was already used." : friendlyError(err, "join"));
       setBusy(false);
     }
   };

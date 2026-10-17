@@ -1,0 +1,49 @@
+# Outside uptime check for the Orion box: a box that is down cannot alert by itself (server/src/jobs/alerts.ts covers
+# disk, health and error bursts while it is up). Every 5 minutes GitHub calls /api/health; two failures 30 seconds
+# apart post to the ALERT_WEBHOOK_URL secret (Slack or Discord) and fail the run, which also emails the repo's
+# watchers. Set the repository variable ORION_HEALTH_URL (https://api.<domain>/api/health) to turn it on.
+# GitHub may start scheduled runs a few minutes late, so this is a backstop, not a pager.
+name: Uptime
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: vars.ORION_HEALTH_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check /api/health
+        env:
+          URL: ${{ vars.ORION_HEALTH_URL }}
+          WEBHOOK: ${{ secrets.ALERT_WEBHOOK_URL }}
+        run: |
+          out=$(mktemp)
+          check() { : > "$out"; curl -sS -m 15 -o "$out" -w '%{http_code}' "$URL" 2>/dev/null || true; }
+          status=$(check)
+          if [ "$status" != 200 ]; then
+            sleep 30
+            status=$(check)
+          fi
+          if [ "$status" = 200 ]; then
+            echo "healthy: $(cat "$out")"
+            exit 0
+          fi
+          body=$(head -c 300 "$out")
+          msg="Orion uptime: $URL answered ${status:-nothing} twice, 30 seconds apart. ${body}"
+          echo "$msg"
+          if [ -n "$WEBHOOK" ]; then
+            payload=$(jq -n --arg m "$msg" '{text: $m, content: $m}')
+            curl -fsS -m 10 -H 'Content-Type: application/json' -d "$payload" "$WEBHOOK" || echo "webhook failed"
+          fi
+          exit 1

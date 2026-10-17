@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { getAuthDb } from "@/auth/db";
 import { orgQuery } from "@/contract/schemas";
 import { getStore } from "@/http/deps";
 import { preflight, principalOf, route, scopedQuery } from "@/http/route";
@@ -10,7 +11,8 @@ export const runtime = "nodejs";
 export const GET = route(async (req: NextRequest, ctx: RouteContext<"/api/sources/[id]/image">) => {
   const { orgId } = orgQuery.parse(scopedQuery(req));
   const { id } = await ctx.params;
-  return screenshotResponse(principalOf(req), getStore(orgId), id);
+  const p = principalOf(req);
+  return screenshotResponse(p, getStore(orgId), id, p ? getAuthDb() : undefined);
 });
 
 export const OPTIONS = preflight;

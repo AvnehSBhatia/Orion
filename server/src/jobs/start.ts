@@ -1,5 +1,7 @@
 // Process startup for the Node server (called from instrumentation.ts): background jobs and the embedder warm-up.
+import { getAuthDb } from "@/auth/db";
 import { config } from "@/config";
+import { checkHealth } from "@/health";
 import { getEmbedder, getLlm, getStore } from "@/http/deps";
 import { maintainInBackground } from "@/orgspace/maintain";
 import { logJson, safely } from "./log";
@@ -16,6 +18,14 @@ export function startBackgroundJobs(): void {
       orgIds: () => orgIdsOnDisk(config.dataDir),
       store: (orgId) => getStore(orgId),
       maintain: (store) => maintainInBackground(store, getEmbedder(), getLlm(), config.extractModel),
+      authDb: getAuthDb,
+      healthy: () => {
+        const h = checkHealth({
+          authDb: () => void getAuthDb().db.prepare("SELECT 1").get(),
+          embedder: () => getEmbedder().status?.() ?? "ready",
+        });
+        return { ok: h.ok, failing: Object.entries(h.checks).filter(([, v]) => v === false || v === "error").map(([k]) => k) };
+      },
     });
   }
 

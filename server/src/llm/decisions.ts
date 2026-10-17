@@ -37,7 +37,7 @@ export const decide: Decide = async (req) => {
     {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-Title": "Orion" },
-      body: JSON.stringify({ ...req, provider: providerPrefs() }),
+      body: JSON.stringify({ ...req, provider: providerPrefs(req.model) }),
     },
     { purpose: "chat", label: "decision", timeoutMs: config.routerTimeoutMs, retries: 1 },
   );

@@ -605,7 +605,7 @@ export function Constellation({
         className="absolute inset-0 touch-none"
         style={{ cursor: "grab" }}
         role="img"
-        aria-label={`Embedding constellation: ${counts.nodes} nodes and ${counts.sources} sources in ${counts.clusters} clusters`}
+        aria-label={`Embedding constellation: ${counts.nodes} projects and ${counts.sources} documents in ${counts.clusters} clusters`}
       />
 
       <div className="pointer-events-none absolute top-4 left-5 font-mono text-[11px] tracking-wide text-faint uppercase">
@@ -642,7 +642,7 @@ export function Constellation({
           ))}
           <li className="flex items-center gap-1.5 text-faint">
             <span className="size-1 bg-faint" />
-            Sources
+            Documents
           </li>
         </ul>
       )}
@@ -681,7 +681,7 @@ export function Constellation({
               )}
               {hover.kind === "node"
                 ? [hover.domain && DOMAIN_LABEL[hover.domain], hover.status && STATUS_LABEL[hover.status]].filter(Boolean).join(" · ")
-                : ["Source", hover.cluster].filter(Boolean).join(" · ")}
+                : ["Document", hover.cluster].filter(Boolean).join(" · ")}
             </p>
             <p className="mt-0.5 leading-snug font-medium">{hover.label}</p>
             {(hover.author || hover.createdAt) && (

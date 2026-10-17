@@ -44,13 +44,26 @@ import { useWorkspace } from "./useWorkspace";
 /** Answers slower than this are cut off with a friendly message and a Retry. */
 const CHAT_TIMEOUT_MS = 90_000;
 
-/** Returning visitors, and anyone on a touch screen (the scroll scrub is desktop-only), skip the intro. */
+/** Returning visitors skip the hero; see skipScrub for who skips the scroll scrub after the first question. */
 function initialPhase(): Phase {
   if (typeof window === "undefined") return "hero";
   return readStored(INTRO_SEEN_KEY) ? "app" : "hero";
 }
 
+/** The scrub is a desktop moment: reduced motion, touch screens, small screens, and repeat visits go straight in. */
+function skipScrub() {
+  return (
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+    window.matchMedia("(pointer: coarse)").matches ||
+    window.matchMedia("(max-width: 767px)").matches ||
+    !!readStored(INTRO_SEEN_KEY)
+  );
+}
+
 const ACTION_ICONS = [TrendingUp, CircleAlert, Megaphone];
+
+/** Where the composer sits on the hero: just below the middle, or lower on a short screen so the title fits above it. */
+const HERO_DOCK_BOTTOM = "min(calc(50% - 28px), calc(100% - var(--dock, 240px) - 210px))";
 
 export function AppShell() {
   const { me, signOut } = useSession();
@@ -71,6 +84,7 @@ export function AppShell() {
   const phaseRef = useRef(phase);
   const selectedRef = useRef(selectedId);
   const openAfterAnswer = useRef(false);
+  const stopRef = useRef<AbortController | null>(null);
   const demo = useDemo();
 
   useEffect(() => {
@@ -173,9 +187,14 @@ export function AppShell() {
     }
     // The dashboard reshapes on its own fast call and lands the moment it resolves, without waiting for the answer.
     if (isLayoutAsk(text)) dash.reshape(text);
+    // Stop cancels this answer; a newer question cancels it too, so only one streams at a time.
+    stopRef.current?.abort();
+    const stop = new AbortController();
+    stopRef.current = stop;
+    const timer = window.setTimeout(() => stop.abort(new DOMException("Answer timed out", "TimeoutError")), CHAT_TIMEOUT_MS);
+    // Tokens land in the reply as they arrive; the final message swaps in renumbered citations and next steps.
+    let streamed = "";
     try {
-      // Tokens land in the reply as they arrive; the final message swaps in renumbered citations and next steps.
-      let streamed = "";
       const response = await api.chat(
         orgId,
         userId,
@@ -186,7 +205,7 @@ export function AppShell() {
           update({ role: "assistant", text: streamed, pending: true });
         },
         history,
-        AbortSignal.timeout(CHAT_TIMEOUT_MS),
+        stop.signal,
       );
       update({ role: "assistant", text: response.reply, sources: response.sources, actions: response.actions });
       if (response.viewCommand) applyView(response.viewCommand);
@@ -202,21 +221,24 @@ export function AppShell() {
         if (id) setSelectedId(id);
       }
     } catch (error) {
-      update({ role: "assistant", text: friendlyError(error, "ask Orion"), failed: { question: text } });
+      // Stopped by hand: keep what had arrived, or offer the question again (not when a newer question replaced it).
+      if (stop.signal.aborted && (stop.signal.reason as Error | undefined)?.name !== "TimeoutError") {
+        const superseded = stopRef.current !== stop;
+        update(streamed || superseded ? { role: "assistant", text: streamed || "Stopped." } : { role: "assistant", text: "Stopped.", failed: { question: text } });
+      }
+      else update({ role: "assistant", text: friendlyError(stop.signal.aborted ? stop.signal.reason : error, "ask Orion"), failed: { question: text } });
+    } finally {
+      window.clearTimeout(timer);
+      if (stopRef.current === stop) stopRef.current = null;
     }
   };
+
+  const stopAnswer = () => stopRef.current?.abort();
 
   const sendFromMap = (text: string, options?: { retry?: boolean }) => {
     noteDemoSent(text);
     void ask(text, options);
-    if (phase === "hero") {
-      // The scrub is a desktop moment: reduced motion, touch screens, and repeat visits go straight in.
-      const skip =
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
-        window.matchMedia("(pointer: coarse)").matches ||
-        !!readStored(INTRO_SEEN_KEY);
-      setPhase(skip ? "app" : "entering");
-    }
+    if (phase === "hero") setPhase(skipScrub() ? "app" : "entering");
   };
 
   const goHome = () => {
@@ -288,6 +310,7 @@ export function AppShell() {
           messages={messages}
           onSend={(text) => void ask(text)}
           onRetry={(text) => void ask(text, { retry: true })}
+          onStop={stopAnswer}
           onSelect={setSelectedId}
           onNavigate={navigate}
         />
@@ -341,7 +364,16 @@ export function AppShell() {
         )}
         {phase === "hero" && <AccountMenu name={me.userId === user?.id ? user?.name : undefined} orgName={org?.name} className="absolute top-3 right-4 z-30" />}
         {phase === "entering" && (
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-40 h-px bg-white/80" style={{ width: "calc(var(--progress) * 100%)" }} />
+          <>
+            <div className="pointer-events-none absolute inset-x-0 top-0 z-40 h-px bg-white/80" style={{ width: "calc(var(--progress) * 100%)" }} />
+            <button
+              type="button"
+              onClick={() => setPhase("app")}
+              className="absolute top-3 right-4 z-40 rounded-full border border-line-strong bg-bg/80 px-3 py-1 text-[12px] text-muted backdrop-blur-md transition-colors hover:text-ink"
+            >
+              Skip intro
+            </button>
+          </>
         )}
 
         <header
@@ -414,12 +446,12 @@ export function AppShell() {
           className="absolute inset-x-0 outline-none"
           style={{
             top: phase === "app" && connection !== "live" ? 89 : 56,
-            bottom: phase === "app" ? 0 : "calc(var(--dock, 200px) + 32px)",
+            bottom: phase === "app" ? "calc(var(--dock, 220px) + 12px)" : "calc(var(--dock, 200px) + 32px)",
           }}
           inert={phase !== "app"}
         >
           {ws.unreachable && !graph ? (
-            <div className="flex h-full items-center justify-center px-6" style={{ paddingBottom: "calc(var(--dock, 200px) + 40px)" }}>
+            <div className="flex h-full items-center justify-center px-6">
               <div className="max-w-sm text-center">
                 <Quiet title="Can't reach Orion right now" detail="Your data is safe. This page retries on its own every few seconds." />
               </div>
@@ -451,11 +483,11 @@ export function AppShell() {
               </div>
             </div>
           ) : view === "home" && empty ? (
-            <div className="thin-scroll h-full overflow-auto" style={{ paddingBottom: "calc(var(--dock, 200px) + 40px)" }}>
+            <div className="thin-scroll h-full overflow-auto">
               <Onboarding org={org} users={users} activity={activity} />
             </div>
           ) : view === "blocked" && listed.length === 0 && graph ? (
-            <div className="flex h-full items-center justify-center px-6" style={{ paddingBottom: "calc(var(--dock, 200px) + 40px)" }}>
+            <div className="flex h-full items-center justify-center px-6">
               <div className="max-w-md text-center">
                 <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Nothing is blocked</h1>
                 <p className="mt-2 text-muted">
@@ -475,7 +507,7 @@ export function AppShell() {
               </div>
             </div>
           ) : view === "home" ? (
-            <div className="thin-scroll h-full overflow-auto" style={{ paddingBottom: "calc(var(--dock, 200px) + 40px)" }}>
+            <div className="thin-scroll h-full overflow-auto">
               {dash.key && dash.spec.origin === "chat" && <ResetBar resetting={dash.resetting} onReset={dash.reset} />}
               {/* Widgets are keyed by id inside, so a rebuilt spec reshapes in place instead of remounting. */}
               <DynamicDashboard
@@ -521,7 +553,9 @@ export function AppShell() {
         <div
           className="pointer-events-none absolute inset-x-0 z-10 px-6 text-center"
           style={{
-            bottom: "calc(50% + 232px)",
+            // Above the composer and its prompts (--dock, measured), and never under them on a phone, where the prompts
+            // stack and make the dock tall.
+            bottom: `max(calc(${HERO_DOCK_BOTTOM} + 20px + var(--dock, 240px) + 16px), min(calc(50% + 232px), calc(100% - 190px)))`,
             opacity: "var(--title)",
             filter: "blur(calc((1 - var(--title)) * 12px))",
             transform: "translateY(calc((1 - var(--title)) * -28px))",
@@ -529,8 +563,9 @@ export function AppShell() {
         >
           <h1 className="orion-wordmark font-display text-[clamp(88px,15vw,168px)] leading-[0.84] font-normal tracking-[-0.035em]">Orion</h1>
           <p className="orion-wordmark mx-auto mt-5 max-w-xl text-[15px] leading-relaxed tracking-[0.01em] text-balance text-muted [animation-delay:180ms]">
-            {user ? `Hi ${user.name.split(" ")[0]}. Ask what your team is working on.` : "Ask what your team is working on."} The map shows the
-            rest.
+            {user ? `Hi ${user.name.split(" ")[0]}. Ask what your team is working on.` : "Ask what your team is working on."}
+            {/* One line on a phone: a second one sits under the composer. */}
+            <span className="hidden sm:inline"> The map shows the rest.</span>
           </p>
         </div>
 
@@ -538,7 +573,7 @@ export function AppShell() {
           ref={dockRef}
           className="absolute left-1/2 z-30 w-[min(560px,calc(100%-32px))]"
           style={{
-            bottom: "calc((1 - var(--chat)) * (50% - 28px) + 20px)",
+            bottom: `calc((1 - var(--chat)) * ${HERO_DOCK_BOTTOM} + 20px)`,
             transform: "translateX(-50%) scale(calc(0.97 + 0.03 * var(--chat)))",
           }}
         >
@@ -549,6 +584,7 @@ export function AppShell() {
               onSend={sendFromMap}
               onClose={() => setReplyOpen(false)}
               onRetry={(text) => sendFromMap(text, { retry: true })}
+              onStop={stopAnswer}
               keepOpen={demo.on}
             />
           )}

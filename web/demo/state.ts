@@ -93,7 +93,7 @@ export function cardHint(kind: string, widgetKind?: string): string | null {
 
 const SECTION_HINT: Record<string, string> = {
   Dependencies: "What waits on what. When one project slips, everything after it is at risk.",
-  "Who feeds what": "Each row is a person. Each dot is something they captured, on the project it updated.",
+  "Who feeds what": "Each row is a person. Each dot is something they captured in the last day, on the project it updated.",
   Topics: "Related work grouped by meaning, no matter which team it came from.",
 };
 

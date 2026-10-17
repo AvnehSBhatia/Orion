@@ -5,7 +5,7 @@ import type { Store } from "@/db/store";
 import { HttpError } from "@/http/error";
 import { verifyPassword } from "./crypto";
 import { normalizeUsername, type Account, type AuthDb, type Principal } from "./db";
-import { emailSchema, passwordSchema } from "./service";
+import { assertEmailFree, emailSchema, passwordSchema } from "./service";
 
 /** What an admin sees about an account. Never the password hash or tokens. */
 export type AccountView = {
@@ -57,17 +57,19 @@ export function updateAccountAs(db: AuthDb, actor: Principal, username: string, 
     const others = db.activeAdmins(actor.orgId).filter((u) => u !== target.username);
     if (others.length === 0) throw new HttpError(409, "the org needs at least one active admin; promote someone else first");
   }
+  if (patch.email) assertEmailFree(db, patch.email, target.username);
   const updated = db.updateAccount(target.username, patch)!;
   audit(db, { orgId: actor.orgId, actor: actor.username, action: "account_updated", target: target.username, detail: { ...patch } });
   return updated;
 }
 
-/** A one-time reset link (24h) an admin shares with the person. */
-export function issueResetLink(db: AuthDb, actor: Principal, username: string): { resetUrl: string; expiresAt: string } {
+/** A one-time reset link (24h) an admin copies and sends to the person. */
+export async function issueResetLink(db: AuthDb, actor: Principal, username: string): Promise<{ resetUrl: string; expiresAt: string }> {
   const target = accountInOrg(db, actor.orgId, username);
   const { token, expiresAt } = db.createReset(target.username);
+  const resetUrl = `${config.appUrl}/reset/${token}`;
   audit(db, { orgId: actor.orgId, actor: actor.username, action: "password_reset", target: target.username, detail: "link issued" });
-  return { resetUrl: `${config.appUrl}/reset/${token}`, expiresAt };
+  return { resetUrl, expiresAt };
 }
 
 export const resetRequest = z.object({ token: z.string().min(1).max(200), password: passwordSchema });
@@ -76,7 +78,7 @@ export const resetRequest = z.object({ token: z.string().min(1).max(200), passwo
 export async function resetPassword(db: AuthDb, body: z.infer<typeof resetRequest>): Promise<void> {
   const username = db.consumeReset(body.token);
   const account = username ? db.getAccount(username) : null;
-  if (!account) throw new HttpError(400, "this reset link is invalid or has expired. Ask an admin for a new one.");
+  if (!account) throw new HttpError(400, "this reset link is invalid or has expired. Request a new one or ask an admin.");
   await db.setPassword(account.username, body.password);
   audit(db, { orgId: account.orgId, actor: account.username, action: "password_reset", target: account.username, detail: "completed" });
 }

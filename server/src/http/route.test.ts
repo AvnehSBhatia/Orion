@@ -262,4 +262,5 @@ describe("config check", () => {
     expect(dev.errors).toEqual([]);
     expect(dev.warnings.length).toBeGreaterThanOrEqual(2);
   });
+
 });

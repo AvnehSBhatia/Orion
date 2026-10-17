@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { listAudit } from "@/audit/log";
 import { AuthDb, type Principal } from "@/auth/db";
 import type { Store } from "@/db/store";
-import { memoryStore } from "@/test/helpers";
+import { submitWorkBlocks } from "@/mac/workBlocks";
+import { deps, memoryStore } from "@/test/helpers";
 import { deleteCapturesBy, deleteMyCaptures, deletePerson } from "./deletion";
 import { captureGate, capturePolicy, updateSettingsAs } from "./policy";
 import { getOrgSettings, isExcludedUrl, normalizeHost, orgSettingsPatch } from "./settings";
@@ -137,6 +138,25 @@ describe("deletion", () => {
     expect([...store.touchedNodeIds("priya")]).toEqual(["n1"]);
     expect(store.getNode("n1")).not.toBeNull();
     expect(count(store, "SELECT count(*) n FROM source_changes WHERE source_id = 'src-p'")).toBe(1);
+  });
+
+  it("also removes the person's Mac work blocks, with their window titles and text", () => {
+    const store = fixture();
+    const block = (id: string) => ({
+      local_id: id,
+      started_at: "2026-10-14T10:00:00.000Z",
+      ended_at: "2026-10-14T10:05:00.000Z",
+      app_name: "Mail",
+      window_title: "Re: pricing",
+      match_method: "none",
+      match_confidence: 0,
+      snippet: "Initech wants a discount",
+    });
+    submitWorkBlocks(deps(store), "devon", [block("d1")]);
+    submitWorkBlocks(deps(store), "priya", [block("p1")]);
+    deleteCapturesBy(store, "devon");
+    expect(count(store, "SELECT count(*) n FROM mac_work_blocks WHERE user_id = 'devon'")).toBe(0);
+    expect(count(store, "SELECT count(*) n FROM mac_work_blocks WHERE user_id = 'priya'")).toBe(1);
   });
 
   it("deletes your own captures with an audit entry", () => {

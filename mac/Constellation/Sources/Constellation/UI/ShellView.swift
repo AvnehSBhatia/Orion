@@ -313,7 +313,7 @@ struct ShellView: View {
     }
 
     private var setupGuide: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Setup")
                     .font(Theme.Typo.sectionHeader)
@@ -336,29 +336,29 @@ struct ShellView: View {
                         showWelcome()
                     }
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         ZStack {
                             Circle().fill(step.done ? Theme.success.opacity(0.22) : (step.current ? Theme.primaryFill : Color.clear))
                             if step.done {
                                 Image(systemName: "checkmark")
-                                    .font(.system(size: 8, weight: .bold))
+                                    .font(.system(size: 12, weight: .bold))
                                     .foregroundStyle(Theme.success)
                             } else {
                                 Text("\(step.id)")
-                                    .font(AppFont.font(10, AppFont.semibold))
+                                    .font(AppFont.font(13, AppFont.semibold))
                                     .foregroundStyle(step.current ? Theme.onPrimary : Theme.textTertiary)
                             }
                         }
-                        .frame(width: 16, height: 16)
-                        .overlay(Circle().strokeBorder(step.current || step.done ? Color.clear : Theme.border, lineWidth: 1))
+                        .frame(width: 28, height: 28)
+                        .overlay(Circle().strokeBorder(step.current || step.done ? Color.clear : Theme.border, lineWidth: 1.5))
                         Text(step.title)
-                            .font(AppFont.font(13, step.current ? AppFont.medium : AppFont.regular))
+                            .font(AppFont.font(14, step.current ? AppFont.medium : AppFont.regular))
                             .foregroundStyle(step.current ? Theme.textPrimary : Theme.textSecondary)
                             .lineLimit(1)
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 8)
-                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                     .background(step.current ? Theme.selectedNav : Color.clear, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)

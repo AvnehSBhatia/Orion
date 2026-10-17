@@ -2,6 +2,7 @@
 // carries the session cookie (`credentials: "include"`), which the backend sets at sign-in.
 
 import { toHistory } from "@/lib/chat";
+import { cleanGraph } from "@/lib/format";
 import type {
   Account,
   AdminAliasRule,
@@ -25,10 +26,13 @@ import type {
   MacClient,
   MacClientInput,
   Me,
+  MyTimesheet,
   OrgProfile,
   OrgSettings,
   OrgSummary,
   PilotPerson,
+  PrivacySummary,
+  ResetLink,
   SourceDetail,
   TokenInfo,
   Usage,
@@ -189,6 +193,7 @@ export const api = {
     changePassword: (current: string, next: string) => post<void>("/api/auth/password", { current, next }),
     /** Public: set a new password from a reset link. */
     resetPassword: (token: string, password: string) => post<void>("/api/auth/reset", { token, password }),
+    /** Public: email a reset link to the account with this email, if there is one. */
     acceptInvite: (body: { token: string; username: string; password: string; name: string; role: string; email?: string }) =>
       post<LoginResponse>("/api/auth/accept-invite", body),
   },
@@ -196,18 +201,18 @@ export const api = {
     list: () => request<{ accounts: Account[] }>("/api/auth/accounts"),
     update: (username: string, change: Partial<Pick<Account, "admin" | "disabled" | "email">>) =>
       patch<{ account: Account }>(`/api/auth/accounts/${seg(username)}`, change),
-    resetLink: (username: string) => post<{ resetUrl: string; expiresAt: string }>(`/api/auth/accounts/${seg(username)}/reset`),
+    resetLink: (username: string) => post<ResetLink>(`/api/auth/accounts/${seg(username)}/reset`),
   },
   invites: {
     list: () => request<{ invites: Invite[] }>("/api/auth/invites"),
-    create: (body: { admin?: boolean; role?: string }) => post<CreatedInvite>("/api/auth/invites", body),
+    create: (body: { admin?: boolean; role?: string; email?: string; name?: string }) => post<CreatedInvite>("/api/auth/invites", body),
     revoke: (id: string) => del<void>(`/api/auth/invites/${seg(id)}`),
     /** Public: which org an invite link is for. */
     lookup: (token: string) => request<InviteLookup>(`/api/auth/invites/${seg(token)}`),
   },
   tokens: {
     list: () => request<{ tokens: TokenInfo[] }>("/api/auth/tokens"),
-    create: (label: string) => post<CreatedToken>("/api/auth/tokens", { label }),
+    create: (label: string, opts: { kind?: "api" | "ci"; expiresInDays?: number } = {}) => post<CreatedToken>("/api/auth/tokens", { label, ...opts }),
     revoke: (id: string) => del<{ ok: true }>(`/api/auth/tokens/${seg(id)}`),
   },
   /** A one-time code the Mac app exchanges for its device token (POST /v1/devices/register). */
@@ -238,11 +243,21 @@ export const api = {
   me: {
     /** Removes the caller's own captured documents and screenshots. */
     deleteCaptures: () => del<{ deleted: number }>("/api/me/captures"),
+    /** Everything Orion holds about the caller, saved as one JSON file. */
+    exportData: (userId: string) => download("/api/me/export", `orion-export-${userId}-${new Date().toISOString().slice(0, 10)}.json`),
+    /** Counts and settings only: what left this account, and who else looked. */
+    privacy: () => request<PrivacySummary>("/api/me/privacy"),
+    /** The caller's own time entries. A user id is not sent. */
+    time: (from: string, to: string) => request<MyTimesheet>("/api/me/time", { query: { from, to } }),
   },
   health: () => request<{ ok: boolean; version?: string }>("/api/health"),
   audit: (limit = 100) => request<{ events: AuditEvent[] }>("/api/audit", { query: { limit } }),
+  /** Admin: every audit event the org keeps, as CSV. */
+  auditCsv: (orgId: string) => download("/api/audit", `orion-audit-${orgId}-${new Date().toISOString().slice(0, 10)}.csv`, { format: "csv" }),
+  /** Admin: everything Orion holds about one person, as one JSON file. */
+  exportPerson: (orgId: string, userId: string) => download(`/api/users/${seg(userId)}/export`, `orion-export-${userId}-${new Date().toISOString().slice(0, 10)}.json`, { orgId }),
   users: (orgId: string) => request<{ users: User[] }>("/api/users", { query: { orgId } }),
-  graph: (orgId: string) => request<GraphResponse>("/api/graph", { query: { orgId } }),
+  graph: async (orgId: string) => cleanGraph(await request<GraphResponse>("/api/graph", { query: { orgId } })),
   activity: (orgId: string, limit = 40) => request<ActivityResponse>("/api/activity", { query: { orgId, limit } }),
   embeddings: (orgId: string) => request<EmbeddingsResponse>("/api/embeddings", { query: { orgId } }),
   brief: (orgId: string, userId: string) => request<BriefResponse>("/api/brief", { query: { orgId, userId } }),

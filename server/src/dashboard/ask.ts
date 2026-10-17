@@ -28,7 +28,7 @@ const ASK_PROMPT = `You edit one person's dashboard from their message. Set chan
 When a draft is given, it already has the filters the message names: keep them, fix titles, add what the message asks for that the draft missed, and drop what it did not ask for. Without a draft, start from the current dashboard and change only what was asked.
 "Only X" or "just X": every widget is about X, plus at most one activity widget.
 ${WIDGET_GUIDE}
-Filters: domains, statuses, owner (a name), query (words in label or summary), sinceHours (today 24, this week 168), source (tool it was captured from, like google ads, hubspot, code). Never use nodeIds. Use at most 8 widgets. The board title says what it shows, never the person's name. Titles are a few plain words in sentence case. No em dashes or exclamation marks. Reply with compact JSON on one line, no indentation.`;
+Filters: domains, statuses, owner (a name), query (words in label or summary), sinceHours (today 24, this week 168), source (tool it was captured from, like google ads, hubspot, code). Never use nodeIds. Use at most 8 widgets. The board title says what it shows, never the person's name. Titles are a few plain words in sentence case; say projects or work, and documents, never nodes, sources, graph, or sellable. No em dashes or exclamation marks. Reply with compact JSON on one line, no indentation.`;
 
 // Words that mean a layout request. Anything else that reads as a plain question skips the model.
 const LAYOUT_WORDS =

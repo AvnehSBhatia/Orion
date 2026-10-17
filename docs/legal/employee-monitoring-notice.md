@@ -1,45 +1,50 @@
-> **DRAFT — needs review by counsel.** Not legal advice. This is the default text the Orion extension shows before recording starts. Each customer should adapt it, add their own legal basis and contact, and check local rules: works council or union consultation in the EU, written notice and acknowledgment in New York (Civil Rights Law §52-c), Connecticut and Delaware, a CCPA notice at collection in California, and a DPIA under GDPR Art. 35. Bumping the org's `consentVersion` asks everyone to accept again.
-
 # Before you start: what Orion records
 
-**[Company] uses Orion to keep a shared, up-to-date picture of the team's work.** Please read this before turning on recording.
+**[Company] uses Orion to keep a shared, current picture of the team's work and to draft your daily time entries.** Please read this before you turn on capture. Nothing is sent to Orion until you accept this notice.
 
-**What's recorded.** Only the browser tabs, windows or screens you pick, and only while recording is on:
+**What the Orion Mac app reads.**
 
-- the page address, title and visible text, including text you type into forms (never passwords)
-- screenshots when the content changes, at most every [5] seconds
+- Text on screen in the front window of the apps you turn on. Every app starts off. Password managers, Keychain and System Settings can't be turned on.
+- In browsers: the tab title and the page address, cut to the domain and path (no query strings). Page text only if [Company] allows it and you turn it on yourself. [browser page text]
+- If you turn on Granola meeting notes, the finished notes on your Mac (your notes and the summary). Never the recording or the transcript.
+- Which app and window you were in, and when.
 
-Orion doesn't record keystrokes as you type, audio, your camera, incognito windows, or anything you didn't pick. These sites are never recorded: [list, e.g. banking, health, HR, personal email].
+Orion never takes screenshots. It doesn't record keystrokes, audio or your camera. It skips private and incognito windows and password fields. It skips banking sites and any sites or words you add to your skip list. Sites [Company] blocks for everyone: [excluded sites].
 
-**What it's used for.** Orion turns what you work on into work items (projects, tasks, blockers, who's on what) that your team can see, search and ask questions about. [Company] does not use Orion to [measure productivity / time-track / make disciplinary decisions] — [edit to match your policy].
+**Cleaned on your Mac first.** Before anything is saved, the app removes card numbers, Social Security numbers, and API keys and tokens. It also removes email addresses, phone numbers and street addresses unless you turn that off. You can also choose to hide people's names.
+
+**The Outbox.** What the app captures waits in the Outbox on your Mac, where you can read, edit or delete it. Items you don't review are approved automatically after 30 minutes and then sent. You can turn auto-approve off, so nothing is sent until you approve it. While items wait, the app may send them to Orion only to write a short summary for you. That text is not stored.
+
+**What Orion does with it.** AI models read your approved work to find work items (projects, tasks, blockers, who's on what) and to draft your daily time entries by client. The models run through OpenRouter, only at providers that keep nothing and don't train on it.
 
 **Who sees it.**
 
-- Your colleagues see the work items and page text.
-- **Screenshots** are visible only to you and [Company]'s Orion admins [unless changed: "to everyone in the organization"].
-- To build work items, page text and titles are processed by AI models through OpenRouter. Those providers don't keep or train on it.
+- Everyone in [Company] sees the work items. They can describe what you worked on.
+- The text from your Mac is visible only to you and [Company]'s Orion admins.
+- Admins can view Orion as you. Each time is recorded in the audit log.
+- You review your own time entries. Admins can export the entries you accept or edit (date, client, minutes, description) and see how many entries each person accepted, edited or rejected.
 
-**How long it's kept.** Screenshots: [14] days. Page text: [90] days. Work items stay until deleted.
+Orion does not score or rank people. Ask [contact] how [Company] uses this information.
+
+**How long it's kept.** Text from your Mac: [snippet days]. Window titles, page addresses and times: [document days] in search, and they stay with your time records until deleted. Time entries and work items stay until deleted.
 
 **Your controls.**
 
-- Pause or stop recording at any time from the Orion icon. A badge shows when recording is on.
-- Remove a tab or window from what's shared.
-- Delete your own captures in Orion's settings.
+- Pause or turn off capture at any time from the Orion icon in the menu bar.
+- Choose which apps are read, and change your skip list and what is removed.
+- Review, edit or delete items in the Outbox before they're sent.
+- Delete your data from the Mac app or from Orion's settings. Work items already built from it stay.
+- Download a copy of your data from Orion's settings.
 - Ask [contact] to see, correct or delete your data.
 
-**More detail:** [link to privacy policy] · Questions: [contact name / email]
+**If [Company] still uses the older Orion Chrome extension.** It records only the tabs, windows or screens you pick, while recording is on: the page address, title and visible text (never passwords), and screenshots when the content changes, at most every [interval] seconds. Its page text is visible to everyone in [Company] and kept [document days]. Screenshots are [screenshot visibility] and kept [screenshot days].
 
----
-
-[ ] I've read this notice and understand what Orion records.
-
-**[ Accept and continue ]**   [ Not now ]
+**More detail:** [link to privacy policy] · Questions: [contact]
 
 <!--
-Implementation notes for the extension (not shown to users):
-- Show on first run and whenever GET /api/capture/policy reports a consent version the user hasn't accepted.
-- Recording stays disabled until POST /api/auth/consent { version } succeeds; capture endpoints return 403 "consent required" otherwise.
-- Keep "Not now" as a real choice: nothing is captured, the user can come back later.
-- Store nothing locally that implies consent; the server's acceptedAt is the record (it also lands in the audit log).
+Maintainer notes (not shown to users):
+- The server serves this file as the monitoring notice (GET /api/auth/me and GET /v1/policy). server/src/auth/notice.ts
+  fills the [bracketed] fields from the org's name and settings; BUILT_IN_NOTICE there must match this file (a test checks).
+- Changing this text does not ask anyone to accept again. An admin does that by bumping the notice version in the admin UI.
+- Keep the short fallback in web/components/auth/ConsentScreen.tsx in line with this text.
 -->

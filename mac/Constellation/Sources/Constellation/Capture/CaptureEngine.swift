@@ -22,6 +22,7 @@ struct CaptureStatus: Equatable {
     private let scheduler = EventScheduler()
     private(set) var segmenter = Segmenter()
     let names = NameMasker() // stable [Person N] tokens for this session; the Outbox uses it for edits
+    let granola = GranolaImporter()
     /// Refreshed when records move into the Outbox.
     var outbox: OutboxModel?
     var directory: ClientDirectory?
@@ -71,6 +72,8 @@ struct CaptureStatus: Equatable {
         }
         checkOutbox()
         stats.updateStore(store?.totals(), storeAvailable: store != nil)
+        granola.onImported = { [weak self] in self?.outbox?.refresh() }
+        granola.start(settings: settings, store: store)
         reattach()
     }
 
@@ -253,6 +256,7 @@ struct CaptureStatus: Equatable {
     private func tick() {
         if let pausedUntil = settings.pausedUntil, pausedUntil <= Date() {
             settings.resume() // triggers reattach through the settings sink
+            granola.checkNow()
         }
         if AXIsProcessTrusted() != status.trusted { reattach() }
 

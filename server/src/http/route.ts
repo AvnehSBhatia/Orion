@@ -3,12 +3,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ZodError } from "zod";
 import { config } from "@/config";
 import type { ErrorResponse } from "@/contract/types";
+import { auditViewingAs } from "@/audit/log";
 import { sha256 } from "@/auth/crypto";
-import type { Principal } from "@/auth/db";
+import { getAuthDb, type Principal } from "@/auth/db";
 import { authenticate, clientIp, rawToken } from "@/auth/request";
 import { SIGN_IN_REQUIRED, assertActingAs, assertAdmin, assertOrg, scopeInput } from "@/auth/scope";
 import { DEFAULT_MAX_BODY, checkContentLength, readJsonCapped } from "./body";
 import { allowedOrigin, checkCsrf } from "./csrf";
+import { noteServerError } from "@/jobs/alerts";
 import { HttpError, tooManyRequests } from "./error";
 import { rateLimiter, type LimitClass } from "./ratelimit";
 
@@ -96,14 +98,22 @@ export function readJson(req: Request, fallback?: unknown): Promise<unknown> {
   return readJsonCapped(req, bodyCaps.get(req) ?? DEFAULT_MAX_BODY, fallback);
 }
 
+/** With `user`, an admin naming another person's userId is "viewing as": audited, once an hour per admin and person. */
+function noteViewingAs<T>(req: NextRequest, scoped: T, opts?: { user?: boolean }): T {
+  const p = principalOf(req);
+  const userId = (scoped as { userId?: unknown } | null)?.userId;
+  if (opts?.user && p && typeof userId === "string" && userId !== p.userId) auditViewingAs(getAuthDb(), p, userId, req.nextUrl.pathname);
+  return scoped;
+}
+
 /** The query string as an object, with orgId (and with `user`, userId) pinned to the caller. */
 export function scopedQuery(req: NextRequest, opts?: { user?: boolean }): Record<string, string> {
-  return scopeInput(principalOf(req), Object.fromEntries(req.nextUrl.searchParams), opts);
+  return noteViewingAs(req, scopeInput(principalOf(req), Object.fromEntries(req.nextUrl.searchParams), opts), opts);
 }
 
 /** The JSON body, with orgId (and with `user`, userId) pinned to the caller. */
 export async function scopedBody(req: NextRequest, opts?: { user?: boolean }): Promise<unknown> {
-  return scopeInput(principalOf(req), await readJson(req), opts);
+  return noteViewingAs(req, scopeInput(principalOf(req), await readJson(req), opts), opts);
 }
 
 /** 403 unless the caller is this person or an org admin. */
@@ -168,6 +178,7 @@ export function route<T, C = unknown>(handler: (req: NextRequest, ctx: C) => Pro
       const { status, body, headers: extra } = errorStatus(err);
       res = NextResponse.json(body, { status, headers: { ...headers, ...extra } });
     }
+    if (res.status >= 500) noteServerError(req.nextUrl.pathname);
     const p = principals.get(req) ?? null;
     logRequest({ reqId, method: req.method, path: req.nextUrl.pathname, status: res.status, ms: Date.now() - t0, org: p?.orgId ?? null, user: p?.userId ?? null });
     return res;

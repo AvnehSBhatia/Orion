@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useSession } from "@/components/auth/session";
 import { PageFrame } from "@/components/settings/PageFrame";
 import { CopyButton, CopyField } from "@/components/ui/CopyButton";
 import { field, FieldError, Notice, Panel, PrimaryButton, SecondaryButton } from "@/components/ui/form";
 import { API, api, statusOf } from "@/lib/api/client";
 import type { CreatedToken, DeviceCode, TokenInfo } from "@/lib/api/types";
+import { syncWorkflow } from "@/lib/githubSync";
 import { settingsError } from "@/lib/notLive";
 import { ago, shortDate, useNow } from "@/lib/time";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
@@ -15,6 +17,7 @@ const SECTIONS = [
   { id: "password", label: "Password" },
   { id: "mac", label: "Connect your Mac" },
   { id: "claude-code", label: "Connect Claude Code" },
+  { id: "github", label: "Connect GitHub" },
   { id: "data", label: "Your data" },
 ];
 
@@ -25,6 +28,7 @@ export function SettingsPage() {
       <PasswordPanel />
       <MacPanel />
       <ClaudeCodePanel />
+      <GitHubPanel />
       <DataPanel />
     </PageFrame>
   );
@@ -180,7 +184,15 @@ function MacPanel() {
     <Panel
       id="mac"
       title="Connect your Mac"
-      description="The Constellation app on your Mac sends the work you approve in its Outbox to Orion. Make a code here and enter it in the app."
+      description={
+        <>
+          The Orion app on your Mac sends the work you approve in its Outbox to Orion.{" "}
+          <Link href="/download" className="text-ink underline underline-offset-4">
+            Install it
+          </Link>
+          , then make a code here and enter it in the app.
+        </>
+      }
     >
       <div className="flex flex-wrap items-center gap-3">
         <PrimaryButton type="button" onClick={make} disabled={busy}>
@@ -200,8 +212,11 @@ function MacPanel() {
               </div>
               <p className="mt-2 text-[12px] text-faint">Expires in {left}</p>
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-[14px] text-muted">
-                <li>Open Constellation on your Mac.</li>
+                <li>Open Orion on your Mac.</li>
                 <li>Go to Outbox and choose Connect.</li>
+                <li>
+                  Check the server is <code className="font-mono text-ink">{API}</code> (the install command sets it; change it if not).
+                </li>
                 <li>Paste this code. It works once, for 15 minutes.</li>
               </ol>
             </>
@@ -248,6 +263,7 @@ export const mcpCommand = (token: string) => `claude mcp add --transport http or
 function ClaudeCodePanel() {
   const [tokens, setTokens] = useState<TokenInfo[] | null>(null);
   const [label, setLabel] = useState("Claude Code");
+  const [days, setDays] = useState("365");
   const [created, setCreated] = useState<CreatedToken | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -281,7 +297,7 @@ function ClaudeCodePanel() {
     setBusy(true);
     setError("");
     try {
-      setCreated(await api.tokens.create(label.trim() || "Claude Code"));
+      setCreated(await api.tokens.create(label.trim() || "Claude Code", { expiresInDays: days === "never" ? undefined : Number(days) }));
       await load();
     } catch (err) {
       setError(settingsError(err, "create a token"));
@@ -311,6 +327,14 @@ function ClaudeCodePanel() {
         <label className="block min-w-[220px] flex-1 text-sm text-muted">
           Token name
           <input className={field} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder="Claude Code on my laptop" />
+        </label>
+        <label className="block w-36 text-sm text-muted">
+          Expires
+          <select className={field} value={days} onChange={(e) => setDays(e.target.value)}>
+            <option value="90">In 90 days</option>
+            <option value="365">In a year</option>
+            <option value="never">Never</option>
+          </select>
         </label>
         <PrimaryButton type="submit" disabled={busy}>
           {busy ? "Creating…" : "Create token"}
@@ -367,10 +391,158 @@ function ClaudeCodePanel() {
   );
 }
 
+/**
+ * Connects a repo: an admin's token (so each commit is credited to its git author, not to whoever made the token),
+ * stored as the repo's ORION_TOKEN secret, and a workflow that runs the codebase agent on every push.
+ */
+function GitHubPanel() {
+  const { me } = useSession();
+  const [tokens, setTokens] = useState<TokenInfo[]>([]);
+  const [repo, setRepo] = useState("");
+  const [branch, setBranch] = useState("main");
+  const [created, setCreated] = useState<CreatedToken | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const create = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      // A CI token may only send commits, so a leaked repo secret cannot read or change anything.
+      setCreated(await api.tokens.create(`GitHub: ${repo.trim() || "repo"}`, { kind: "ci", expiresInDays: 365 }));
+      await load();
+    } catch (err) {
+      setError(settingsError(err, "create a token"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const load = useCallback(async () => {
+    try {
+      setTokens((await api.tokens.list()).tokens.filter((t) => t.kind === "ci"));
+    } catch {
+      // The list is a convenience; creating still works.
+    }
+  }, []);
+  useEffect(() => {
+    if (me.admin) void load();
+  }, [me.admin, load]);
+
+  const revoke = async (token: TokenInfo) => {
+    if (!window.confirm(`Revoke "${token.label}"? That repo stops syncing to Orion right away.`)) return;
+    try {
+      await api.tokens.revoke(token.id);
+      if (created?.id === token.id) setCreated(null);
+      await load();
+    } catch (err) {
+      setError(settingsError(err, "revoke this token"));
+    }
+  };
+
+  const workflow = syncWorkflow(branch.trim() || "main");
+  return (
+    <Panel
+      id="github"
+      title="Connect GitHub"
+      description="Every push to a repo's main branch tells Orion what engineering changed, so work items, briefs and coding agents stay current. Private paths stay on GitHub."
+    >
+      {!me.admin ? (
+        <p className="text-[14px] text-muted">Ask an admin to connect your repos, so each commit is credited to the person who wrote it.</p>
+      ) : (
+        <>
+          <form onSubmit={create} className="flex flex-wrap items-end gap-3">
+            <label className="block min-w-[200px] flex-1 text-sm text-muted">
+              Repository
+              <input className={field} value={repo} onChange={(e) => setRepo(e.target.value)} maxLength={80} placeholder="acme/web" />
+            </label>
+            <label className="block w-32 text-sm text-muted">
+              Branch
+              <input className={field} value={branch} onChange={(e) => setBranch(e.target.value)} maxLength={80} />
+            </label>
+            <PrimaryButton type="submit" disabled={busy}>
+              {busy ? "Creating…" : "Create token"}
+            </PrimaryButton>
+          </form>
+
+          {created && (
+            <ol className="mt-5 min-w-0 list-decimal space-y-4 rounded-xl border border-ink/40 bg-bg p-4 pl-9 text-[14px] text-muted" role="status">
+              <li className="min-w-0">
+                In the repo on GitHub, open Settings, Secrets and variables, Actions, and add a repository secret named{" "}
+                <code className="font-mono text-ink">ORION_TOKEN</code> with this value. It is shown only once, can only send commits, and expires
+                in a year.
+                <div className="mt-2">
+                  <CopyField value={created.token} label="Copy the token" />
+                </div>
+              </li>
+              <li className="min-w-0">
+                Add this file as <code className="font-mono text-ink">.github/workflows/orion-sync.yml</code> and push it to {branch.trim() || "main"}.
+                <div className="mt-2 min-w-0 overflow-hidden rounded-lg border border-line-strong bg-panel">
+                  <div className="flex items-center justify-between gap-2 border-b border-line px-3 py-1.5">
+                    <span className="truncate font-mono text-[12px] text-faint">orion-sync.yml</span>
+                    <CopyButton text={workflow} label="Copy the workflow" />
+                  </div>
+                  <pre className="max-h-72 w-full overflow-auto p-3 font-mono text-[12px] leading-relaxed text-ink">{workflow}</pre>
+                </div>
+              </li>
+              <li>
+                Optional: keep folders out of Orion with a line like <code className="font-mono text-ink">+./src/secret/</code> in the repo&apos;s root{" "}
+                <code className="font-mono text-ink">.gitignore</code>.
+              </li>
+            </ol>
+          )}
+
+          {tokens.length > 0 && (
+            <>
+              <h3 className="mt-6 text-[13px] font-medium text-muted">Connected repos</h3>
+              <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
+                {tokens.map((t) => (
+                  <li key={t.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px] text-ink">{t.label.replace(/^GitHub: /, "")}</p>
+                      <p className="text-[12px] text-faint">
+                        {t.lastUsedAt ? `Last sync ${ago(t.lastUsedAt)}` : "No sync yet"}
+                        {t.expiresAt ? ` · expires ${shortDate(t.expiresAt)}` : ""}
+                      </p>
+                    </div>
+                    <SecondaryButton type="button" onClick={() => revoke(t)}>
+                      Revoke
+                    </SecondaryButton>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </>
+      )}
+
+      {error && (
+        <div className="mt-4">
+          <Notice kind="error">{error}</Notice>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function DataPanel() {
+  const { me } = useSession();
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [result, setResult] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const download = async () => {
+    setDownloading(true);
+    setResult(null);
+    try {
+      await api.me.exportData(me.userId ?? me.username ?? "me");
+    } catch (err) {
+      setResult({ kind: "error", text: settingsError(err, "download your data") });
+    } finally {
+      setDownloading(false);
+    }
+  };
   const run = async () => {
     setBusy(true);
     setResult(null);
@@ -385,12 +557,20 @@ function DataPanel() {
     }
   };
   return (
-    <Panel
-      id="data"
-      title="Your captured data"
-      description="Delete every page and screenshot the extension captured from you. Work items already built from them stay, without the raw text. This can't be undone."
-    >
-      <div className="flex flex-wrap items-end gap-3">
+    <Panel id="data" title="Your data" description="Download a copy of everything Orion holds about you, or delete what it captured from you.">
+      <div className="flex flex-wrap items-center gap-3">
+        <SecondaryButton type="button" onClick={() => void download()} disabled={downloading}>
+          {downloading ? "Preparing…" : "Download my data"}
+        </SecondaryButton>
+        <p className="min-w-[220px] flex-1 text-[13px] text-faint">
+          One JSON file: your account, captures with their text, Mac work blocks and time entries, work items you own or touched, tokens (never the secrets), and audit
+          events about you. Screenshots are listed by id.
+        </p>
+      </div>
+      <p className="mt-6 text-[14px] text-muted">
+        Delete everything Orion captured from you, on your Mac or in the browser. Work items already built from them stay, without the raw text. This can&apos;t be undone.
+      </p>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="block min-w-[220px] flex-1 text-sm text-muted">
           Type <span className="font-mono text-ink">delete</span> to confirm
           <input className={field} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />

@@ -12,3 +12,8 @@ server/**/*.db-wal
 server/**/*.db-shm
 server/**/*.traineddata
 server/scripts/probe-*.ts
+# The codebase agent, bundled into the image for /api/downloads/ctx-sync.mjs.
+!codebase-agent/**
+codebase-agent/node_modules
+codebase-agent/dist
+codebase-agent/mock/out
