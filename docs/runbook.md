@@ -265,6 +265,10 @@ You can also use the dashboard's admin page once it ships. Disabling revokes eve
 
 For offboarding: disable the account, ask the person to remove the extension (or remove it through Chrome enterprise policy), and rotate any CI token they created.
 
+## Data access request
+
+An employee asks for a copy of what Orion holds about them (GDPR Art. 15). They can download it themselves from Settings, "Your data", "Download my data" (`GET /api/me/export`). An admin can export anyone in the org from Admin, People, "Export data" (`GET /api/users/<userId>/export`). The file lists screenshots by id; send those separately if asked (`GET /api/sources/<id>/image`). Both exports show in the audit log as `data_exported`.
+
 ## Data deletion request
 
 These come from an employee (GDPR Art. 17, CCPA) or from the customer org. Log every request with the date, requester, scope and completion date. The audit log (`GET /api/audit`) records `data_deleted` events.

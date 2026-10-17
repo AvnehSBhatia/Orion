@@ -1,5 +1,7 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
+import { auditThrottled } from "@/audit/log";
+import { getAuthDb, type Principal } from "@/auth/db";
 import { DOMAINS, NODE_TYPES, STATUSES } from "@/contract/types";
 import { readGraph } from "@/graph/view";
 import { buildContext, findNodes, findSources, publicClusters } from "@/retrieval/context";
@@ -17,14 +19,37 @@ const HIDDEN = "only the author and admins can read Mac activity text";
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
 const json = (value: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(value) }] });
 
+/**
+ * One audit event per token and tool a minute: the tool name and how many calls it stands for. Never the arguments
+ * (a task or query is the person's words) or what came back.
+ */
+function auditToolCall(p: Principal, tool: string): void {
+  auditThrottled(getAuthDb(), `mcp:${p.tokenId}:${tool}`, 60_000, {
+    orgId: p.orgId,
+    actor: p.username,
+    action: "mcp_tool_called",
+    target: p.tokenId,
+    detail: { tool },
+  });
+}
+
 /** Read-only MCP server for one org and one person, built per request (stateless Streamable HTTP). */
-export function mcpHandlerFor(orgId: string, userId: string, viewer: Viewer = null) {
+export function mcpHandlerFor(orgId: string, userId: string, viewer: Viewer = null, principal: Principal | null = null) {
   const store = getStore(orgId);
   const embedder = getEmbedder();
   requireUser(store, userId);
 
   return createMcpHandler(
     (server) => {
+      // Every tool call is audited (throttled) before it runs.
+      if (principal) {
+        const register = server.registerTool.bind(server) as (name: string, config: unknown, cb: (...args: unknown[]) => unknown) => unknown;
+        server.registerTool = ((name: string, config: unknown, cb: (...args: unknown[]) => unknown) =>
+          register(name, config, (...args: unknown[]) => {
+            auditToolCall(principal, name);
+            return cb(...args);
+          })) as typeof server.registerTool;
+      }
       server.registerTool(
         "context_for_task",
         {

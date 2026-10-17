@@ -239,9 +239,15 @@ export const api = {
   me: {
     /** Removes the caller's own captured documents and screenshots. */
     deleteCaptures: () => del<{ deleted: number }>("/api/me/captures"),
+    /** Everything Orion holds about the caller, saved as one JSON file. */
+    exportData: (userId: string) => download("/api/me/export", `orion-export-${userId}-${new Date().toISOString().slice(0, 10)}.json`),
   },
   health: () => request<{ ok: boolean; version?: string }>("/api/health"),
   audit: (limit = 100) => request<{ events: AuditEvent[] }>("/api/audit", { query: { limit } }),
+  /** Admin: every audit event the org keeps, as CSV. */
+  auditCsv: (orgId: string) => download("/api/audit", `orion-audit-${orgId}-${new Date().toISOString().slice(0, 10)}.csv`, { format: "csv" }),
+  /** Admin: everything Orion holds about one person, as one JSON file. */
+  exportPerson: (orgId: string, userId: string) => download(`/api/users/${seg(userId)}/export`, `orion-export-${userId}-${new Date().toISOString().slice(0, 10)}.json`, { orgId }),
   users: (orgId: string) => request<{ users: User[] }>("/api/users", { query: { orgId } }),
   graph: async (orgId: string) => cleanGraph(await request<GraphResponse>("/api/graph", { query: { orgId } })),
   activity: (orgId: string, limit = 40) => request<ActivityResponse>("/api/activity", { query: { orgId, limit } }),
