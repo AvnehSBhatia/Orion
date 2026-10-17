@@ -19,10 +19,9 @@ pkill -f 'Orion.app/Contents/MacOS/Constellation' >/dev/null 2>&1 || true
 pkill -f '/.build/release/Constellation' >/dev/null 2>&1 || true
 sleep 0.4
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS/Fonts" "$APP/Contents/Resources/Fonts"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/Fonts"
 cp .build/release/Constellation "$APP/Contents/MacOS/Constellation"
 cp Sources/Constellation/Resources/Fonts/*.ttf "$APP/Contents/Resources/Fonts/"
-cp Sources/Constellation/Resources/Fonts/*.ttf "$APP/Contents/MacOS/Fonts/"
 
 cat > "$APP/Contents/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
