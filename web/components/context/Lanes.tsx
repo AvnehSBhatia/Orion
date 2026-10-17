@@ -1,7 +1,7 @@
 "use client";
 
-// Lineage: one lane per person over the last 24 hours. Each dot is a capture or commit;
-// filled when it created a project, ringed when it only updated one. Shows who feeds what.
+// Lineage: one lane per person over the last 2 minutes. Each dot is a capture or commit;
+// filled when it created a node, ringed when it only updated one. Shows who feeds what.
 
 import { Quiet } from "@/components/ui/Quiet";
 import type { ActivityResponse, Source } from "@/lib/api/types";
@@ -11,9 +11,9 @@ import { useMemo } from "react";
 import { SectionHead, Shell } from "./Section";
 import { openSource } from "@/lib/viewer";
 
-const WINDOW_H = 24;
-const WINDOW_MS = WINDOW_H * 60 * 60 * 1000;
-const TICKS = [24, 18, 12, 6, 0]; // hours ago
+const WINDOW_S = 120;
+const WINDOW_MS = WINDOW_S * 1000;
+const TICKS = [120, 90, 60, 30, 0]; // seconds ago
 
 type Lane = { name: string; sources: Source[]; feeds: string[] };
 
@@ -54,10 +54,10 @@ export function Lanes({ activity, scope }: { activity: ActivityResponse | null; 
 
   return (
     <section>
-      <SectionHead title="Who feeds what" note={total ? `${total} in 24 hours` : "Last 24 hours"} />
+      <SectionHead title="Who feeds what" note={total ? `${total} in 2 min` : "Last 2 min"} />
       <Shell>
         {lanes.length === 0 ? (
-          <Quiet title={activity ? "No captures in the last 24 hours." : "Loading activity…"} />
+          <Quiet title={activity ? "No captures in the last 2 minutes." : "Loading activity…"} />
         ) : (
           <div className="px-4 py-4 md:px-5">
             <div className="grid grid-cols-[minmax(0,9rem)_1fr] gap-x-4 md:grid-cols-[minmax(0,12rem)_1fr]">
@@ -67,14 +67,14 @@ export function Lanes({ activity, scope }: { activity: ActivityResponse | null; 
               <span />
               <div className="relative mt-1 h-4 font-mono text-[10px] text-faint">
                 {TICKS.map((m) => (
-                  <span key={m} className="absolute -translate-x-1/2 first:translate-x-0 last:-translate-x-full" style={{ left: `${((WINDOW_H - m) / WINDOW_H) * 100}%` }}>
-                    {m === 0 ? "now" : `−${m}h`}
+                  <span key={m} className="absolute -translate-x-1/2 first:translate-x-0 last:-translate-x-full" style={{ left: `${((WINDOW_S - m) / WINDOW_S) * 100}%` }}>
+                    {m === 0 ? "now" : `−${m}s`}
                   </span>
                 ))}
               </div>
             </div>
             <div className="mt-3 flex gap-4 text-[12px] text-faint">
-              <span className="flex items-center gap-1.5"><Dot kind="created" /> Created a project</span>
+              <span className="flex items-center gap-1.5"><Dot kind="created" /> Created a node</span>
               <span className="flex items-center gap-1.5"><Dot kind="updated" /> Updated one</span>
               <span className="flex items-center gap-1.5"><Dot kind="none" /> No change</span>
             </div>
@@ -98,7 +98,7 @@ function LaneRow({ lane, now }: { lane: Lane; now: number }) {
       <div className="relative border-b border-line">
         <span aria-hidden className="absolute inset-x-0 top-1/2 h-px bg-line" />
         {TICKS.slice(1, -1).map((m) => (
-          <span key={m} aria-hidden className="absolute top-2 bottom-2 w-px bg-line" style={{ left: `${((WINDOW_H - m) / WINDOW_H) * 100}%` }} />
+          <span key={m} aria-hidden className="absolute top-2 bottom-2 w-px bg-line" style={{ left: `${((WINDOW_S - m) / WINDOW_S) * 100}%` }} />
         ))}
         {lane.sources.map((s) => {
           const x = 1 - (now - Date.parse(s.createdAt)) / WINDOW_MS;

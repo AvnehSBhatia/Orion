@@ -84,7 +84,7 @@ export function Clusters({ embeddings, scope }: { embeddings: EmbeddingsResponse
                       onClick={() => (p.kind === "node" ? openNode(p.id) : openSource(p.id))}
                       className="-mx-1.5 flex w-[calc(100%+0.75rem)] items-baseline gap-2 rounded-md px-1.5 py-1 text-left text-[13px] transition-colors duration-150 hover:bg-raised"
                     >
-                      <span className="w-16 shrink-0 text-[11px] text-faint">{p.kind === "node" ? "Project" : "Capture"}</span>
+                      <span className="w-9 shrink-0 font-mono text-[10px] tracking-wide text-faint uppercase">{p.kind === "node" ? "node" : "cap"}</span>
                       <span className="min-w-0 flex-1 truncate text-muted">{p.label}</span>
                       <span className="shrink-0 font-mono text-[11px] text-faint">{agoShort(p.createdAt, now)}</span>
                     </button>

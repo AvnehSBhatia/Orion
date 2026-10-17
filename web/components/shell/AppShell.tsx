@@ -446,12 +446,12 @@ export function AppShell() {
           className="absolute inset-x-0 outline-none"
           style={{
             top: phase === "app" && connection !== "live" ? 89 : 56,
-            bottom: phase === "app" ? "calc(var(--dock, 220px) + 12px)" : "calc(var(--dock, 200px) + 32px)",
+            bottom: phase === "app" ? 0 : "calc(var(--dock, 200px) + 32px)",
           }}
           inert={phase !== "app"}
         >
           {ws.unreachable && !graph ? (
-            <div className="flex h-full items-center justify-center px-6">
+            <div className="flex h-full items-center justify-center px-6" style={{ paddingBottom: "calc(var(--dock, 200px) + 40px)" }}>
               <div className="max-w-sm text-center">
                 <Quiet title="Can't reach Orion right now" detail="Your data is safe. This page retries on its own every few seconds." />
               </div>
@@ -483,11 +483,11 @@ export function AppShell() {
               </div>
             </div>
           ) : view === "home" && empty ? (
-            <div className="thin-scroll h-full overflow-auto">
+            <div className="thin-scroll h-full overflow-auto" style={{ paddingBottom: "calc(var(--dock, 200px) + 40px)" }}>
               <Onboarding org={org} users={users} activity={activity} />
             </div>
           ) : view === "blocked" && listed.length === 0 && graph ? (
-            <div className="flex h-full items-center justify-center px-6">
+            <div className="flex h-full items-center justify-center px-6" style={{ paddingBottom: "calc(var(--dock, 200px) + 40px)" }}>
               <div className="max-w-md text-center">
                 <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Nothing is blocked</h1>
                 <p className="mt-2 text-muted">
@@ -507,7 +507,7 @@ export function AppShell() {
               </div>
             </div>
           ) : view === "home" ? (
-            <div className="thin-scroll h-full overflow-auto">
+            <div className="thin-scroll h-full overflow-auto" style={{ paddingBottom: "calc(var(--dock, 200px) + 40px)" }}>
               {dash.key && dash.spec.origin === "chat" && <ResetBar resetting={dash.resetting} onReset={dash.reset} />}
               {/* Widgets are keyed by id inside, so a rebuilt spec reshapes in place instead of remounting. */}
               <DynamicDashboard

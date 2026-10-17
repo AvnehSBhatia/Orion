@@ -642,7 +642,7 @@ export function Constellation({
           ))}
           <li className="flex items-center gap-1.5 text-faint">
             <span className="size-1 bg-faint" />
-            Documents
+            Sources
           </li>
         </ul>
       )}

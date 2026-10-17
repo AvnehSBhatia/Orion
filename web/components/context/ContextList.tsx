@@ -29,14 +29,14 @@ export function ContextList({
 
   return (
     // Locked frame: the header stays put and the sections scroll inside a bounded panel that ends above the chat dock.
-    <div className="flex h-full flex-col px-4 pt-8 pb-4 md:px-8">
+    <div className="flex h-full flex-col px-4 pt-8 md:px-8" style={{ paddingBottom: "calc(var(--dock, 200px) + 32px)" }}>
       <header className="mx-auto w-full max-w-[1400px] shrink-0 pb-4">
         <h1 className="text-[28px] font-semibold tracking-[-0.03em]">{title}</h1>
         <p className="mt-1 text-muted">{scoped ? description : "How the work connects."}</p>
         {offline && <p className="mt-2 text-[13px] text-faint">Orion is offline. Showing the last data received.</p>}
       </header>
       {/* One frame: dependencies on the left, lanes and topics stacked on the right. Each panel scrolls on its own. */}
-      <div className="thin-scroll mx-auto grid min-h-0 w-full max-w-[1400px] flex-1 gap-4 overflow-auto lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:grid-rows-[minmax(260px,1.3fr)_minmax(220px,1fr)]">
+      <div className="thin-scroll mx-auto grid min-h-0 w-full max-w-[1400px] flex-1 gap-4 max-lg:overflow-auto lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
         <Panel className="lg:row-span-2">
           <Chains graph={graph} scope={scope} />
         </Panel>

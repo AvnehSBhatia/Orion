@@ -1,59 +1,6 @@
 import CaptureCore
 import SwiftUI
 
-/// Granola's finished notes. Observes the importer so the status line updates.
-private struct MeetingNotesSettings: View {
-    @ObservedObject var settings: Settings
-    @ObservedObject var granola: GranolaImporter
-    @State private var key = ""
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.s) {
-            SectionHeader(
-                title: "Meeting notes",
-                info: "Granola's notes, not its recording. A key is created in the Granola app under Settings, Connectors, API keys, with the personal notes scope."
-            )
-            GlassCard {
-                VStack(alignment: .leading, spacing: Theme.Space.m) {
-                    Toggle("Import finished Granola notes", isOn: $settings.granolaNotes)
-                        .toggleStyle(.switch)
-                        .onChange(of: settings.granolaNotes) { _, _ in granola.checkNow() }
-                    Text("Reads the notes you and Granola already wrote. Never the recording or the transcript. Each note waits in the Outbox, like any other item.")
-                        .font(Theme.Typo.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if settings.granolaNotes {
-                        SecureField("Granola API key", text: $key)
-                            .spaceField()
-                        HStack(spacing: Theme.Space.s) {
-                            Button(granola.hasKey ? "Replace key" : "Save key") {
-                                granola.saveKey(key)
-                                key = ""
-                            }
-                            .buttonStyle(GhostButtonStyle(small: true))
-                            .disabled(key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            if granola.hasKey {
-                                Button("Remove key") {
-                                    granola.saveKey("")
-                                    key = ""
-                                }
-                                .buttonStyle(GhostButtonStyle(small: true))
-                            }
-                            Button("Check now") { granola.checkNow() }
-                                .buttonStyle(GhostButtonStyle(small: true))
-                        }
-                        Text(granola.status)
-                            .font(Theme.Typo.caption)
-                            .foregroundStyle(Theme.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-        }
-        .onAppear { granola.refreshKey() }
-    }
-}
-
 /// Connection, what leaves this Mac, and the quiet tools. Destructive actions sit at the bottom.
 struct SettingsView: View {
     @ObservedObject var settings: Settings
@@ -97,7 +44,6 @@ struct SettingsView: View {
                 diagnostics
                 delete
             case .privacy:
-                meetingNotes
                 privateAddresses
                 safeguards
                 SkipRulesSettings(settings: settings)
@@ -147,10 +93,6 @@ struct SettingsView: View {
                 }
             }
         }
-    }
-
-    private var meetingNotes: some View {
-        MeetingNotesSettings(settings: settings, granola: engine.granola)
     }
 
     private var privateAddresses: some View {

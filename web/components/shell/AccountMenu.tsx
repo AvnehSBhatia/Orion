@@ -13,12 +13,10 @@ export type AccountLink = { label: string; href: string };
 export function accountLinks(admin: boolean | undefined): AccountLink[] {
   return [
     { label: "Settings", href: "/settings" },
-    { label: "Timesheet", href: "/time" },
-    { label: "What others can see", href: "/sharing" },
     { label: "Connect Claude Code", href: "/settings#claude-code" },
     { label: "Change password", href: "/settings#password" },
     ...(admin ? [{ label: "Admin", href: "/admin" }] : []),
-    { label: "Privacy policy", href: "/privacy" },
+    { label: "Privacy", href: "/privacy" },
   ];
 }
 
