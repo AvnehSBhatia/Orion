@@ -21,7 +21,7 @@ const ACTION: Record<string, string> = {
   invite_accepted: "Accepted an invite",
   settings_changed: "Changed org settings",
   data_deleted: "Deleted data",
-  viewed_as: "Viewed as a colleague",
+  viewed_as: "Viewed or acted as a colleague",
   source_opened: "Opened a colleague's capture",
   org_updated: "Changed the org profile",
   mcp_tool_called: "Used an MCP tool",
