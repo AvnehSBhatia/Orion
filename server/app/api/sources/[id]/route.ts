@@ -1,10 +1,11 @@
 import type { NextRequest } from "next/server";
+import { getAuthDb } from "@/auth/db";
 import { orgQuery } from "@/contract/schemas";
 import type { SourceResponse } from "@/contract/types";
 import { getStore } from "@/http/deps";
 import { HttpError } from "@/http/error";
 import { preflight, principalOf, route, scopedQuery } from "@/http/route";
-import { isHidden, maskImages, viewerOf } from "@/orgs/visibility";
+import { auditSourceOpened, isHidden, maskImages, viewerOf } from "@/orgs/visibility";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,9 @@ export const GET = route(async (req: NextRequest, ctx: RouteContext<"/api/source
   const found = store.readDocument(id);
   if (!found) throw new HttpError(404, `unknown source "${id}"`);
   if (isHidden(store, viewerOf(principalOf(req)), id)) throw new HttpError(403, "only the author and admins can read Mac activity text");
+  // Other people's page text is org-wide; another person's Mac text is the private kind, so its reads are audited.
+  const p = principalOf(req);
+  if (p && found.source.kind === "mac") auditSourceOpened(getAuthDb(), p, found.source, "text");
   return { ...found, source: maskImages(principalOf(req), store, [found.source])[0] };
 });
 

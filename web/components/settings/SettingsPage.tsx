@@ -527,9 +527,22 @@ function GitHubPanel() {
 }
 
 function DataPanel() {
+  const { me } = useSession();
   const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [result, setResult] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const download = async () => {
+    setDownloading(true);
+    setResult(null);
+    try {
+      await api.me.exportData(me.userId ?? me.username ?? "me");
+    } catch (err) {
+      setResult({ kind: "error", text: settingsError(err, "download your data") });
+    } finally {
+      setDownloading(false);
+    }
+  };
   const run = async () => {
     setBusy(true);
     setResult(null);
@@ -544,12 +557,20 @@ function DataPanel() {
     }
   };
   return (
-    <Panel
-      id="data"
-      title="Your captured data"
-      description="Delete everything Orion captured from you, on your Mac or in the browser. Work items already built from them stay, without the raw text. This can't be undone."
-    >
-      <div className="flex flex-wrap items-end gap-3">
+    <Panel id="data" title="Your data" description="Download a copy of everything Orion holds about you, or delete what it captured from you.">
+      <div className="flex flex-wrap items-center gap-3">
+        <SecondaryButton type="button" onClick={() => void download()} disabled={downloading}>
+          {downloading ? "Preparing…" : "Download my data"}
+        </SecondaryButton>
+        <p className="min-w-[220px] flex-1 text-[13px] text-faint">
+          One JSON file: your account, captures with their text, Mac work blocks and time entries, work items you own or touched, tokens (never the secrets), and audit
+          events about you. Screenshots are listed by id.
+        </p>
+      </div>
+      <p className="mt-6 text-[14px] text-muted">
+        Delete everything Orion captured from you, on your Mac or in the browser. Work items already built from them stay, without the raw text. This can&apos;t be undone.
+      </p>
+      <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="block min-w-[220px] flex-1 text-sm text-muted">
           Type <span className="font-mono text-ink">delete</span> to confirm
           <input className={field} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />

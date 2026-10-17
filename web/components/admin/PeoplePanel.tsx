@@ -2,6 +2,7 @@
 
 import { CopyField } from "@/components/ui/CopyButton";
 import { field, Notice, Panel, PrimaryButton, SecondaryButton } from "@/components/ui/form";
+import { useSession } from "@/components/auth/session";
 import { api } from "@/lib/api/client";
 import type { Account, CreatedInvite, Invite } from "@/lib/api/types";
 import { settingsError } from "@/lib/notLive";
@@ -41,6 +42,17 @@ export function PeoplePanel({ self }: { self: string }) {
     }
   };
 
+  const { me: session } = useSession();
+  const exportData = async (account: Account) => {
+    setMsg(null);
+    try {
+      await api.exportPerson(session.orgId ?? "", account.userId);
+      setMsg({ kind: "ok", text: `Downloaded ${account.name || account.username}'s data. The export is in the audit log.` });
+    } catch (err) {
+      setMsg({ kind: "error", text: settingsError(err, "export this person's data") });
+    }
+  };
+
   const resetLink = async (account: Account) => {
     setMsg(null);
     try {
@@ -76,7 +88,7 @@ export function PeoplePanel({ self }: { self: string }) {
           <p className="text-[14px] text-faint">No accounts to show.</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-line">
-            <table className="w-full min-w-[720px] text-left text-[14px]">
+            <table className="w-full min-w-[820px] text-left text-[14px]">
               <thead>
                 <tr className="border-b border-line font-mono text-[11px] tracking-[0.08em] text-faint uppercase">
                   <th className="px-3 py-2 font-normal">Person</th>
@@ -119,6 +131,9 @@ export function PeoplePanel({ self }: { self: string }) {
                           </SecondaryButton>
                           <SecondaryButton type="button" disabled={a.disabled} onClick={() => resetLink(a)}>
                             Reset link
+                          </SecondaryButton>
+                          <SecondaryButton type="button" onClick={() => exportData(a)}>
+                            Export data
                           </SecondaryButton>
                           <SecondaryButton
                             type="button"

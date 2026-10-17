@@ -1,4 +1,5 @@
-import type { Principal } from "@/auth/db";
+import { auditThrottled } from "@/audit/log";
+import type { AuthDb, Principal } from "@/auth/db";
 import type { Source } from "@/contract/types";
 import type { Store } from "@/db/store";
 import { HttpError } from "@/http/error";
@@ -75,13 +76,32 @@ function contentType(buf: Buffer): string {
   return "image/jpeg";
 }
 
-/** The screenshot as a response, after the visibility check. 404 when there is none, 403 when it is not yours to see. */
-export function screenshotResponse(p: Principal | null, store: Store, id: string): Response {
+/**
+ * The screenshot as a response, after the visibility check. 404 when there is none, 403 when it is not yours to see.
+ * With `db`, opening someone else's is audited.
+ */
+export function screenshotResponse(p: Principal | null, store: Store, id: string, db?: AuthDb): Response {
   const source = store.getSource(id);
   const image = source ? store.sourceImage(id) : null;
   if (!source || !image) throw new HttpError(404, `no image for source "${id}"`);
   if (!canSeeImage(p, getOrgSettings(store), source.authorId)) throw new HttpError(403, "only the author and admins can open this screenshot");
+  if (db) auditSourceOpened(db, p, { id, kind: source.kind, authorId: source.authorId }, "screenshot");
   return new Response(new Uint8Array(image), {
     headers: { "Content-Type": contentType(image), "Cache-Control": "private, max-age=3600" },
+  });
+}
+
+/**
+ * Someone opened another person's Mac text or screenshot (an admin, or a colleague when screenshots are org-wide).
+ * Logged with ids only, once an hour per viewer and document. Opening your own, or with auth off, is not logged.
+ */
+export function auditSourceOpened(db: AuthDb, p: Principal | null, s: { id: string; kind: string; authorId: string | null }, what: "text" | "screenshot"): void {
+  if (!p || s.authorId === p.userId) return;
+  auditThrottled(db, `open:${p.orgId}:${p.username}:${s.id}:${what}`, 3_600_000, {
+    orgId: p.orgId,
+    actor: p.username,
+    action: "source_opened",
+    target: s.id,
+    detail: { what, kind: s.kind, author: s.authorId },
   });
 }

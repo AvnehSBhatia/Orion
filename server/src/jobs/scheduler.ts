@@ -2,6 +2,8 @@
 // disk, one org at a time. Assumes one server process per DATA_DIR (as the rest of the server does).
 import fs from "node:fs";
 import path from "node:path";
+import { purgeAudit } from "@/audit/log";
+import type { AuthDb } from "@/auth/db";
 import type { Store } from "@/db/store";
 import { duePendingCount } from "@/ingest/extraction";
 import { runRetention } from "@/retention";
@@ -15,6 +17,8 @@ export type JobDeps = {
   store: (orgId: string) => Store;
   /** Schedules org maintenance, which retries due extractions first. */
   maintain: (store: Store) => void;
+  /** auth.db, whose audit log the retention pass trims to 400 days. Without it the log is left alone. */
+  authDb?: () => AuthDb;
   /** The /api/health check, for the alert watchdog. Without it only the disk is watched. */
   healthy?: () => { ok: boolean; failing: string[] };
 };
@@ -73,6 +77,10 @@ export async function retentionPass(deps: JobDeps, now = Date.now()): Promise<vo
       logJson("info", "retention", { orgId, ...report });
     }
     await new Promise((resolve) => setImmediate(resolve));
+  }
+  if (deps.authDb) {
+    const purged = await safely("audit retention", () => purgeAudit(deps.authDb!(), now));
+    if (purged) logJson("info", "audit retention", { eventsDeleted: purged });
   }
 }
 

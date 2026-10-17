@@ -35,11 +35,17 @@ Links point at the web app: `${UI_ORIGIN}/invite/<token>` and `${UI_ORIGIN}/rese
 - `GET /api/orgs/:orgId/settings` → `{ settings: OrgSettings }` (see `server/src/orgs/settings.ts`; members may read it).
 - `PATCH /api/orgs/:orgId/settings { ...partial OrgSettings }` → `{ settings }`.
 - `GET /api/orgs/:orgId/usage` → `{ month: "2026-10", llm: { calls, inputTokens, outputTokens, costUsd, budgetUsd }, captures: { month, total }, storage: { bytes, screenshotsBytes } }`.
-- `GET /api/audit?limit=100` → `{ events: [{ at, actor, action, target, detail }] }`. Actions: login, login_failed, logout, token_created, token_revoked, account_created, account_updated, password_changed, password_reset, invite_created, invite_accepted, settings_changed, data_deleted.
+- `GET /api/audit?limit=100` → `{ events: [{ at, actor, action, target, detail }] }`. Actions: login, login_failed, logout, token_created, token_revoked, account_created, account_updated, password_changed, password_reset, invite_created, invite_accepted, settings_changed, data_deleted, viewed_as (an admin read another person's feed, brief, context or dashboard; once an hour per admin and person), source_opened (another person's Mac text or screenshot; once an hour per viewer and document), org_updated (changed field names), mcp_tool_called (tool name and call count; once a minute per token and tool), data_exported, audit_exported, and the Mac events. Details hold ids and counts, never captured text or titles. Events are kept 400 days.
+- `GET /api/audit?format=csv` (admin) → every event the org keeps, oldest first, as `orion-audit-<org>-<date>.csv`.
 
 ## Capture policy (any signed-in caller, used by the extension)
 
 - `GET /api/capture/policy` → `{ captureEnabled, excludedHosts, captureIntervalSec, consent: { required, version } }`. The extension polls it every few minutes and on start.
+
+## Data export (access requests)
+
+- `GET /api/me/export` → the caller's data as `orion-export-<user>-<date>.json`: accounts (no password hash), person, documents they authored with text and what each changed, Mac work blocks, time entries, drafts, baseline and alias rules, work items they own, touched or changed, token metadata (no hashes), their dashboard, and audit events where they acted or were acted on. Screenshots are listed as a count and ids; each downloads from `GET /api/sources/<id>/image`.
+- `GET /api/users/:userId/export` (admin, same org) → the same file for one person. Both are audited as `data_exported`.
 
 ## Data deletion
 

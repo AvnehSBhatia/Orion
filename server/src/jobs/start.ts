@@ -18,6 +18,7 @@ export function startBackgroundJobs(): void {
       orgIds: () => orgIdsOnDisk(config.dataDir),
       store: (orgId) => getStore(orgId),
       maintain: (store) => maintainInBackground(store, getEmbedder(), getLlm(), config.extractModel),
+      authDb: getAuthDb,
       healthy: () => {
         const h = checkHealth({
           authDb: () => void getAuthDb().db.prepare("SELECT 1").get(),

@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { NextRequest } from "next/server";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { listAudit, resetAuditThrottle } from "@/audit/log";
 import { AuthDb, setAuthDb } from "@/auth/db";
 import { LEGACY_SESSION_COOKIE } from "@/auth/request";
 import { createOrgStore, deleteOrgStore, getStore, orgExists } from "@/http/deps";
@@ -170,6 +171,16 @@ const CASES: Case[] = [
   { key: "GET /api/mcp", call: () => ({ url: "/api/mcp", headers: { accept: "text/event-stream" } }), otherOrg: "skip", member: (res) => expect([401, 403]).not.toContain(res.status), admin: (res) => expect([401, 403]).not.toContain(res.status) },
   { key: "DELETE /api/mcp", call: () => ({ url: "/api/mcp" }), otherOrg: "skip", member: (res) => expect([401, 403]).not.toContain(res.status), admin: (res) => expect([401, 403]).not.toContain(res.status) },
   { key: "DELETE /api/me/captures", otherOrg: "skip", member: 200 },
+  // Always the caller's own data, whatever org or user the query names.
+  {
+    key: "GET /api/me/export",
+    call: () => ({ url: "/api/me/export?orgId=acme&userId=priya" }),
+    otherOrg: "skip",
+    member: async (res) => {
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { userId: string }).userId).toBe("devon");
+    },
+  },
   {
     key: "GET /api/orgs",
     otherOrg: async (res) => expect(((await res.json()) as { orgs: { id: string }[] }).orgs.map((o) => o.id)).toEqual(["other"]),
@@ -225,6 +236,15 @@ const CASES: Case[] = [
     viewAs: () => ({ body: { orgId: ORG, id: "priya", name: "Priya", role: "Sales lead" } }),
   },
   { key: "DELETE /api/users/[userId]", call: () => ({ url: q("/api/users/temp"), params: { userId: "temp" } }), adminOnly: true, admin: 200 },
+  {
+    key: "GET /api/users/[userId]/export",
+    call: () => ({ url: q("/api/users/priya/export"), params: { userId: "priya" } }),
+    adminOnly: true,
+    admin: async (res) => {
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { userId: string }).userId).toBe("priya");
+    },
+  },
 ];
 
 /** Every route file under app/api, as "METHOD /api/path" for each exported handler. */
@@ -447,6 +467,73 @@ describe("cross-cutting route behavior", () => {
   it("rejects the tokens of a disabled account", async () => {
     getAuthDbFor().updateAccount("devon", { disabled: true });
     expect((await invoke({ key: "GET /api/activity" }, "member", f)).status).toBe(401);
+  });
+
+  const events = (action: string) => listAudit(getAuthDbFor(), ORG, 1000).filter((e) => e.action === action);
+
+  it("audits an admin viewing as someone, once an hour per admin and person", async () => {
+    resetAuditThrottle();
+    const feed = (who: Who, userId: string) => invoke({ key: "GET /api/feed" }, who, f, { url: q("/api/feed", `&userId=${userId}`) });
+    for (const key of ["GET /api/feed", "GET /api/brief", "GET /api/dashboard"]) {
+      expect((await invoke({ key }, "admin", f, { url: q(`/${key.split(" /")[1]}`, "&userId=priya") })).status, key).toBeLessThan(400);
+    }
+    await feed("admin", "devon");
+    await feed("admin", "boss");
+    await feed("member", "devon");
+    expect(events("viewed_as").map((e) => [e.actor, e.target, JSON.parse(e.detail!)])).toEqual([
+      ["boss", "devon", { route: "/api/feed", calls: 1 }],
+      ["boss", "priya", { route: "/api/feed", calls: 1 }],
+    ]);
+  });
+
+  it("audits opening a colleague's Mac text or screenshot, not your own", async () => {
+    resetAuditThrottle();
+    getStore(ORG).db.prepare("UPDATE sources SET kind = 'mac' WHERE id = 'src-p'").run();
+    const open = (who: Who, id: string, image = false) =>
+      invoke({ key: image ? "GET /api/sources/[id]/image" : "GET /api/sources/[id]" }, who, f, { url: q(`/api/sources/${id}${image ? "/image" : ""}`), params: { id } });
+    expect((await open("admin", "src-p")).status).toBe(200);
+    expect((await open("admin", "src-p", true)).status).toBe(200);
+    expect((await open("member", "src-d")).status).toBe(200);
+    expect((await open("member", "src-d", true)).status).toBe(200);
+    // Another person's page text is org-wide and not logged.
+    expect((await open("admin", "src-d")).status).toBe(200);
+    expect(events("source_opened").map((e) => [e.actor, e.target, JSON.parse(e.detail!)])).toEqual([
+      ["boss", "src-p", { what: "screenshot", kind: "mac", author: "priya", calls: 1 }],
+      ["boss", "src-p", { what: "text", kind: "mac", author: "priya", calls: 1 }],
+    ]);
+  });
+
+  it("audits org profile changes with the field names only", async () => {
+    await invoke({ key: "PATCH /api/orgs/[orgId]" }, "admin", f, { params: { orgId: ORG }, body: { context: "We sell shoes.", name: "Acme" } });
+    expect(events("org_updated").map((e) => JSON.parse(e.detail!))).toEqual([{ changed: ["context"] }]);
+  });
+
+  it("audits MCP tool calls by name, once a minute per token and tool", async () => {
+    resetAuditThrottle();
+    const call = (id: number) =>
+      invoke({ key: "POST /api/mcp" }, "member", f, {
+        url: "/api/mcp",
+        headers: { accept: "application/json, text/event-stream" },
+        body: { jsonrpc: "2.0", id, method: "tools/call", params: { name: "list_areas", arguments: {} } },
+      });
+    for (const id of [1, 2, 3]) expect((await call(id)).status).toBe(200);
+    expect(events("mcp_tool_called").map((e) => [e.actor, JSON.parse(e.detail!)])).toEqual([["devon", { tool: "list_areas", calls: 1 }]]);
+  });
+
+  it("exports the audit log as CSV for admins of the org, and logs the export", async () => {
+    await invoke({ key: "POST /api/auth/tokens" }, "admin", f, { body: { label: "ci, nightly" } });
+    const csv = (who: Who) => invoke({ key: "GET /api/audit" }, who, f, { url: "/api/audit?format=csv" });
+    expect((await csv("member")).status).toBe(403);
+    const res = await csv("admin");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/^text\/csv/);
+    expect(res.headers.get("content-disposition")).toMatch(/attachment; filename="orion-audit-acme-/);
+    const lines = (await res.text()).trim().split("\n");
+    expect(lines[0]).toBe("at,actor,action,target,detail");
+    expect(lines.some((l) => l.includes(",boss,token_created,"))).toBe(true);
+    const other = await (await csv("otherAdmin")).text();
+    expect(other).not.toContain("boss");
+    expect(events("audit_exported")).toHaveLength(1);
   });
 
   it("shows consent and email on /api/auth/me", async () => {
