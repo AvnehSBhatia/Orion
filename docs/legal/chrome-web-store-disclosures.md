@@ -1,4 +1,4 @@
-> **DRAFT — needs review by counsel.** These are the answers to paste into the Chrome Web Store developer dashboard ("Privacy practices" tab) for the Orion extension. Re-check them against `extension/static/manifest.json` before every submission. If permissions change, these answers must change too.
+> **Legacy.** These are the Chrome Web Store answers for the older Orion Chrome extension. Orion now captures through the Mac app, and the web app no longer offers the extension. Keep this only for organizations that still use the extension, and re-check it against `extension/static/manifest.json` before any new submission. The current texts are the privacy policy, the monitoring notice, the DPA, the subprocessor list and the security overview in this folder.
 
 # Chrome Web Store privacy disclosures: Orion
 
