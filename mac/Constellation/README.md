@@ -33,9 +33,9 @@ else
 fi
 root=$(git -C "$pkg" rev-parse --show-toplevel)
 echo "Repo: $root"
-git -C "$root" fetch origin cursor/orion-static-figtree-caef
-git -C "$root" switch cursor/orion-static-figtree-caef
-git -C "$root" pull --ff-only origin cursor/orion-static-figtree-caef
+git -C "$root" fetch origin main
+git -C "$root" switch main
+git -C "$root" pull --ff-only origin main
 git -C "$root" log -1 --oneline
 if ! grep -q 'Text("Orion")' "$root/mac/Constellation/Sources/Constellation/UI/ShellView.swift"; then
   echo "Sidebar source still says Constellation. Leaving the open app alone."
