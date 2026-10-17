@@ -1,6 +1,6 @@
 "use client";
 
-// Public: set a new password from a one-time reset link (emailed, or shared by an admin).
+// Public: set a new password from an admin's one-time reset link.
 
 import { Centered } from "@/components/auth/Centered";
 import { field, FieldError, PrimaryButton } from "@/components/ui/form";
@@ -28,7 +28,7 @@ export function ResetForm({ token }: { token: string }) {
       setDone(true);
     } catch (err) {
       const status = statusOf(err);
-      setError(status === 404 || status === 410 || status === 400 ? "This reset link has expired or was already used. Request a new one from the sign-in page or ask your admin." : friendlyError(err, "reset your password"));
+      setError(status === 404 || status === 410 || status === 400 ? "This reset link has expired or was already used. Ask your admin for a new one." : friendlyError(err, "reset your password"));
     } finally {
       setBusy(false);
     }

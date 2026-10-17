@@ -4,36 +4,19 @@ import { DEFAULT_ORG } from "@/contract/schemas";
 import type { Store } from "@/db/store";
 import { deleteOrgStore } from "@/http/deps";
 import { HttpError } from "@/http/error";
-import { ensureMacTables } from "@/mac/schema";
 
 /**
  * Removes every document a person captured or committed: the text, the screenshot, what each changed in the graph
  * (source_changes), its summary and area labels, any digest built from it, and the person's touches. The graph
- * nodes and edges those documents produced stay, since colleagues' work builds on them. Their Mac work blocks
- * (window titles and text), time entries, drafts and baseline go too.
+ * nodes and edges those documents produced stay, since colleagues' work builds on them.
  */
 export function deleteCapturesBy(store: Store, userId: string): number {
   return store.transaction(() => {
     const ids = (store.db.prepare("SELECT id FROM sources WHERE author_id = ?").all(userId) as { id: string }[]).map((r) => r.id);
     deleteSources(store, ids);
     store.db.prepare("DELETE FROM touches WHERE user_id = ?").run(userId);
-    deleteMacRows(store, userId);
     return ids.length;
   });
-}
-
-/** A person's Mac rows: work blocks, evidence, time entries, drafts, baseline and alias rules. Returns blocks deleted. */
-export function deleteMacRows(store: Store, userId: string): number {
-  ensureMacTables(store);
-  const q = store.db;
-  q.prepare("DELETE FROM mac_evidence WHERE entry_id IN (SELECT id FROM mac_entries WHERE user_id = ?) OR block_id IN (SELECT id FROM mac_work_blocks WHERE user_id = ?)").run(userId, userId);
-  q.prepare("DELETE FROM mac_entries WHERE user_id = ?").run(userId);
-  q.prepare("DELETE FROM mac_drafts WHERE user_id = ?").run(userId);
-  q.prepare("DELETE FROM mac_baseline WHERE user_id = ?").run(userId);
-  q.prepare("DELETE FROM mac_baseline_days WHERE user_id = ?").run(userId);
-  const blocks = q.prepare("DELETE FROM mac_work_blocks WHERE user_id = ?").run(userId).changes;
-  q.prepare("DELETE FROM mac_alias_rules WHERE user_id = ?").run(userId);
-  return blocks;
 }
 
 /** Removes these documents and everything derived from them (changes, summaries, facets, digests built from them). */

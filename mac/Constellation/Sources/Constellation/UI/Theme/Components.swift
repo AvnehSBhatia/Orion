@@ -118,22 +118,22 @@ struct SpaceScreen<Header: View, Content: View>: View {
 }
 
 private struct HeaderHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
+    static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 private struct ScrollOffsetKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
+    static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 private struct ContentHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
+    static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 private struct ViewportHeightKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
+    static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 

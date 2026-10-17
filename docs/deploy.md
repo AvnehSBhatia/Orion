@@ -25,8 +25,7 @@ The day-2 work (updates, logs, backups, incidents) is in [runbook.md](runbook.md
 |---|---|---|
 | 1 GB | `EMBED_PROVIDER=openrouter`, 2 GB swap | Works for a pilot team. `next build` swaps, so a deploy takes a few minutes. Page text goes to the embedding provider. |
 | 2 GB | `EMBED_PROVIDER=openrouter`, 2 GB swap | Comfortable for most small teams. |
-| 2 GB | `EMBED_PROVIDER=gemma`, `GEMMA_DTYPE=q4`, `EMBED_SCREENSHOTS=never`, 2 GB swap | Local embeddings at about 1 GB peak, a few points worse than q8. |
-| 6-8 GB | `EMBED_PROVIDER=gemma`, `GEMMA_DTYPE=q8`, `EMBED_SCREENSHOTS=auto` (the example defaults), `SERVER_MEM_LIMIT=5g` | About 1.4 GB resident, near 4.5 GB peak during a screenshot embed. Text doesn't leave the box for embedding. |
+| 4 GB+ | `EMBED_PROVIDER=gemma` allowed | Embeddings run in the API process: about 1 GB resident, peaking near 2 GB during an image embed. Text doesn't leave the box for embedding. |
 
 Other numbers to plan for:
 
@@ -43,12 +42,8 @@ On any Linux host with Docker Engine and the compose plugin (`curl -fsSL https:/
 ```sh
 git clone <repo-url> /opt/orion && cd /opt/orion
 cp deploy/.env.example deploy/.env && chmod 600 deploy/.env
-$EDITOR deploy/.env                          # ORION_DOMAIN, ACME_EMAIL, OPENROUTER_API_KEY
+$EDITOR deploy/.env                          # ORION_DOMAIN, ACME_EMAIL, OPENROUTER_API_KEY, EXTENSION_IDS
 mkdir -p deploy/backups && sudo chown 1000:1000 deploy/backups && chmod 700 deploy/backups
-mkdir -p deploy/downloads/mac                 # Mac app releases, see "Mac app releases" below
-# Swap, so a deploy's build and a screenshot embed don't OOM the box (setup-ubuntu.sh does this for systemd):
-[ "$(swapon --show --noheadings | wc -l)" -eq 0 ] && sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile \
-  && sudo mkswap /swapfile && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 export ORION_VERSION=$(git rev-parse --short HEAD)
 docker compose -f deploy/docker-compose.yml up -d --build
 docker compose -f deploy/docker-compose.yml ps   # server should turn "healthy" once /api/health answers
@@ -61,7 +56,7 @@ What the compose setup does:
 - Data lives on the `orion-data` volume (`/data`) and models on `orion-models` (`/models`). The model downloads on first use and then persists.
 - Containers run as the unprivileged `node` user (uid 1000), and only the volumes and `.next/cache` are writable.
 - Forces `COOKIE_SECURE=true`, `TRUST_PROXY=true`, `AUTH_DISABLED=false` and `UI_ORIGIN=https://app.<domain>`.
-- The server container has a memory limit (`SERVER_MEM_LIMIT`, default 5g for q8 with screenshot embeds) and restarts if it is OOM-killed. With `GEMMA_DTYPE=q4` and `EMBED_SCREENSHOTS=never` use 3g; on a 1-2 GB box with `EMBED_PROVIDER=openrouter`, about `900m`.
+- The server container has a memory limit (`SERVER_MEM_LIMIT`, default 3g) and restarts if it is OOM-killed. On a 1-2 GB box, set it to about `900m` with `EMBED_PROVIDER=openrouter`.
 - Firewall: open only 22, 80 and 443 (`ufw allow OpenSSH; ufw allow 80/tcp; ufw allow 443`). Docker publishes only Caddy's ports.
 
 Backups on a Docker host: add the cron line from the top of `deploy/backup/orion-backup.sh`, with `ORION_BACKUP_MODE=docker` and the `RCLONE_*` settings (see [runbook.md](runbook.md#backups)).
@@ -105,36 +100,18 @@ Keep the dashboard and the API on sibling subdomains of one registrable domain (
 
 `UI_ORIGIN` must be exactly `https://app.<domain>`, because it drives CORS and the CSRF origin check.
 
-## Email
-
-Orion emails invite links and password reset links, and people can reset their own password from the sign-in page. It sends through any SMTP provider. Without email the app still works: admins copy invite and reset links by hand, and "Forgot your password?" tells people to ask their admin.
-
-1. Pick a provider. Resend's free tier (3,000 emails a month) is plenty; Postmark, Amazon SES, and a Google Workspace account work too.
-2. Verify your domain with the provider: add the SPF and DKIM DNS records it gives you (and a DMARC record if it suggests one). Without them most mail lands in spam or is refused.
-3. Set two values in `deploy/.env` (or `/etc/orion/orion.env`) and restart the server:
-
-```sh
-# Resend: the username is "resend", the password is an API key.
-SMTP_URL=smtps://resend:re_xxxxxxxx@smtp.resend.com:465
-MAIL_FROM="Orion <no-reply@acme.com>"
-```
-
-Use `smtps://` with port 465 (TLS from the start) or `smtp://` with port 587 (STARTTLS). URL-encode special characters in the password (`@` is `%40`). `MAIL_FROM` must be on the verified domain; the server refuses to start with `SMTP_URL` set and no `MAIL_FROM`.
-
-To check it, invite yourself at a second address from Admin, People. The panel says whether the email was sent; when it was not, the server log has a `[mail]` line with the reason. Links and tokens are never logged in production.
-
 ## First admin
 
 Accounts are created with `server/scripts/account.ts` on the box. It writes `auth.db` and the org file directly, so run it where the server's `DATA_DIR` is.
 
-The org id becomes the file name `orgs/<org>.db`: lowercase letters, digits and dashes. The user id is the person's id in the graph (for example a first name). Ids are not shown in the app: `--org-name` is the org's display name (used when the command creates the org) and `--name` is the person's. Either one left out defaults to its id in title case (`acme` becomes "Acme"). `--org-description` is optional and sets what the org does; admins can edit it later.
+The org id becomes the file name `orgs/<org>.db`: lowercase letters, digits and dashes. The user id is the person's id in the graph (for example a first name).
 
 Docker:
 
 ```sh
 docker compose -f deploy/docker-compose.yml exec server \
   node_modules/.bin/tsx scripts/account.ts create \
-  --username mina --password 'a-long-passphrase' --org acme --org-name "Acme Inc" --user mina --name "Mina Park" --admin
+  --username mina --password 'a-long-passphrase' --org acme --user mina --name "Mina Park" --admin
 ```
 
 systemd:
@@ -142,26 +119,14 @@ systemd:
 ```sh
 cd /opt/orion/server
 sudo -u orion -H env DATA_DIR=/var/lib/orion/data node_modules/.bin/tsx --env-file=/etc/orion/orion.env \
-  scripts/account.ts create --username mina --password 'a-long-passphrase' --org acme --org-name "Acme Inc" --user mina --name "Mina Park" --admin
+  scripts/account.ts create --username mina --password 'a-long-passphrase' --org acme --user mina --name "Mina Park" --admin
 ```
 
 Notes:
 
 - Wrap the password in single quotes and clear your shell history afterwards (`history -d`), or prefix the command with a space if `HISTCONTROL=ignorespace` is set.
 - To issue an API token for CI or MCP, run `account.ts token --username mina --label "ci"`. The token is shown once.
-- Then sign in at `https://app.<domain>` and invite the rest of the team from Admin, People (by email once [Email](#email) is set up, or by copying the link).
-
-## Mac app releases
-
-The download page is `https://app.<domain>/download`. It is public, and Settings, Connect your Mac links to it. The API serves the files from a folder on the box; they are not in git or the image: `deploy/downloads/mac/` with Docker (mounted read only at `/downloads`), `/var/lib/orion/data/downloads/mac/` with systemd.
-
-1. On a Mac, from `mac/Constellation`: `scripts/package.sh 0.7.0` (add `SWIFT=scripts/swift-clt.sh` on a Mac with stale Command Line Tools). It builds a universal `Orion.app`, signs it, and writes `dist/Orion-0.7.0.zip` and `dist/latest.json`.
-2. Copy the zip first, then `latest.json`, so the page never points at a missing file: `scp dist/Orion-0.7.0.zip dist/latest.json <box>:/opt/orion/deploy/downloads/mac/` (Docker; for systemd, copy to `/var/lib/orion/data/downloads/mac/` and `chown orion`).
-3. Check `https://api.<domain>/api/downloads/mac/latest` shows the new version.
-
-People install and update with `curl -fsSL https://api.<domain>/api/downloads/mac/install.sh | bash`, which checks the zip's SHA-256. The app is not notarized: a zip downloaded in a browser needs System Settings, Privacy & Security, Open Anyway on first launch; the curl install doesn't.
-
-Signing: with no `CODESIGN_IDENTITY` the app is signed ad hoc, and macOS asks for the Accessibility permission again after each update. To keep the permission across updates, create a self-signed code signing certificate once (Keychain Access, Certificate Assistant, Create a Certificate, type Code Signing), keep it in the password manager, and sign every release with it: `CODESIGN_IDENTITY="Orion Mac" scripts/package.sh 0.7.0`.
+- Then sign in at `https://app.<domain>`. Invite the rest of the team from the dashboard once the invite flow ships; until then, use `account.ts create` without `--admin`.
 
 ## Checks after the first deploy
 

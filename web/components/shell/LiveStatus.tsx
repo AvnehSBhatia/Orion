@@ -40,7 +40,7 @@ export function LiveStatus({
     <span className="hidden min-w-0 items-center gap-3 md:flex">
       <span className="flex shrink-0 items-center gap-2 font-mono text-[12px] tracking-wide text-faint uppercase">
         <span className={cn("relative size-1.5 rounded-full", fresh ? "orion-live bg-ink text-ink" : "bg-muted")} />
-        {nodes.toLocaleString("en-US")} projects · {sources.toLocaleString("en-US")} documents
+        {nodes.toLocaleString("en-US")} projects · {sources.toLocaleString("en-US")} captures
       </span>
       {latest && (
         <AnimatePresence mode="popLayout" initial={false}>

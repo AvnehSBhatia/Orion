@@ -20,9 +20,9 @@ export function fallbackDashboard(user: User | null): DashboardSpec {
     origin: "default",
     updatedAt: new Date(0).toISOString(),
     widgets: [
-      { id: "kpi-nodes", kind: "kpi", title: "Projects", size: "sm", ...none, metric: "total_nodes" },
+      { id: "kpi-nodes", kind: "kpi", title: "In the graph", size: "sm", ...none, metric: "total_nodes" },
       { id: "kpi-blocked", kind: "kpi", title: "Blocked", size: "sm", ...none, metric: "blocked" },
-      { id: "kpi-hour", kind: "kpi", title: "Documents this hour", size: "sm", ...none, metric: "sources_last_hour" },
+      { id: "kpi-hour", kind: "kpi", title: "Captures this hour", size: "sm", ...none, metric: "sources_last_hour" },
       { id: "kpi-people", kind: "kpi", title: "People active", size: "sm", ...none, metric: "active_people" },
       { id: "map", kind: "map", title: "Company map", size: "lg", ...none },
       { id: "activity", kind: "activity", title: "Live activity", size: "sm", ...none },

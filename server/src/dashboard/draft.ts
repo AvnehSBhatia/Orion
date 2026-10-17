@@ -86,7 +86,7 @@ export function draftDashboard(
   if (!groups.length && !kinds.length && !intent.sellable) return null;
   const scope = groups.length === 1 ? groups[0] : null;
   const fresh: Widget[] = [
-    ...(intent.sellable ? [widget("kpi", "Ready to sell", "sm", { id: "kpi-sellable", metric: "sellable", filter: scope ?? undefined })] : []),
+    ...(intent.sellable ? [widget("kpi", "Sellable now", "sm", { id: "kpi-sellable", metric: "sellable", filter: scope ?? undefined })] : []),
     ...groupWidgets(groups),
     ...kinds.filter((k) => !(k === "activity" && groups.length)).map((k) => kindWidget(k, scope)),
   ];
@@ -115,7 +115,7 @@ export function draftDashboard(
           ? `${titles[0]} and ${lower(titles[1])}`
           : titles.length
             ? "Your focus"
-            : cap(kinds.map((k) => KIND_DEFAULTS[k][0].toLowerCase()).join(" and ") || "Ready to sell");
+            : cap(kinds.map((k) => KIND_DEFAULTS[k][0].toLowerCase()).join(" and ") || "Sellable now");
     subtitle = titles.length ? `Showing ${titles.map(lower).join(", ")}.` : "What you asked to see.";
   }
   return sanitizeDashboard({ title: title.slice(0, 80), subtitle, widgets: widgets.slice(0, MAX_WIDGETS) }, { origin: "chat", now });

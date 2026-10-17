@@ -1,6 +1,4 @@
 import type { z } from "zod";
-import { audit } from "@/audit/log";
-import type { AuthDb, Principal } from "@/auth/db";
 import type { createOrgRequest, updateOrgRequest } from "@/contract/schemas";
 import type { OrgResponse } from "@/contract/types";
 import { toPublicUser, type Store } from "@/db/store";
@@ -30,16 +28,6 @@ export function updateOrgProfile(store: Store, id: string, patch: z.infer<typeof
     createdAt: current?.createdAt ?? new Date().toISOString(),
   });
   return orgResponse(store, id);
-}
-
-/** An admin changes the profile; the audit log records which fields changed, never their text. */
-export function updateOrgProfileAs(db: AuthDb, store: Store, actor: Principal | null, id: string, patch: z.infer<typeof updateOrgRequest>): OrgResponse {
-  const before = store.getOrg();
-  const res = updateOrgProfile(store, id, patch);
-  const after = res.org as unknown as Record<string, unknown>;
-  const changed = Object.keys(patch).filter((k) => JSON.stringify((before as Record<string, unknown> | null)?.[k]) !== JSON.stringify(after[k]));
-  if (changed.length) audit(db, { orgId: id, actor: actor?.username ?? null, action: "org_updated", target: id, detail: { changed } });
-  return res;
 }
 
 /** Creates an org with its profile and, optionally, its first members (auth-disabled demos only). */

@@ -1,125 +1,113 @@
+> **DRAFT — needs review by counsel** (and by engineering before each publish). Items marked [at launch] depend on work tracked in `docs/production-checklist.md`. Don't publish a claim until it ships.
+
 # Orion Security Overview
 
-How Orion protects customer data, for security reviews and vendor questionnaires. Contact: [security contact email].
+How Orion protects customer data, for security reviews and vendor questionnaires. Contact: [security@domain].
 
 ## Architecture
 
-- Orion runs on one virtual server at [hosting provider], in [region]. On it:
-  - a web app
-  - an API server
-  - Caddy, a reverse proxy that handles TLS
-- Each customer organization's data lives in its own SQLite database file. A separate database holds accounts, tokens and the audit log.
-- Every API request is checked against the caller's organization. Requests for another organization's data are refused.
+- Orion runs on dedicated servers at [hosting provider, region]. The parts are:
+  - a web dashboard
+  - an API
+  - a reverse proxy that terminates TLS
+- Each customer organization's data lives in its own database file. A separate database holds accounts and credentials.
+- Every API request is checked against the caller's organization. Requests for another organization's data are refused (403).
 - Data comes from:
-  - the Orion Mac app (work blocks a person approves)
-  - an optional GitHub Action in the customer's repositories (commit changes)
-  - the web app
-  - the older Orion Chrome extension, for organizations that still use it
-- Coding assistants read Orion data over an authenticated MCP endpoint, with the person's own token.
-
-## The Mac app
-
-- Reads text through macOS Accessibility, only from apps the person turns on. Every app starts off. Password managers, Keychain and System Settings can't be turned on.
-- Never takes screenshots. Skips password fields and private or incognito windows.
-- In browsers, keeps the title and the domain and path of the address. Query strings are dropped. Page text is read only if both the organization and the person turn it on.
-- Removes card numbers, Social Security numbers, and API keys and tokens on the device before anything is saved. Emails, phone numbers and street addresses are removed by default. Names can be masked.
-- Keeps captured items in a local store encrypted with AES-GCM, with the key in the macOS Keychain. Text there is cleared after 30 days.
-- Sends nothing until the person accepts the organization's monitoring notice. Items wait in an Outbox, where the person can edit or delete them. By default they are approved automatically after 30 minutes. The person can turn that off.
-- The server checks every work block again and refuses any that hold a card number or an API key, or come from a site the organization blocks.
+  - the Orion Chrome extension (captures the user picks)
+  - an optional CI job in the customer's repositories (commit changes)
+  - the dashboard
+- Coding assistants read context over an authenticated MCP endpoint.
 
 ## Encryption
 
 - **In transit:**
-  - All traffic to Orion uses HTTPS. Caddy gets and renews certificates from Let's Encrypt. HSTS is on.
-  - The Chrome extension only talks to HTTPS servers (or to localhost).
-  - Calls to OpenRouter use HTTPS.
+  - All traffic uses HTTPS (TLS 1.2+, certificates from Let's Encrypt, renewed automatically). HSTS is enabled.
+  - The extension only talks to HTTPS backends [at launch].
+  - Calls to AI providers go over HTTPS.
 - **At rest:**
-  - Database files are readable only by the Orion service account. Orion does not encrypt the live database files itself. Disk encryption depends on the host's volume setup.
-  - Backups are encrypted on the server with rclone crypt before upload. The keys are not stored with the backup provider.
+  - Production disks are encrypted at the volume level [confirm per host: provider-managed volume encryption or LUKS].
+  - Database directories are readable only by the service account.
+  - Backups are encrypted on the server (rclone crypt, with keys kept outside the backup provider) before upload.
 - **Credentials:**
-  - Passwords are hashed with scrypt and a random salt per password.
-  - Session, API, CI and device tokens are random 256-bit values. Only their SHA-256 hash is stored.
+  - Passwords are hashed with scrypt and a per-password salt.
+  - Session and API tokens are random 256-bit values. Only their SHA-256 hash is stored.
 
-## Sign-in and access control
+## Authentication and access control
 
-- People sign in with their email (or username) and a password. A forgotten password is reset with a one-time link sent by email, valid for 24 hours. There is no SSO or two-factor sign-in yet.
-- **Sessions** are HttpOnly cookies (Secure in production, SameSite=Lax) that expire after 30 days. There is no idle timeout.
-- **Sign-in protection:** 10 failed sign-ins for one IP address and username within 15 minutes block more tries for a while. Sign-ins for unknown usernames take as long as real ones.
-- **Tokens:**
-  - **API tokens** (for MCP and scripts) act as the person. They can be labeled, given an expiry, and revoked at any time.
-  - **CI tokens** for GitHub sync can only send commits. Only admins can create them. The web app sets them to expire after one year.
-  - **Mac device tokens** work only on the Mac app's API, not the rest of Orion.
-  - Disabling an account revokes all its tokens.
+- Users sign in with a username and password. Sessions are HttpOnly, Secure cookies that expire (30 days today; idle timeout [at launch]).
+- **Login protection:** sign-in attempts are rate limited, and logins for unknown usernames take the same time as real ones.
+- **API tokens** for the extension, MCP and CI:
+  - per user and labeled
+  - revocable at any time
+  - every token is revoked when an account is disabled
 - **Roles:**
-  - **Admins** manage members, settings, retention and deletions, and can export time entries.
-  - **Members** see their organization's work items.
-  - Text from a person's Mac is visible only to that person and admins.
-  - Screenshots from the older extension are visible only to their author and admins by default.
-  - Viewing Orion as another person is admin only, and each time is recorded in the audit log.
+  - **Admins** manage members, settings, retention and deletions.
+  - **Members** see their organization's work map.
+  - **Screenshots** are visible only to the person who captured them and to admins by default.
+  - Acting on behalf of another user ("viewing as") is admin-only [at launch].
 - **Browser protections:**
-  - Writes made with a session cookie must send JSON and come from the Orion web app's origin (CSRF protection).
-  - Only the configured Orion extension ids get credentialed cross-origin access.
-  - Security headers: HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy and Permissions-Policy.
-- **Rate limits:** each caller has limits per kind of request (sending data, asking questions, account actions, and everything else).
-- **Spend cap:** each organization has a monthly cap on AI spend ($50 by default). Past it, model steps are skipped.
-- **Operator access to the server:**
-  - SSH only
-  - the firewall allows only SSH, HTTP and HTTPS
-  - automatic security updates are on
+  - Cookie-authenticated writes require a JSON body and a matching Origin (CSRF protection) [at launch].
+  - Only the published Orion extension id gets credentialed CORS access.
+  - Security headers: HSTS, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy.
+- **Operator access to production:**
+  - limited to [named roles]
+  - SSH keys only, no passwords
+  - firewall allows only SSH, HTTP and HTTPS
+  - automatic security updates
 
 ## Audit log
 
-Orion records security events for each organization, and admins can review them:
+Orion records security-relevant events per organization, and admins can review them [at launch]:
 
-- sign-ins, failed sign-ins and sign-outs
+- sign-ins and failed sign-ins
+- sign-outs
 - token creation and revocation
 - account creation and changes
-- invites
 - password changes and resets
+- invites
 - settings changes
-- Mac device connections
-- notice acceptance, with its version
-- data deletions and data exports
-- admins viewing or acting as another person
-- someone opening another person's Mac text or screenshot
-- organization profile changes
-- coding-assistant (MCP) tool calls, by tool name
-- invite and password-reset emails
+- data deletions
 
-Events hold ids, field names and counts, never captured text. Admins can export the log as CSV. Events are kept for 400 days, including after an organization is deleted, and then removed.
+## Data minimization and privacy controls
 
-## Privacy controls
-
-- **Person's controls:** pick which Mac apps are read, a personal skip list of sites and words, redaction choices, the Outbox, pause or turn off capture from the menu bar, delete their own data, and download a copy of it.
-- **Admin controls:** block sites for everyone, turn capture off for the whole organization, allow or block browser page text on Macs, set retention, set who sees extension screenshots, and ask everyone to accept the notice again.
-- **Retention defaults:** Mac text 14 days, documents (captures and commits) 90 days, extension screenshots 14 days. Work items and time entries stay until deleted.
-- **Deletion:** a person can delete their own data. An admin can delete a person, with everything they captured, or the whole organization. Work items already built from deleted captures stay.
+- **The user decides what's shared:**
+  - The extension captures only the tabs, windows and screens a user chooses, only while recording.
+  - It never captures incognito windows or password fields.
+- **Consent and pausing:**
+  - Recording requires accepting the organization's monitoring notice first [at launch].
+  - A badge shows when recording is on, and the user can pause at any time.
+- **Admin controls:**
+  - Admins can exclude sites so they're never captured.
+  - Admins can switch capture off for the whole organization.
+- **Retention** is configurable. The defaults remove screenshots after 14 days and captured text after 90 days.
+- **Deletion:**
+  - Users can delete their own captures.
+  - Admins can delete a person (with their captures) or the whole organization.
 
 ## AI and third parties
 
-- Model calls go through OpenRouter. Every call denies data collection. Model calls also require zero data retention, and each model is pinned to named hosts outside China. Customer data is never used to train models.
-- When a model call fails, we log its status, never the prompt or the model's answer.
-- Outbox summaries before approval are not stored or logged.
-- Search embeddings are made on our own server by default.
-- The full list is in our subprocessor list.
+- Captured text is sent to AI models through OpenRouter to extract work items and answer questions. Requests are sent with data collection denied, so only providers that don't retain or train on prompts are used. Customer data is never used to train models.
+- Screenshots aren't sent to AI providers [confirm for the configured embedding mode].
+- The full list is in the [Subprocessor List].
+- Each organization has a monthly AI spend cap [at launch].
 
 ## Availability and backups
 
 - Daily online backups of every database, with integrity checks.
-- Local copies kept for 7 days. Encrypted offsite copies on Cloudflare R2 kept for 35 days.
-- A restore drill from the offsite copy is part of our monthly runbook.
-- The server checks its disk and health every 5 minutes and alerts on bursts of errors. Alerts carry counts and route paths only. Services restart on failure.
+- Encrypted copies kept offsite for [35] days.
+- Restores are tested monthly. Target recovery point: 24 hours. Target recovery time: [4] hours.
+- Health is monitored every minute with alerting. Services restart automatically on failure.
 
-## Development
+## Secure development
 
-- CI runs type checks, tests, lint and builds on every pull request and on pushes to the main branches, plus `npm audit` for high-severity issues in production dependencies.
+- All changes go through pull requests with CI: type checks, unit tests, lint, builds, and dependency vulnerability checks.
 - Dependabot opens weekly dependency updates.
-- Secrets live in environment files on the server, readable only by the service, never in the repository.
+- Secrets live in environment files readable only by the service, never in the repository.
 
 ## Incident response
 
-A written runbook covers triage, containment, keeping evidence, telling people, and a postmortem afterwards. We tell customers about a personal data breach within 48 hours of confirming it (see the DPA).
+A documented runbook covers triage, containment, evidence preservation and communication. Customers are notified of a personal data breach within [48] hours of confirmation (see the DPA).
 
-## Not offered yet
+## Not yet offered
 
-SSO or SAML, two-factor sign-in, idle session timeout, SOC 2 or ISO 27001 reports, customer-managed keys, and a choice of data region.
+SSO/SAML, 2FA, SOC 2 or ISO 27001 reports, customer-managed keys, data residency choices. [Update as these ship.]

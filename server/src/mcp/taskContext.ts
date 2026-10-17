@@ -68,10 +68,7 @@ export async function buildTaskContext(
   const user = store.getUser(userId);
   const graph = readGraph(store);
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
-  // The task's matches lead and the person's own item follows: "the closest work item" in the situation is items[0],
-  // and on a vague task the for-you item ("Usage export API" for "speed up voice replies") took that place.
-  const forYou = (n: ContextItem) => n.why.startsWith("for you");
-  const items = [...ctx.items.filter((n) => !forYou(n)), ...ctx.items.filter(forYou)];
+  const items = ctx.items;
   const ids = new Set(items.map((n) => n.id));
 
   // Ripple: why an item is at risk although nobody marked it so.

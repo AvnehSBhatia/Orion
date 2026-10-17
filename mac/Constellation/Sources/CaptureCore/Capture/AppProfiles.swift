@@ -21,10 +21,6 @@ public struct AppProfile: Sendable {
     public var title: SelectedRowTitle?
     /// Leave out container descriptions ("message content", "message headers").
     public var dropAreaLabels = false
-    /// Read only inside the first of these views found; when none is there, read the
-    /// window as usual. Mail: just the open email's body, not its banners, header, or
-    /// buttons. A compose window has no such view, so what's being written is still read.
-    public var focusIdentifiers: [String] = []
 
     public static func forApp(_ bundleId: String) -> AppProfile? {
         profiles[bundleId]
@@ -32,26 +28,15 @@ public struct AppProfile: Sendable {
 
     static let profiles: [String: AppProfile] = [
         "com.apple.mail": AppProfile(
-            // Sidebar, list of emails, the All Mail / Primary / Promotions tabs, and the
-            // "Downloading messages" status. Found with `ax-probe layout --all`.
-            skipIdentifiers: ["MailboxesOutlineView", "Mail.messageList", "Mail.categoryBucket.", "activityView"],
+            // Sidebar, list of emails, and the All Mail / Primary / Promotions tabs.
+            skipIdentifiers: ["MailboxesOutlineView", "Mail.messageList", "Mail.categoryBucket."],
             title: SelectedRowTitle(
                 list: "Mail.messageList",
                 fields: ["Mail.messageList.cell.view.subjectLabel", "Mail.messageList.cell.view.addressLabel"]
             ),
-            dropAreaLabels: true,
-            focusIdentifiers: ["_MAIL_MESSAGE_BODY"]
+            dropAreaLabels: true
         ),
     ]
-
-    /// Where to read from: the first focus view found in the window, else the window.
-    func readRoot(in window: AXUIElement, start: DispatchTime) -> AXUIElement {
-        for identifier in focusIdentifiers {
-            // Not through the sidebar or the list of emails: the body is in the reading pane.
-            if let view = Self.find(identifier, in: window, start: start, skipping: skipIdentifiers) { return view }
-        }
-        return window
-    }
 
     static func skips(_ identifier: String, _ skip: Set<String>) -> Bool {
         skip.contains(identifier) || skip.contains { $0.hasSuffix(".") && identifier.hasPrefix($0) }
@@ -79,16 +64,14 @@ public struct AppProfile: Sendable {
     }
 
     /// Breadth first search by developer identifier, within the read's time budget.
-    static func find(_ identifier: String, in root: AXUIElement, start: DispatchTime, skipping skip: Set<String> = []) -> AXUIElement? {
+    static func find(_ identifier: String, in root: AXUIElement, start: DispatchTime) -> AXUIElement? {
         var queue = [root]
         var visited = 0
         while !queue.isEmpty, visited < 400, AXReader.elapsedMs(since: start) < Limits.maxWalkMs {
             let node = queue.removeFirst()
             visited += 1
             let shape = AXReader.copyMultiple(node, AXReader.shapeAttributes)
-            let id = shape[3] as? String
-            if id == identifier { return node }
-            if let id, !skip.isEmpty, skips(id, skip) { continue }
+            if shape[3] as? String == identifier { return node }
             if let children = shape[2] as? [AnyObject] { queue += children.compactMap(AXReader.element) }
         }
         return nil

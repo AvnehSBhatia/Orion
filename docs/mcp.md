@@ -6,8 +6,6 @@ The intended flow: someone changes a campaign in Google Ads, the Orion extension
 
 ## Connect Claude Code
 
-The quickest way: in Orion open Settings, Connect Claude Code, create a token, and run the command it shows.
-
 Authentication is an Orion API token, sent as a bearer. The token decides the org and the person, so results are ranked for you. Create one in `server/` with `npx tsx scripts/account.ts token --username <you> --label "claude code"` (or `POST /api/auth/tokens`), then put it in the environment:
 
 ```sh

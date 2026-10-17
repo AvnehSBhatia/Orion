@@ -69,8 +69,6 @@ export const BEATS = [
 
 const SCROLL_SECONDS = 6.4;
 const RESUME_AFTER_MS = 1200;
-/** However the scroll is pushed around, the intro ends by itself after this long. */
-const MAX_INTRO_MS = 15_000;
 
 function ramp(progress: number, start: number, end: number) {
   return Math.min(1, Math.max(0, (progress - start) / (end - start)));
@@ -116,7 +114,6 @@ export function useIntroScroll({
     let killTrigger: (() => void) | null = null;
     let idle = 0;
     let writingScroll = false;
-    let watchdog = 0;
 
     const set = (name: string, value: number) => stage.style.setProperty(name, value.toFixed(3));
     const stampMap = () => {
@@ -162,7 +159,6 @@ export function useIntroScroll({
       idle = window.setTimeout(() => startTween?.(), RESUME_AFTER_MS);
     };
 
-    watchdog = window.setTimeout(finish, MAX_INTRO_MS);
     const root = document.documentElement;
     root.style.scrollbarWidth = "none";
     window.scrollTo(0, 0);
@@ -234,7 +230,6 @@ export function useIntroScroll({
       cancelAnimationFrame(frame);
       root.style.scrollbarWidth = "";
       window.clearTimeout(idle);
-      window.clearTimeout(watchdog);
       stopTween?.();
       killTrigger?.();
       stampMap();

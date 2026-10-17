@@ -4,11 +4,7 @@ Sends what changed in a repo to Orion, so the org's context map knows what engin
 
 Paths you mark private never leave the machine, and their names are never printed.
 
-## In a customer's repo (GitHub Actions)
-
-Nothing to install in the repo. An Orion admin opens Settings, Connect GitHub, creates a token for the repo, adds it as the repository secret `ORION_TOKEN`, and commits the workflow it shows as `.github/workflows/orion-sync.yml`. On each push the workflow downloads this agent as one file from the Orion server (`/api/downloads/ctx-sync.mjs`, built by `npm run build` into `dist/` and baked into the server image) and runs it with Node. An admin's token lets Orion credit each commit to its git author; a member's token credits every commit to that member.
-
-## Setup (this repo, or running it by hand)
+## Setup
 
 ```sh
 cd codebase-agent

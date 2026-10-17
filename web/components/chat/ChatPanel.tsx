@@ -12,7 +12,6 @@ export function ChatPanel({
   messages,
   onSend,
   onRetry,
-  onStop,
   suggestions = [],
   className,
 }: {
@@ -20,8 +19,6 @@ export function ChatPanel({
   onSend: (message: string) => void;
   /** Sends a failed question again; defaults to onSend. */
   onRetry?: (message: string) => void;
-  /** Cancels the answer being written. */
-  onStop?: () => void;
   suggestions?: string[];
   className?: string;
 }) {
@@ -65,15 +62,6 @@ export function ChatPanel({
                 </div>
               ) : (
                 <ReplyText text={message.text} sources={message.sources} streaming={message.pending} />
-              )}
-              {message.pending && onStop && (
-                <button
-                  type="button"
-                  onClick={onStop}
-                  className="mt-2 rounded-full border border-line-strong px-3 py-1 text-[12px] text-muted transition-colors hover:bg-raised hover:text-ink"
-                >
-                  Stop
-                </button>
               )}
               {!message.pending && !message.failed && <ActionPills actions={message.actions} onSend={onSend} className="mt-2" />}
             </div>

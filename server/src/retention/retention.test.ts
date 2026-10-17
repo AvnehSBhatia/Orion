@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { listAudit } from "@/audit/log";
-import { AuthDb } from "@/auth/db";
 import type { Store } from "@/db/store";
 import { extractionRetryPass, retentionPass, type JobDeps } from "@/jobs/scheduler";
 import { saveOrgSettings } from "@/orgs/settings";
@@ -113,20 +111,6 @@ describe("background passes", () => {
     expect(good.getSource("old")).toBeNull();
     const logged = (console.error as unknown as { mock: { calls: string[][] } }).mock.calls.map((c) => JSON.parse(c[0]));
     expect(logged[0]).toMatchObject({ level: "error", msg: "background job failed", job: "retention", orgId: "broken", err: { message: "disk on fire" } });
-  });
-
-  it("keeps the audit log 400 days and purges older events in the hourly pass", async () => {
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    const db = AuthDb.open(":memory:");
-    const add = (at: string, action: string) =>
-      db.db.prepare("INSERT INTO audit (org_id, at, actor, action, target, detail) VALUES ('acme', ?, 'boss', ?, NULL, NULL)").run(at, action);
-    add(daysAgo(401), "login");
-    add(daysAgo(399), "logout");
-    add(daysAgo(1), "token_created");
-    await retentionPass({ orgIds: () => [], store: () => memoryStore(), maintain: () => {}, authDb: () => db }, NOW);
-    expect(listAudit(db, "acme").map((e) => e.action)).toEqual(["token_created", "logout"]);
-    const logged = (console.log as unknown as { mock: { calls: string[][] } }).mock.calls.map((c) => JSON.parse(c[0]));
-    expect(logged).toContainEqual(expect.objectContaining({ msg: "audit retention", eventsDeleted: 1 }));
   });
 
   it("schedules maintenance only for orgs with extractions due", async () => {

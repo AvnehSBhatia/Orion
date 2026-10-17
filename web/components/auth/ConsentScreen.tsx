@@ -11,20 +11,15 @@ import { Markdown } from "@/lib/markdown";
 import Link from "next/link";
 import { useState } from "react";
 
-// Shown only when the server sends no notice. A short form of docs/legal/employee-monitoring-notice.md; keep them in line.
-const FALLBACK_NOTICE = `**Your organization uses Orion to keep a shared, current picture of the team's work and to draft your daily time entries.** Please read this before you start. Nothing is sent to Orion until you accept this notice.
+const FALLBACK_NOTICE = `**Your organization uses Orion to keep a shared, up-to-date picture of the team's work.** Please read this before you start.
 
-**What the Orion Mac app reads.** Text on screen in the front window of the apps you turn on (every app starts off). In browsers, the tab title and the page's domain and path, and page text only if your organization allows it and you turn it on. Orion never takes screenshots or records keystrokes, and it skips private windows and password fields.
+**What's recorded.** Only the browser tabs, windows or screens you pick in the Orion extension, and only while recording is on: the page address, title and visible text (never passwords), and screenshots when the content changes.
 
-**Cleaned on your Mac first.** Card numbers, Social Security numbers, and API keys and tokens are always removed before anything is saved. Email addresses, phone numbers and street addresses are removed unless you turn that off.
+**What it's used for.** Orion turns that into work items (projects, blockers, who's on what) your team can see, search, and ask about. Page text is processed by AI models to do this.
 
-**The Outbox.** Captured items wait on your Mac, where you can edit or delete them. Items you don't review are approved and sent after 30 minutes, unless you turn auto-approve off.
+**Who sees it.** Colleagues see work items and page text. Screenshots are visible to you and your org's admins unless your admin changed that.
 
-**What it's used for.** AI models, through OpenRouter at providers that keep nothing, read approved work to find work items and to draft your daily time entries.
-
-**Who sees it.** Everyone in your organization sees the work items. The text from your Mac is visible only to you and your Orion admins. Admins can view Orion as you, and that is recorded. Admins can export the time entries you accept or edit.
-
-**Your controls.** Pause or turn off capture at any time from the Orion menu bar icon. Delete your data or download a copy from Orion's settings. Ask your Orion admin to see, correct or delete your data.`;
+**Your controls.** Pause or stop recording at any time from the Orion icon, remove a tab from what's shared, and ask your admin to see or delete your data.`;
 
 export function ConsentScreen() {
   const { me, refresh, signOut } = useSession();

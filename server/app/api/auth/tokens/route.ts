@@ -8,12 +8,12 @@ export const runtime = "nodejs";
 /** Your tokens (sessions and API tokens), without the secrets. */
 export const GET = route(async (req: NextRequest) => ({ tokens: getAuthDb().listTokens(requirePrincipal(req).username) }), { public: true });
 
-/** A new API token (MCP, scripts) or CI token (a repo's GitHub sync). The raw token is in this response only. */
+/** A new API token for MCP, the extension, or CI. The raw token is in this response only. */
 export const POST = route(
   async (req: NextRequest) => {
     const p = requirePrincipal(req);
-    const { label, kind, expiresInDays } = createTokenRequest.parse(await readJson(req, {}));
-    return createApiToken(getAuthDb(), p, label, kind, expiresInDays);
+    const { label } = createTokenRequest.parse(await readJson(req, {}));
+    return createApiToken(getAuthDb(), p, label);
   },
   { public: true },
 );

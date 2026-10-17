@@ -294,6 +294,5 @@ import Foundation
         BackendClient.minimumWait(failures: failures, retryAfter: retryAfter)
     }
 
-    /// The packaged app's version (scripts/package.sh writes it into Info.plist); "dev" when run from swift build.
-    static let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.6.0-dev"
+    static let appVersion = "0.6.0-dev"
 }

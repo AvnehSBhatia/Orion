@@ -78,22 +78,9 @@ export const config = {
   get modelCacheDir(): string {
     return process.env.MODEL_CACHE_DIR || ".cache/models";
   },
-  /** The seeded "demo" org: on in development and tests, off in production unless DEMO_ORG=on. */
-  get demoOrg(): boolean {
-    const v = process.env.DEMO_ORG;
-    return v === "on" || (v !== "off" && process.env.NODE_ENV !== "production");
-  },
   /** One SQLite file per org: `${dataDir}/orgs/${orgId}.db`. */
   get dataDir(): string {
     return process.env.DATA_DIR || "data";
-  },
-  /** The codebase agent as one file (`npm run build` in codebase-agent/), served for GitHub Actions to run. */
-  get agentBundle(): string {
-    return process.env.CODEBASE_AGENT_BUNDLE || `${process.cwd()}/../codebase-agent/dist/ctx-sync.mjs`;
-  },
-  /** Built Mac app releases served by /api/downloads/mac (see `downloads/mac.ts`). Not in the data backups. */
-  get downloadsDir(): string {
-    return process.env.DOWNLOADS_DIR || `${this.dataDir}/downloads`;
   },
   /** light (default): keep a shrunk screenshot, skip OCR and pruning, which ate the server's CPU. full: OCR and prune every capture. */
   get ingestImages(): "light" | "full" {
@@ -153,17 +140,5 @@ export const config = {
   /** Where links in invites and password resets point (the first UI_ORIGIN). */
   get appUrl(): string {
     return (this.uiOrigins[0] ?? "http://localhost:3000").replace(/\/+$/, "");
-  },
-  /** Outgoing mail for invites and password resets, like smtps://user:pass@smtp.resend.com:465. Unset: no email. */
-  get smtpUrl(): string | undefined {
-    return process.env.SMTP_URL || undefined;
-  },
-  /** The From of every email, like "Orion <no-reply@acme.com>". The domain must be verified with the SMTP provider. */
-  get mailFrom(): string {
-    return process.env.MAIL_FROM || "Orion <no-reply@localhost>";
-  },
-  /** Invites and resets go out by email. Off: admins copy the links by hand and people ask them for resets. */
-  get mailOn(): boolean {
-    return !!this.smtpUrl;
   },
 };

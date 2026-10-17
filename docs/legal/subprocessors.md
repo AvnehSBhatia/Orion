@@ -1,29 +1,31 @@
+> **DRAFT — needs review by counsel.** Fill in the hosting and backup providers you actually use, and confirm the OpenRouter provider settings in your account before publishing.
+
 # Orion Subprocessors
 
-Last updated: October 16, 2026. We give customers at least 30 days' notice before adding a subprocessor. To hear about changes, write to [privacy contact email].
+Last updated: [date]. Subscribe to changes: [email or RSS]. We give at least [30] days' notice before adding a subprocessor.
 
 | Subprocessor | What it does | Data it handles | Location | Safeguards |
 |---|---|---|---|---|
-| **[Hosting provider]** | Runs Orion on one virtual server and stores the databases | All customer data: accounts, Mac work blocks, time entries, captures, screenshots from the older extension, work items | [Region] | Firewall allows only SSH, HTTP and HTTPS. Database files readable only by the Orion service account. |
-| **Cloudflare, Inc. (R2 storage)** | Stores offsite backups | Backup files, encrypted on our server with rclone crypt before upload. Cloudflare can't read them. | [Region] | Encrypted before upload. The keys are not stored with Cloudflare. |
-| **OpenRouter, Inc.** | Routes AI model calls to model hosts | Captured text, window titles, page addresses, code changes, the capturing person's name and role, the organization's name and description, questions and the work items they need | United States | Every call sets `data_collection: "deny"`. Chat, extraction, summary and decision calls also set zero data retention (`zdr`). |
-| **Model hosts reached through OpenRouter** | Run the AI models | What OpenRouter forwards, for that call only | Varies by host, mostly United States | Only hosts that keep nothing and don't train on prompts. Each model is pinned to the hosts below. |
-| **[Email provider]** | Sends invites and password reset emails | Name, email address, the invite or reset link | [Region] | |
+| **[Hosting provider, e.g. Hetzner / DigitalOcean / AWS]** | Runs Orion's servers and stores the databases | All customer data (accounts, captures, screenshots, the work map) | [Region, e.g. EU (Germany)] | Encrypted disks; [DPA link]; [certifications] |
+| **[Backup storage, e.g. Backblaze B2 / Cloudflare R2 / AWS S3]** | Stores daily backups | Encrypted backup files (encrypted before upload; the provider can't read them) | [Region] | Client-side encryption; [DPA link] |
+| **OpenRouter, Inc.** | Routes AI requests to model providers | Captured page text, titles and URLs; code diffs; the capturing person's name and role; questions and context excerpts. [If `EMBED_PROVIDER=openrouter`: page text for embeddings.] Not screenshots [confirm]. | United States | Requests sent with `data_collection: "deny"`; [zero-data-retention setting if enabled]; [DPA link]; [SCCs / DPF] |
+| **Model providers reached through OpenRouter** | Run the AI models | The content OpenRouter forwards, for that request only | Varies by provider, mostly United States | Only providers that, per OpenRouter, don't store or train on prompts when data collection is denied. Currently: [list the providers allowed for the configured models, e.g. DeepSeek via [hosts], Google for embeddings]. [Decide and state whether endpoints hosted in China are allowed.] |
+| **[Email provider, when invites/resets by email ship]** | Sends account emails | Name, email address | [Region] | [DPA link] |
+| **[Error tracking / uptime monitoring, if used]** | Error reports, uptime checks | Error messages and stack traces (configured to strip captured content); no captured data for uptime checks | [Region] | [DPA link] |
 
-## Model hosts
+Not subprocessors:
 
-| Model | What it does | Allowed hosts |
-|---|---|---|
-| `nace-ai/drex-v2.0` (Drex) | Decides whether a capture or commit holds work, and routes chat questions. It sees the org's name and description, the person's name and role, the page address, the title, and the first 3,000 characters of text. | DeepInfra |
-| `anthropic/claude-haiku-5.5` | Finds work items in approved captures and commits, labels areas, writes digests | Anthropic, Amazon Bedrock, Google Vertex, Microsoft Azure |
-| `deepseek/deepseek-v4.1-flash` | Chat answers, briefs, Outbox summaries, dashboards, time entry descriptions | DeepInfra, Together, Fireworks, Baseten, Cloudflare. No hosts in China. |
-| `~typesafe/jev-latest` (Jev) | Picks which work items a chat question is about. It sees the question, the earlier question, the person's name and role, and up to 255 work item summaries. | TypeSafe |
+- Let's Encrypt: issues TLS certificates and sees no customer data.
+- GitHub: Customer runs our CI sync in its own repositories, under its own GitHub agreement.
 
-**Embeddings** (for search) run on our own server by default, with EmbeddingGemma. No third party sees that text. If we ever switch to hosted embeddings, `google/gemini-embedding-2` through OpenRouter would receive the text, with data collection denied. We would update this list first.
+## Model configuration
 
-## Not subprocessors
+Orion uses these models by default, all through OpenRouter. Admins can ask which models their organization uses.
 
-- **Let's Encrypt** issues our TLS certificates (through Caddy). It sees no customer data.
-- **GitHub.** A customer who connects a repository runs our sync job in its own GitHub account, under its own GitHub agreement.
-- **Coding assistants** a person connects to Orion with their own token, such as Claude Code. Orion data that person asks for goes to their assistant's model provider under their own account.
-- **Alert and uptime services** (for example a Slack or Discord webhook, or an uptime checker). Our alerts carry counts and route paths only, never customer data.
+- Extraction, area labels, and digests: `anthropic/claude-haiku-5.5`, after `nace-ai/drex-v2.0` checks the capture holds work (it sees the org name and description, the person's name and role, the URL, the title, and the first 3,000 characters of text)
+- Chat and dashboards: `deepseek/deepseek-v4.1-flash` [update to production values]
+- Fast steps: `deepseek/deepseek-v4.1-flash`
+- Chat routing (decision models, no text generated): `nace-ai/drex-v2.0` decides whether a message needs the chat model; `~typesafe/jev-latest` reads the message with up to 255 work item cards and picks the task and items. Both see the message, the earlier question, the person's name and role, and the item cards.
+- Embeddings:
+  - `EMBED_PROVIDER=gemma`: run on our own servers, no third party.
+  - `EMBED_PROVIDER=openrouter`: `google/gemini-embedding-2`, which sends page text to Google.

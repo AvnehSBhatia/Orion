@@ -112,17 +112,4 @@ struct RecordStoreTests {
         try store.saveNow(record(text: "after delete")) // still usable
         #expect(try store.load().first?.text == "after delete")
     }
-
-    @Test("A finished note lands in the Outbox once")
-    func addFinished() throws {
-        let store = try RecordStore(url: url, keys: MemoryStoreKey())
-        var note = record(text: "Ship the pilot.")
-        note.status = .queued
-        #expect(try store.addFinished(note, approve: false))
-        #expect(try store.addFinished(note, approve: false) == false)
-        let waiting = try store.outbox([.queued])
-        #expect(waiting.count == 1)
-        #expect(waiting.first?.record.text == "Ship the pilot.")
-        #expect(waiting.first?.queuedAt != nil)
-    }
 }

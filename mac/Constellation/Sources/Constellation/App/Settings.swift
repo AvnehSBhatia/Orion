@@ -29,7 +29,6 @@ enum CaptureState: Equatable {
         static let installId = "installId"
         static let consentVersion = "consentVersion"
         static let browserPageText = "browserPageText"
-        static let granolaNotes = "granolaNotes"
         static let policy = "orgPolicy"
     }
 
@@ -65,8 +64,6 @@ enum CaptureState: Equatable {
     /// Personal switch for reading page text in browsers. Off by default, and does nothing
     /// unless the company's policy allows it too.
     @Published var browserPageText: Bool { didSet { defaults.set(browserPageText, forKey: Key.browserPageText) } }
-    /// Import finished Granola notes (never the recording or transcript). Off until the person turns it on.
-    @Published var granolaNotes: Bool { didSet { defaults.set(granolaNotes, forKey: Key.granolaNotes) } }
     /// The company's last policy. Kept, so an outage never lifts its exclusions or its pause.
     @Published var policy: OrgPolicy {
         didSet { defaults.set(try? JSONEncoder().encode(policy), forKey: Key.policy) }
@@ -93,7 +90,6 @@ enum CaptureState: Equatable {
         backendURL = defaults.string(forKey: Key.backendURL) ?? "http://localhost:8787"
         consentVersion = defaults.object(forKey: Key.consentVersion) as? Int
         browserPageText = defaults.bool(forKey: Key.browserPageText)
-        granolaNotes = defaults.bool(forKey: Key.granolaNotes)
         policy = defaults.data(forKey: Key.policy).flatMap { try? JSONDecoder().decode(OrgPolicy.self, from: $0) } ?? OrgPolicy()
         if let existing = defaults.string(forKey: Key.installId) {
             installId = existing

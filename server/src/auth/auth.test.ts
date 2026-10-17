@@ -139,10 +139,7 @@ describe("scoping", () => {
     const { account, created } = await createAccountIn(db, store, "acme", { username: "sam.k", password: "password1" });
     expect(account.userId).toBe("sam-k");
     expect(created).toBe(true);
-    expect(store.getUser("sam-k")?.name).toBe("Sam K");
-
-    await createAccountIn(db, store, "acme", { username: "mina", password: "password1", name: "Mina Park" });
-    expect(store.getUser("mina")?.name).toBe("Mina Park");
+    expect(store.getUser("sam-k")?.name).toBe("sam-k");
   });
 });
 

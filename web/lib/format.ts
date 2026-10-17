@@ -1,4 +1,4 @@
-import type { GraphResponse, PublicNode, Source } from "@/lib/api/types";
+import type { Source } from "@/lib/api/types";
 
 /** Trims to `max` characters with an ellipsis. */
 export function clip(text: string, max: number) {
@@ -89,45 +89,4 @@ export function formatBytes(n: number) {
     i++;
   }
   return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
-}
-
-// ---- Extraction output, cleaned for display -------------------------------------------
-// The extractor sometimes leaves junk ("Update 230.", a search results page as the thing to read). The server filters
-// it too; this keeps old rows and any misses off the screen.
-
-/** A to-do worth showing, or null for a few characters or a bare "Update 230". */
-export function usefulTodo(todo: string | null | undefined): string | null {
-  const t = todo?.trim() ?? "";
-  if (t.length < 12 || /^update\s+#?\d+\.?$/i.test(t)) return null;
-  return t;
-}
-
-const SEARCH_HOST = /(^|\.)(google|bing|duckduckgo|yahoo|baidu|yandex|ecosia|startpage|search\.brave)\.[a-z.]+$/i;
-
-/** False for search results, new-tab pages, and browser internals: nothing anyone should be told to read. */
-export function isReadable(url: string, title = "") {
-  if (/^(about|chrome|edge|brave|moz-extension|chrome-extension):/i.test(url)) return false;
-  if (/^(new tab|duckduckgo\b|google search\b)/i.test(title.trim()) || /[-–—] (google )?search$/i.test(title.trim())) return false;
-  const h = host(url);
-  if (!h) return true;
-  return !SEARCH_HOST.test(h);
-}
-
-/** The node with junk to-dos and read links dropped. */
-export function cleanNode(node: PublicNode): PublicNode {
-  return { ...node, todo: usefulTodo(node.todo), readLinks: node.readLinks.filter((l) => isReadable(l.url, l.title)) };
-}
-
-export const cleanGraph = (graph: GraphResponse): GraphResponse => ({ ...graph, nodes: graph.nodes.map(cleanNode) });
-
-/** Generated titles in plain words: "Nodes by domain" → "Projects by domain", "sources" → "documents". */
-export function plainTitle(text: string) {
-  return text
-    .replace(/\bsellable nodes\b/gi, (m) => (m[0] === "S" ? "Ready to sell" : "ready to sell"))
-    .replace(/\bsellable\b/gi, (m) => (m[0] === "S" ? "Ready to sell" : "ready to sell"))
-    .replace(/\b(node|source)(s?)\b/gi, (m, word: string, plural: string) => {
-      const swap = word.toLowerCase() === "node" ? "project" : "document";
-      const out = swap + plural;
-      return m[0] === m[0].toUpperCase() ? out[0].toUpperCase() + out.slice(1) : out;
-    });
 }

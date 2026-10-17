@@ -16,15 +16,13 @@ The contract the server, web, and extension build against. Existing endpoints ar
 ## Accounts, invites, resets (admin unless noted)
 
 - `GET /api/auth/accounts` → `{ accounts: [{ username, userId, name, email, admin, disabled, createdAt, lastSeenAt, consentAt }] }`
-- `PATCH /api/auth/accounts/:username { admin?, disabled?, email? }` → `{ account }`. Disabling revokes every session and token. An admin cannot disable or demote themselves if they are the last admin. `409` when another account already uses the email (emails are unique, any case).
-- `POST /api/auth/login { username, password }`: `username` takes the account's email too (any case).
-- `POST /api/auth/accounts/:username/reset` → `{ resetUrl, expiresAt, emailStatus }` (one-time, 24h). Emailed to the person when they have an email; `emailStatus` is `"sent" | "failed" | "not_configured"`, or `null` without an email. The link always comes back to share by hand.
+- `PATCH /api/auth/accounts/:username { admin?, disabled?, email? }` → `{ account }`. Disabling revokes every session and token. An admin cannot disable or demote themselves if they are the last admin.
+- `POST /api/auth/accounts/:username/reset` → `{ resetUrl, expiresAt }` (one-time, 24h). The admin shares the link.
 - `POST /api/auth/reset { token, password }` (public) → `204`.
-- `POST /api/auth/forgot { email }` (public, `account` rate limit) → always `200 { sent: true, message }` whether or not an account uses the email, or `{ sent: "not_configured", message }` when the server has no SMTP_URL. Emails the account a one-time reset link (24h); at most 3 an hour per account.
-- `POST /api/auth/invites { admin?: boolean, role?: string, email?: string, name?: string }` → `{ id, inviteUrl, expiresAt, emailStatus }` (7 days, one use). Emailed to `email` when given (`emailStatus` as for reset links); `409` when an account already uses the email.
-- `GET /api/auth/invites` → `{ invites: [{ id, admin, role, email, name, createdBy, createdAt, expiresAt, usedBy }] }`; `DELETE /api/auth/invites/:id` → `204`.
-- `GET /api/auth/invites/:token` (public) → `{ orgName, expiresAt, email, name }` or 404.
-- `POST /api/auth/accept-invite { token, username, password, name, role, email? }` (public) → same body and cookie as login. `email` defaults to the one the invite was sent to.
+- `POST /api/auth/invites { admin?: boolean, role?: string }` → `{ id, inviteUrl, expiresAt }` (7 days, one use).
+- `GET /api/auth/invites` → `{ invites: [{ id, admin, role, createdBy, createdAt, expiresAt, usedBy }] }`; `DELETE /api/auth/invites/:id` → `204`.
+- `GET /api/auth/invites/:token` (public) → `{ orgName, expiresAt }` or 404.
+- `POST /api/auth/accept-invite { token, username, password, name, role, email? }` (public) → same body and cookie as login.
 
 Links point at the web app: `${UI_ORIGIN}/invite/<token>` and `${UI_ORIGIN}/reset/<token>`.
 
@@ -37,17 +35,11 @@ Links point at the web app: `${UI_ORIGIN}/invite/<token>` and `${UI_ORIGIN}/rese
 - `GET /api/orgs/:orgId/settings` → `{ settings: OrgSettings }` (see `server/src/orgs/settings.ts`; members may read it).
 - `PATCH /api/orgs/:orgId/settings { ...partial OrgSettings }` → `{ settings }`.
 - `GET /api/orgs/:orgId/usage` → `{ month: "2026-10", llm: { calls, inputTokens, outputTokens, costUsd, budgetUsd }, captures: { month, total }, storage: { bytes, screenshotsBytes } }`.
-- `GET /api/audit?limit=100` → `{ events: [{ at, actor, action, target, detail }] }`. Actions: login, login_failed, logout, token_created, token_revoked, account_created, account_updated, password_changed, password_reset, invite_created, invite_accepted, settings_changed, data_deleted, viewed_as (an admin read another person's feed, brief, context or dashboard; once an hour per admin and person), source_opened (another person's Mac text or screenshot; once an hour per viewer and document), org_updated (changed field names), mcp_tool_called (tool name and call count; once a minute per token and tool), data_exported, audit_exported, and the Mac events. Details hold ids and counts, never captured text or titles. Events are kept 400 days.
-- `GET /api/audit?format=csv` (admin) → every event the org keeps, oldest first, as `orion-audit-<org>-<date>.csv`.
+- `GET /api/audit?limit=100` → `{ events: [{ at, actor, action, target, detail }] }`. Actions: login, login_failed, logout, token_created, token_revoked, account_created, account_updated, password_changed, password_reset, invite_created, invite_accepted, settings_changed, data_deleted.
 
 ## Capture policy (any signed-in caller, used by the extension)
 
 - `GET /api/capture/policy` → `{ captureEnabled, excludedHosts, captureIntervalSec, consent: { required, version } }`. The extension polls it every few minutes and on start.
-
-## Data export (access requests)
-
-- `GET /api/me/export` → the caller's data as `orion-export-<user>-<date>.json`: accounts (no password hash), person, documents they authored with text and what each changed, Mac work blocks, time entries, drafts, baseline and alias rules, work items they own, touched or changed, token metadata (no hashes), their dashboard, and audit events where they acted or were acted on. Screenshots are listed as a count and ids; each downloads from `GET /api/sources/<id>/image`.
-- `GET /api/users/:userId/export` (admin, same org) → the same file for one person. Both are audited as `data_exported`.
 
 ## Data deletion
 

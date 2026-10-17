@@ -6,7 +6,7 @@ import type { OrgResponse } from "@/contract/types";
 import { getStore } from "@/http/deps";
 import { adminOnly, preflight, principalOf, readJson, route, sameOrg } from "@/http/route";
 import { deleteOrg } from "@/orgs/deletion";
-import { orgResponse, updateOrgProfileAs } from "@/orgs/profile";
+import { orgResponse, updateOrgProfile } from "@/orgs/profile";
 
 export const runtime = "nodejs";
 
@@ -25,7 +25,7 @@ export const GET = route(async (req: NextRequest, ctx: RouteContext<"/api/orgs/[
 export const PATCH = route(async (req: NextRequest, ctx: RouteContext<"/api/orgs/[orgId]">): Promise<OrgResponse> => {
   const id = await orgParam(req, ctx);
   adminOnly(req);
-  return updateOrgProfileAs(getAuthDb(), getStore(id), principalOf(req), id, updateOrgRequest.parse(await readJson(req)));
+  return updateOrgProfile(getStore(id), id, updateOrgRequest.parse(await readJson(req)));
 });
 
 const deleteOrgRequest = z.object({ confirm: z.string() });

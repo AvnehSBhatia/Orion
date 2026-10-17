@@ -40,8 +40,8 @@ export function PointCard({
   const body = node ? node.summary : src ? src.source.excerpt || src.text.slice(0, 280) : "";
   const chips =
     point.kind === "node"
-      ? [point.domain && DOMAIN_LABEL[point.domain], point.status && STATUS_LABEL[point.status], node?.todo && "Has a to-do"]
-      : [src?.source.kind === "code" ? "Commit" : src?.source.kind === "digest" ? "Digest" : "Document", point.cluster];
+      ? [point.domain && DOMAIN_LABEL[point.domain], point.status && STATUS_LABEL[point.status], node?.todo && "Has todo"]
+      : [src?.source.kind === "code" ? "Commit" : src?.source.kind === "digest" ? "Digest" : "Capture", point.cluster];
   const changes = src?.source.changes ?? [];
 
   return (

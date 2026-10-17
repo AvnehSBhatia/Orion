@@ -33,14 +33,6 @@ export function ReplyText({
     cursor = match.index + match[0].length;
   }
   parts.push(text.slice(cursor));
-  // Nothing has arrived yet: say Orion is working on it rather than showing an empty line.
-  if (streaming && !text) {
-    return (
-      <p className={cn("animate-pulse text-faint", className)} role="status">
-        Thinking…
-      </p>
-    );
-  }
   return (
     <p className={cn("whitespace-pre-line", className)}>
       {parts.map((part, index) => (

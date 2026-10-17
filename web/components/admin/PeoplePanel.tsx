@@ -2,9 +2,8 @@
 
 import { CopyField } from "@/components/ui/CopyButton";
 import { field, Notice, Panel, PrimaryButton, SecondaryButton } from "@/components/ui/form";
-import { useSession } from "@/components/auth/session";
-import { api, statusOf } from "@/lib/api/client";
-import type { Account, CreatedInvite, EmailStatus, Invite } from "@/lib/api/types";
+import { api } from "@/lib/api/client";
+import type { Account, CreatedInvite, Invite } from "@/lib/api/types";
 import { settingsError } from "@/lib/notLive";
 import { ago, shortDate, useNow } from "@/lib/time";
 import { cn } from "@/lib/utils";
@@ -12,19 +11,11 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 type Msg = { kind: "ok" | "error"; text: string } | null;
 
-/** One line on how a link went out, ending with when it expires. */
-function delivery(status: EmailStatus, email: string | null, what: string, expires: string): string {
-  if (status === "sent") return `Emailed to ${email}. You can also copy the ${what} below; it works once and expires ${expires}.`;
-  if (status === "failed") return `The email to ${email} didn't go out. Copy the ${what} and send it to them privately; it works once and expires ${expires}.`;
-  if (status === "not_configured") return `Email isn't set up on this server, so nothing was sent. Copy the ${what} and send it to them privately; it works once and expires ${expires}.`;
-  return `Send the ${what} to them privately; it works once and expires ${expires}.`;
-}
-
 export function PeoplePanel({ self }: { self: string }) {
   const [accounts, setAccounts] = useState<Account[] | null>(null);
   const [invites, setInvites] = useState<Invite[] | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
-  const [reset, setReset] = useState<{ username: string; email: string | null; url: string; expiresAt: string; emailStatus: EmailStatus } | null>(null);
+  const [reset, setReset] = useState<{ username: string; url: string; expiresAt: string } | null>(null);
 
   const load = useCallback(async () => {
     const [a, i] = await Promise.allSettled([api.accounts.list(), api.invites.list()]);
@@ -50,22 +41,11 @@ export function PeoplePanel({ self }: { self: string }) {
     }
   };
 
-  const { me: session } = useSession();
-  const exportData = async (account: Account) => {
-    setMsg(null);
-    try {
-      await api.exportPerson(session.orgId ?? "", account.userId);
-      setMsg({ kind: "ok", text: `Downloaded ${account.name || account.username}'s data. The export is in the audit log.` });
-    } catch (err) {
-      setMsg({ kind: "error", text: settingsError(err, "export this person's data") });
-    }
-  };
-
   const resetLink = async (account: Account) => {
     setMsg(null);
     try {
-      const { resetUrl, expiresAt, emailStatus } = await api.accounts.resetLink(account.username);
-      setReset({ username: account.username, email: account.email, url: resetUrl, expiresAt, emailStatus });
+      const { resetUrl, expiresAt } = await api.accounts.resetLink(account.username);
+      setReset({ username: account.username, url: resetUrl, expiresAt });
     } catch (err) {
       setMsg({ kind: "error", text: settingsError(err, "create a reset link") });
     }
@@ -83,7 +63,7 @@ export function PeoplePanel({ self }: { self: string }) {
         {reset && (
           <div className="mb-4 rounded-xl border border-ink/40 bg-bg p-4" role="status">
             <p className="text-[14px] text-ink">
-              Reset link for @{reset.username}. {delivery(reset.emailStatus, reset.email, "link", shortDate(reset.expiresAt))}
+              Reset link for @{reset.username}. Send it to them privately; it works once and expires {shortDate(reset.expiresAt)}.
             </p>
             <div className="mt-2">
               <CopyField value={reset.url} label="Copy the reset link" />
@@ -96,7 +76,7 @@ export function PeoplePanel({ self }: { self: string }) {
           <p className="text-[14px] text-faint">No accounts to show.</p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-line">
-            <table className="w-full min-w-[820px] text-left text-[14px]">
+            <table className="w-full min-w-[720px] text-left text-[14px]">
               <thead>
                 <tr className="border-b border-line font-mono text-[11px] tracking-[0.08em] text-faint uppercase">
                   <th className="px-3 py-2 font-normal">Person</th>
@@ -140,9 +120,6 @@ export function PeoplePanel({ self }: { self: string }) {
                           <SecondaryButton type="button" disabled={a.disabled} onClick={() => resetLink(a)}>
                             Reset link
                           </SecondaryButton>
-                          <SecondaryButton type="button" onClick={() => exportData(a)}>
-                            Export data
-                          </SecondaryButton>
                           <SecondaryButton
                             type="button"
                             disabled={me}
@@ -167,9 +144,7 @@ export function PeoplePanel({ self }: { self: string }) {
 function InvitePanel({ invites, onChange }: { invites: Invite[] | null; onChange: () => Promise<void> }) {
   const [admin, setAdmin] = useState(false);
   const [role, setRole] = useState("");
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
-  const [created, setCreated] = useState<(CreatedInvite & { email: string | null }) | null>(null);
+  const [created, setCreated] = useState<CreatedInvite | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
   const [busy, setBusy] = useState(false);
 
@@ -178,16 +153,12 @@ function InvitePanel({ invites, onChange }: { invites: Invite[] | null; onChange
     setBusy(true);
     setMsg(null);
     try {
-      const to = email.trim() || undefined;
-      const invite = await api.invites.create({ admin, role: role.trim() || undefined, email: to, name: name.trim() || undefined });
-      setCreated({ ...invite, email: to ?? null });
+      setCreated(await api.invites.create({ admin, role: role.trim() || undefined }));
       setRole("");
-      setEmail("");
-      setName("");
       setAdmin(false);
       await onChange();
     } catch (err) {
-      setMsg({ kind: "error", text: statusOf(err) === 409 ? "Someone already has an account with that email." : settingsError(err, "create an invite") });
+      setMsg({ kind: "error", text: settingsError(err, "create an invite") });
     } finally {
       setBusy(false);
     }
@@ -209,20 +180,8 @@ function InvitePanel({ invites, onChange }: { invites: Invite[] | null; onChange
   const used = (invites ?? []).filter((i) => i.usedBy);
 
   return (
-    <Panel
-      id="invite"
-      title="Invite people"
-      description="Email someone a one-time link (valid 7 days), or leave the email empty and copy the link. The person picks their own username and password."
-    >
+    <Panel id="invite" title="Invite people" description="Create a one-time link (valid 7 days). The person picks their own username and password.">
       <form onSubmit={create} className="flex flex-wrap items-end gap-3">
-        <label className="block min-w-[220px] flex-1 text-sm text-muted">
-          Their email
-          <input className={field} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="sam@yourcompany.com" autoComplete="off" maxLength={200} />
-        </label>
-        <label className="block min-w-[180px] flex-1 text-sm text-muted">
-          Their name (optional)
-          <input className={field} value={name} onChange={(e) => setName(e.target.value)} placeholder="Sam Kim" autoComplete="off" maxLength={80} />
-        </label>
         <label className="block min-w-[220px] flex-1 text-sm text-muted">
           Their role (optional)
           <input className={field} value={role} onChange={(e) => setRole(e.target.value)} placeholder="Account executive" maxLength={120} />
@@ -232,12 +191,12 @@ function InvitePanel({ invites, onChange }: { invites: Invite[] | null; onChange
           Make them an admin
         </label>
         <PrimaryButton type="submit" disabled={busy}>
-          {busy ? (email.trim() ? "Sending…" : "Creating…") : email.trim() ? "Send invite" : "Create invite link"}
+          {busy ? "Creating…" : "Create invite link"}
         </PrimaryButton>
       </form>
       {created && (
         <div className="mt-4 rounded-xl border border-ink/40 bg-bg p-4" role="status">
-          <p className="text-[14px] text-ink">Invite ready. {delivery(created.emailStatus, created.email, "invite link", shortDate(created.expiresAt))}</p>
+          <p className="text-[14px] text-ink">Invite link ready. Send it to one person; it expires {shortDate(created.expiresAt)}.</p>
           <div className="mt-2">
             <CopyField value={created.inviteUrl} label="Copy the invite link" />
           </div>
@@ -259,12 +218,9 @@ function InvitePanel({ invites, onChange }: { invites: Invite[] | null; onChange
             <li key={i.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
               <div className="min-w-0 flex-1 text-[14px]">
                 <p className="text-ink">
-                  {i.name || i.email || i.role || "No role set"}
+                  {i.role || "No role set"}
                   {i.admin && <span className="ml-2 text-[12px] text-faint">Admin</span>}
                 </p>
-                {(i.name || i.email) && (i.role || (i.name && i.email)) && (
-                  <p className="text-[12px] text-muted">{[i.name ? i.email : null, i.role].filter(Boolean).join(" · ")}</p>
-                )}
                 <p className="text-[12px] text-faint">
                   By @{i.createdBy} {ago(i.createdAt)} · expires {shortDate(i.expiresAt)}
                 </p>

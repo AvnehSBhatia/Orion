@@ -23,20 +23,4 @@ describe("org store cache", () => {
     expect(getStore("cachetest")).toBe(twin);
     expect(() => first.db.prepare("SELECT 1").get()).not.toThrow();
   });
-
-  it("has no demo org in production unless DEMO_ORG=on", async () => {
-    const { getStore, listOrgs, orgExists } = await import("./deps");
-    const before = process.env.DEMO_ORG;
-    try {
-      process.env.DEMO_ORG = "off";
-      expect(orgExists("demo")).toBe(false);
-      expect(() => getStore("demo")).toThrow(expect.objectContaining({ status: 404 }));
-      expect(listOrgs().map((o) => o.id)).not.toContain("demo");
-      process.env.DEMO_ORG = "on";
-      expect(orgExists("demo")).toBe(true);
-    } finally {
-      if (before === undefined) delete process.env.DEMO_ORG;
-      else process.env.DEMO_ORG = before;
-    }
-  });
 });

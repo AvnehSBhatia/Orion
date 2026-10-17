@@ -20,20 +20,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY server/ ./
 RUN rm -rf .env .env.* data .cache && node_modules/.bin/next build
 
-# The codebase agent as one file, served at /api/downloads/ctx-sync.mjs for customers' GitHub Actions to run.
-FROM node:${NODE_VERSION}-bookworm-slim AS agent
-WORKDIR /agent
-COPY codebase-agent/package.json codebase-agent/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
-COPY codebase-agent/ ./
-RUN npm run build
-
 FROM node:${NODE_VERSION}-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     DATA_DIR=/data \
     MODEL_CACHE_DIR=/models \
-    CODEBASE_AGENT_BUNDLE=/app/agent/ctx-sync.mjs \
     PORT=3001
 WORKDIR /app
 RUN apt-get update \
@@ -41,7 +32,6 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 # App files are root-owned and read-only for the app user; only the volumes and the Next cache are writable.
 COPY --from=build /app ./
-COPY --from=agent /agent/dist/ctx-sync.mjs /app/agent/ctx-sync.mjs
 RUN mkdir -p /data /models /backups /app/.next/cache \
  && chown -R node:node /data /models /backups /app/.next/cache \
  && chmod 700 /data /backups

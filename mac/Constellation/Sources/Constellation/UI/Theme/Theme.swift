@@ -57,7 +57,7 @@ enum AppFont {
             roots.append(executable.deletingLastPathComponent())
         }
         if let resources = Bundle.main.resourceURL {
-            roots.append(resources) // Orion.app/Contents/Resources, where scripts/package.sh puts the font
+            roots.append(resources)
         }
         roots.append(Bundle.main.bundleURL)
         roots.append(Bundle.main.bundleURL.deletingLastPathComponent())
@@ -74,7 +74,7 @@ enum AppFont {
     }
 
     private static func fontFiles(in directory: URL, _ manager: FileManager) -> [URL]? {
-        let folders = ["Fonts", "Resources/Fonts", ""]
+        let folders = ["Fonts", "Resources/Fonts", "Contents/Resources", "Contents/Resources/Fonts", ""]
         for folder in folders {
             let base = folder.isEmpty ? directory : directory.appendingPathComponent(folder)
             let urls = faceFiles.map { base.appendingPathComponent($0) }

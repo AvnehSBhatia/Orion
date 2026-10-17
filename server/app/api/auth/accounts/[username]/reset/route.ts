@@ -6,10 +6,7 @@ import { preflight, requirePrincipal, route } from "@/http/route";
 
 export const runtime = "nodejs";
 
-/**
- * An admin makes a one-time password reset link (24h) for an account in their org. It is emailed to the person when
- * they have an email (`emailStatus`); the link comes back either way, to share by hand.
- */
+/** An admin makes a one-time password reset link (24h) for an account in their org, to share with the person. */
 export const POST = route(
   async (req: NextRequest, ctx: RouteContext<"/api/auth/accounts/[username]/reset">) => {
     const p = requirePrincipal(req);

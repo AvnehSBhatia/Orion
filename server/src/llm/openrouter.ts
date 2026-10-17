@@ -55,7 +55,7 @@ const headers = (key: string) => ({ Authorization: `Bearer ${key}`, "Content-Typ
 /** The request as sent: our routing and privacy settings, usage accounting on, internal fields dropped. */
 export function requestBody(req: CompletionRequest, extra: Record<string, unknown>): string {
   const { purpose: _purpose, zdr, ...rest } = req;
-  const provider = providerPrefs(rest.model, { zdr });
+  const provider = zdr ? { ...providerPrefs(), zdr: true, data_collection: "deny" } : providerPrefs();
   return JSON.stringify({ ...extra, ...rest, provider, usage: { include: true } });
 }
 

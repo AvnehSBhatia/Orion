@@ -1,8 +1,6 @@
 // Accounts for sign-in. Writes $DATA_DIR/auth.db (and the org's SQLite file when it adds the person).
 // Usage:
 //   npx tsx scripts/account.ts create --username devon --password '...' --org acme --user devon [--admin] [--name "Devon Lee"] [--role "..."]
-//     [--org-name "Acme Inc"] [--org-description "..."]   (used when this creates the org)
-//   Names left out default to the id in title case: --org acme is "Acme", --user devon-lee is "Devon Lee".
 //   npx tsx scripts/account.ts password --username devon --password '...'
 //   npx tsx scripts/account.ts token --username devon --label "mcp on laptop"
 
@@ -10,7 +8,6 @@ import { parseArgs } from "node:util";
 import { getAuthDb } from "@/auth/db";
 import { ensurePerson } from "@/auth/service";
 import { createOrgStore, getStore, orgExists } from "@/http/deps";
-import { titleFromId } from "@/lib/text";
 
 const [command, ...rest] = process.argv.slice(2);
 const { values } = parseArgs({
@@ -21,8 +18,6 @@ const { values } = parseArgs({
     org: { type: "string" },
     user: { type: "string" },
     name: { type: "string" },
-    "org-name": { type: "string" },
-    "org-description": { type: "string" },
     role: { type: "string" },
     label: { type: "string" },
     admin: { type: "boolean", default: false },
@@ -46,17 +41,9 @@ async function main() {
     const password = need("password");
     const orgId = need("org");
     const userId = need("user");
-    const orgName = values["org-name"]?.trim() || titleFromId(orgId);
     const store = orgExists(orgId)
       ? getStore(orgId)
-      : createOrgStore({
-          id: orgId,
-          name: orgName,
-          description: values["org-description"]?.trim() || orgName,
-          websites: [],
-          context: "",
-          createdAt: new Date().toISOString(),
-        });
+      : createOrgStore({ id: orgId, name: orgId, description: orgId, websites: [], context: "", createdAt: new Date().toISOString() });
     const account = await db.createAccount({ username, password, orgId, userId, admin: values.admin });
     if (ensurePerson(store, userId, values.name, values.role)) console.log(`Added ${userId} to org ${orgId}. Their gravity is fit on the next npm run seed or role change.`);
     console.log(`Created ${account.username} (org ${account.orgId}, user ${account.userId}${account.admin ? ", admin" : ""}).`);

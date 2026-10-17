@@ -8,7 +8,7 @@ import { Quiet } from "@/components/ui/Quiet";
 import { Mark } from "@/components/ui/StatusMark";
 import type { ActivityResponse, Gap, GraphResponse, PublicNode, Status, Widget, WidgetMetric } from "@/lib/api/types";
 import { DOMAIN_LABEL, DOMAIN_TINT, DOMAINS } from "@/lib/domain";
-import { initials, plainTitle } from "@/lib/format";
+import { initials } from "@/lib/format";
 import { STATUS_LABEL, STATUS_TONE, STATUSES } from "@/lib/status";
 import { agoShort, useNow } from "@/lib/time";
 import { openNode } from "@/lib/viewer";
@@ -25,8 +25,8 @@ export const METRIC_LABEL: Record<WidgetMetric, string> = {
   at_risk: "At risk",
   on_track: "On track",
   done: "Done",
-  sellable: "Ready to sell",
-  sources_total: "Documents",
+  sellable: "Sellable",
+  sources_total: "Captures",
   sources_last_hour: "This hour",
   active_people: "Active people",
   gaps: "Gaps",
@@ -111,7 +111,7 @@ export function Kpi({
     <div className="flex h-full min-h-[116px] flex-col justify-between rounded-2xl border border-line bg-panel p-4">
       <p className="flex items-center gap-2 text-[13px] text-muted">
         {(metric === "blocked" || metric === "at_risk" || metric === "on_track" || metric === "done") && <Mark status={metric} size={10} />}
-        <span className="truncate">{plainTitle(widget.title) || METRIC_LABEL[metric]}</span>
+        <span className="truncate">{widget.title || METRIC_LABEL[metric]}</span>
       </p>
       <div className="mt-2 flex items-end justify-between gap-3">
         <div className="flex items-baseline gap-2">

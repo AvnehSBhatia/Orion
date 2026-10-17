@@ -2,4 +2,3 @@ backups/
 .env
 backup.env
 deploys.log
-downloads/

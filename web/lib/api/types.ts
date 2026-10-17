@@ -183,29 +183,19 @@ export type Invite = {
   id: string;
   admin: boolean;
   role: string | null;
-  /** Who it was emailed to, and their name, when the admin gave them. */
-  email: string | null;
-  name: string | null;
   createdBy: string;
   createdAt: string;
   expiresAt: string;
   usedBy: string | null;
 };
 
-/** How a link went out: by email, or null when there was no address to send it to (copy it by hand). */
-export type EmailStatus = "sent" | "failed" | "not_configured" | null;
-
-export type CreatedInvite = { id: string; inviteUrl: string; expiresAt: string; emailStatus: EmailStatus };
-export type InviteLookup = { orgName: string; expiresAt: string; email: string | null; name: string | null };
-export type ResetLink = { resetUrl: string; expiresAt: string; emailStatus: EmailStatus };
-/** The same answer whether or not an account uses the email. */
-export type ForgotAnswer = { sent: true | "not_configured"; message: string };
+export type CreatedInvite = { id: string; inviteUrl: string; expiresAt: string };
+export type InviteLookup = { orgName: string; expiresAt: string };
 
 export type TokenInfo = {
   id: string;
   /** "device": a connected Mac; `label` is its model name. */
-  /** "ci": a repo's GitHub sync, which may only send commits. */
-  kind: "session" | "api" | "device" | "ci";
+  kind: "session" | "api" | "device";
   label: string;
   createdAt: string;
   expiresAt: string | null;

@@ -12,7 +12,7 @@ const ROLE_PROMPT = `You design the home dashboard for one person in an organiza
 ${WIDGET_GUIDE}
 Pick what this person checks every morning. Examples: sales sees sellable features, deals, and what is at risk with customers; an engineer sees blocked and at risk engineering work, recent commits, and the map; a founder sees KPIs across every domain, the constellation, live activity, gaps, and who is active; ops sees ops risks, gaps, and owners.
 Always include one activity widget and one constellation or map widget. Use 6 to ${MAX_WIDGETS} widgets. Do not use nodeIds; use domains, statuses, owner, or query so the dashboard stays live.
-Titles are a few plain words in sentence case; say projects or work, and documents, never nodes, sources, graph, or sellable. Never use em dashes or exclamation marks.`;
+Titles are a few plain words in sentence case. Never use em dashes or exclamation marks.`;
 
 function graphBrief(graph: GraphResponse): string {
   const count = <K extends string>(keys: K[]) => keys.reduce<Record<string, number>>((m, k) => ((m[k] = (m[k] ?? 0) + 1), m), {});

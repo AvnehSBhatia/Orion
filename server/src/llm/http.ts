@@ -43,39 +43,18 @@ export const llmEnv = {
   get ignoreProviders(): string[] {
     return list(process.env.OPENROUTER_IGNORE_PROVIDERS);
   },
-  /** Chat and decision calls go only to providers that keep nothing (provider.zdr). OPENROUTER_ZDR=off lifts it. */
-  get zdr(): boolean {
-    return process.env.OPENROUTER_ZDR !== "off";
-  },
-  /** Each model family's hosts are pinned to MODEL_HOSTS unless OPENROUTER_PROVIDERS is set or OPENROUTER_PINS=off. */
-  get pins(): boolean {
-    return process.env.OPENROUTER_PINS !== "off";
-  },
 };
 
 /**
- * The hosts each model family may run on: large providers outside China serving the full or fp8 model. DeepSeek V4.1
- * Flash had 35 hosts on OpenRouter (October 2026), among them DeepSeek, Baidu, Alibaba and SiliconFlow, and small
- * fp4 hosts. Drex (DeepInfra) and Jev (TypeSafe) have one host each and are not listed.
+ * OpenRouter provider routing for every request: never a provider that stores or trains on prompts, only providers
+ * that honor every parameter sent (strict JSON schemas), and the operator's allow and deny lists.
  */
-export const MODEL_HOSTS: [prefix: string, hosts: string[]][] = [
-  ["deepseek/", ["deepinfra", "together", "fireworks", "baseten", "cloudflare"]],
-  ["anthropic/", ["anthropic", "amazon-bedrock", "google-vertex", "azure"]],
-];
-
-/**
- * OpenRouter provider routing: never a provider that stores or trains on prompts, only providers that honor every
- * parameter sent (strict JSON schemas), and the operator's allow and deny lists. With a `model` (chat and decision
- * calls), also zero data retention and that model's pinned hosts.
- */
-export function providerPrefs(model?: string, { zdr = false }: { zdr?: boolean } = {}): Record<string, unknown> {
-  const pinned = model && llmEnv.pins ? (MODEL_HOSTS.find(([prefix]) => model.startsWith(prefix))?.[1] ?? []) : [];
-  const only = llmEnv.providers.length ? llmEnv.providers : pinned;
+export function providerPrefs(): Record<string, unknown> {
+  const only = llmEnv.providers;
   const ignore = llmEnv.ignoreProviders;
   return {
     data_collection: "deny",
     require_parameters: true,
-    ...((zdr || (model && llmEnv.zdr)) && { zdr: true }),
     ...(only.length ? { only } : {}),
     ...(ignore.length ? { ignore } : {}),
   };
