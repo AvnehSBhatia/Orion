@@ -2,7 +2,7 @@
 
 import type { ActivityResponse, DashboardSpec } from "@/lib/api/types";
 import { plainTitle } from "@/lib/format";
-import { agoShort, useNow } from "@/lib/time";
+import { since, useNow } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import { LayoutGrid, Sparkles, UserRound } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -14,9 +14,9 @@ export const StaleContext = createContext(false);
 const EASE = [0.23, 1, 0.32, 1] as const;
 
 const ORIGIN = {
-  role: { label: "Role", icon: UserRound },
-  chat: { label: "Orion", icon: Sparkles },
-  default: { label: "Default", icon: LayoutGrid },
+  role: { label: "From your role", icon: UserRound },
+  chat: { label: "From your question", icon: Sparkles },
+  default: { label: "Starter layout", icon: LayoutGrid },
 } as const;
 
 export const DashboardHeader = memo(function DashboardHeader({ spec, activity }: { spec: DashboardSpec; activity: ActivityResponse | null }) {
@@ -38,13 +38,13 @@ export const DashboardHeader = memo(function DashboardHeader({ spec, activity }:
           <h1 className="truncate text-[24px] leading-tight font-semibold tracking-[-0.035em] md:text-[28px]">{plainTitle(spec.title)}</h1>
           <span
             className={cn(
-              "inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-px font-mono text-[9.5px] tracking-[0.08em] uppercase",
+              "inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[12px]",
               spec.origin === "chat" ? "border-ink/40 text-ink" : "border-line-strong text-faint",
             )}
           >
-            <OriginIcon className="size-2.5" strokeWidth={1.75} />
+            <OriginIcon className="size-3" strokeWidth={1.75} />
             {origin.label}
-            {spec.updatedAt && <span className="text-faint normal-case">{agoShort(spec.updatedAt, now)}</span>}
+            {spec.updatedAt && <span className="text-faint">· {since(spec.updatedAt, now)}</span>}
           </span>
         </motion.div>
       </AnimatePresence>

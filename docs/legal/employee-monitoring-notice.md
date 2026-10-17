@@ -6,6 +6,7 @@
 
 - Text on screen in the front window of the apps you turn on. Every app starts off. Password managers, Keychain and System Settings can't be turned on.
 - In browsers: the tab title and the page address, cut to the domain and path (no query strings). Page text only if [Company] allows it and you turn it on yourself. [browser page text]
+- If you turn on Granola meeting notes, the finished notes on your Mac (your notes and the summary). Never the recording or the transcript.
 - Which app and window you were in, and when.
 
 Orion never takes screenshots. It doesn't record keystrokes, audio or your camera. It skips private and incognito windows and password fields. It skips banking sites and any sites or words you add to your skip list. Sites [Company] blocks for everyone: [excluded sites].

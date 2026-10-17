@@ -178,6 +178,15 @@ describe("Mac blocks in one call", () => {
     expect(out[0].nodes[0]).toMatchObject({ todo: null, readLinks: [], sellable: null });
   });
 
+  it("tells the model a Granola block is meeting notes, and leaves other apps alone", async () => {
+    const { llm, requests } = fakeLlm([jsonTurn({ blocks: [] }), jsonTurn({ blocks: [] })]);
+    const ex = new LlmExtractor(llm, "test/model", async () => true);
+    await ex.fromCaptures([{ url: "mac://Granola", title: "Q4 budget", text: "Decision: ship Friday." }], []);
+    expect(requests[0].messages[0].content).toContain("finished meeting notes from Granola");
+    await ex.fromCaptures([block("Pricing page")], []);
+    expect(requests[1].messages[0].content).not.toContain("finished meeting notes");
+  });
+
   it("makes no call when the gate turns every block away", async () => {
     const { llm, requests } = fakeLlm([]);
     const out = await new LlmExtractor(llm, "test/model", async () => false).fromCaptures([block("a"), block("b")], []);

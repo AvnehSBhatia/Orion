@@ -263,3 +263,26 @@ export type AdminAliasRule = {
 export type AliasRule = { id: string; pattern: string; client_id: string };
 
 export type PilotPerson = { user_id: string; name: string; accepted: number; edited: number; rejected: number; active_days: number };
+
+export type PrivacySummary = {
+  windowDays: number;
+  sent: { total: number; macApps: { app: string; count: number }[]; other: { kind: string; count: number }[] };
+  settings: {
+    retentionDays: number;
+    screenshotRetentionDays: number;
+    snippetRetentionDays: number;
+    auditRetentionDays: number;
+    macBrowserPageText: boolean;
+    screenshotVisibility: "author_and_admins" | "org";
+  };
+  events: { at: string; actor: string | null; action: string; what?: "text" | "screenshot" }[];
+  eventDays: number;
+};
+
+export type MyTimesheet = {
+  userId: string;
+  from: string;
+  to: string;
+  entries: { day: string; client: string; minutes: number; narrative: string; status: "proposed" | "accepted" | "edited" | "rejected" }[];
+  clients: { client: string; minutes: number; entries: number }[];
+};

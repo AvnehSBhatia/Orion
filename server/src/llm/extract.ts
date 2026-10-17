@@ -203,6 +203,21 @@ const BATCH_PROMPT = `
 The input holds several numbered blocks: separate screens the same person had open, one after another. Read each block as fully as if it were the only one: list every item it shows (the main one and every other project, deal, ticket, or decision it names with a status, owner, or date), up to ${MAX_CAPTURE_NODES} per block.
 Answer with one entry per block that has work, giving its number. A block with nothing useful is left out. When two blocks show the same thing, use the same label in both.`;
 
+const MEETING_PROMPT = `
+Some blocks are finished meeting notes from Granola, not a live screen. From those, record the decisions, the action items, and who owns them, with any date the note states. Do not invent dialogue or a transcript. A note with no work is left out.`;
+
+/** True when the block is a Granola note (`mac://Granola`), so extraction treats it as meeting notes. */
+export function isMeetingCapture(input: CaptureInput): boolean {
+  if (!input.url.toLowerCase().startsWith("mac://")) return false;
+  let name = input.url.slice("mac://".length);
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    return false;
+  }
+  return name.replace(/\/+$/, "").toLowerCase() === "granola";
+}
+
 const CODE_PROMPT = `You read a code change and write feature cards that anyone on the team, including sales, can understand and repeat.
 For each meaningful change: a label, a plain-language summary of what a customer or teammate gets (not how the code works), status, release, and sellable.
 release is shipped, in_beta, or in_progress. sellable is true only when release is shipped or in_beta. Skip refactors, tests, and tooling unless they change what users get. At most ${MAX_CODE_NODES} cards.
@@ -345,7 +360,7 @@ export class LlmExtractor implements Extractor {
       purpose: "extract",
       name: "build_updates",
       schema: BLOCK_BATCH_SCHEMA,
-      system: `${EXTRACT_PROMPT}\n${BATCH_PROMPT}`,
+      system: `${EXTRACT_PROMPT}\n${BATCH_PROMPT}${sent.some((i) => isMeetingCapture(inputs[i])) ? `\n${MEETING_PROMPT}` : ""}`,
       user: `${aboutLines(about)}${knownList(shown)}\n\n${blocks.join("\n\n")}`,
     });
     for (const b of parseModelOutput(batchOut, raw).blocks) {

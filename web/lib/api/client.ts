@@ -27,10 +27,12 @@ import type {
   MacClient,
   MacClientInput,
   Me,
+  MyTimesheet,
   OrgProfile,
   OrgSettings,
   OrgSummary,
   PilotPerson,
+  PrivacySummary,
   ResetLink,
   SourceDetail,
   TokenInfo,
@@ -245,6 +247,10 @@ export const api = {
     deleteCaptures: () => del<{ deleted: number }>("/api/me/captures"),
     /** Everything Orion holds about the caller, saved as one JSON file. */
     exportData: (userId: string) => download("/api/me/export", `orion-export-${userId}-${new Date().toISOString().slice(0, 10)}.json`),
+    /** Counts and settings only: what left this account, and who else looked. */
+    privacy: () => request<PrivacySummary>("/api/me/privacy"),
+    /** The caller's own time entries. A user id is not sent. */
+    time: (from: string, to: string) => request<MyTimesheet>("/api/me/time", { query: { from, to } }),
   },
   health: () => request<{ ok: boolean; version?: string }>("/api/health"),
   audit: (limit = 100) => request<{ events: AuditEvent[] }>("/api/audit", { query: { limit } }),

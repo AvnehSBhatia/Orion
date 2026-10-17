@@ -14,7 +14,7 @@ import { useState } from "react";
 // Shown only when the server sends no notice. A short form of docs/legal/employee-monitoring-notice.md; keep them in line.
 const FALLBACK_NOTICE = `**Your organization uses Orion to keep a shared, current picture of the team's work and to draft your daily time entries.** Please read this before you start. Nothing is sent to Orion until you accept this notice.
 
-**What the Orion Mac app reads.** Text on screen in the front window of the apps you turn on (every app starts off). In browsers, the tab title and the page's domain and path, and page text only if your organization allows it and you turn it on. Orion never takes screenshots or records keystrokes, and it skips private windows and password fields.
+**What the Orion Mac app reads.** Text on screen in the front window of the apps you turn on (every app starts off). In browsers, the tab title and the page's domain and path, and page text only if your organization allows it and you turn it on. If you turn on Granola meeting notes, Orion reads those finished notes and never the recording or transcript. Orion never takes screenshots or records keystrokes, and it skips private windows and password fields.
 
 **Cleaned on your Mac first.** Card numbers, Social Security numbers, and API keys and tokens are always removed before anything is saved. Email addresses, phone numbers and street addresses are removed unless you turn that off.
 

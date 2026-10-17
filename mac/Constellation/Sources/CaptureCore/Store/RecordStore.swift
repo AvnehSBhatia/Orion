@@ -68,6 +68,24 @@ public final class RecordStore: @unchecked Sendable { // every database call run
         try queue.sync { try upsert(record) }
     }
 
+    /// A finished item (a Granola note) straight into the Outbox. Returns false when that id is already stored.
+    @discardableResult
+    public func addFinished(_ record: ActivityRecord, approve: Bool) throws -> Bool {
+        try queue.sync {
+            let existing = try query("SELECT id FROM records WHERE id = ?", [.text(record.id.uuidString)]) { $0.text(0) }
+            if !existing.isEmpty { return false }
+            var stored = record
+            stored.status = approve ? .approved : .queued
+            try upsert(stored)
+            let now = Date().timeIntervalSince1970
+            try run(
+                "UPDATE records SET queued_at = ?, approved_at = ? WHERE id = ?",
+                [.real(now), approve ? .real(now) : .null, .text(record.id.uuidString)]
+            )
+            return true
+        }
+    }
+
     /// Retention: clear the captured text of records that ended before `cutoff`.
     /// Title and domain stay, so older entries still show what they were. Returns how many were cleared.
     @discardableResult

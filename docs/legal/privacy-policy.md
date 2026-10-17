@@ -19,6 +19,7 @@ The Mac app is the main way Orion learns about work. It reads text through macOS
 - **Apps:** every app starts off. You choose which ones are read. Password managers, Keychain and System Settings can't be turned on.
 - **What is read:** the text on screen in the front window of an allowed app, the window title, the app's name, and when you were in it.
 - **Browsers:** the tab title and the page address, cut to the domain and path. Query strings and fragments are dropped. Page text is read only if your employer allows it and you turn it on yourself. Otherwise only the title and address are kept.
+- **Meeting notes, if you turn them on:** the finished notes Granola already wrote (your notes and its summary). Orion does not read the recording or the transcript. Each note waits in the Outbox like any other item.
 - **Never read:** screenshots (the app never takes any), keystrokes, audio, your camera, password fields, and private or incognito windows. The app also skips banking sites by default, any sites or words on your skip list, and sites your employer blocks.
 
 **Cleaned on your Mac.** Before anything is saved, even on your Mac, the app removes:

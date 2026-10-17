@@ -183,6 +183,27 @@ const CASES: Case[] = [
       expect(((await res.json()) as { userId: string }).userId).toBe("devon");
     },
   },
+  // Always the caller's own counts and events, whatever the query names.
+  {
+    key: "GET /api/me/privacy",
+    call: () => ({ url: "/api/me/privacy?orgId=acme&userId=priya" }),
+    otherOrg: "skip",
+    member: async (res) => {
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { userId?: string; sent: { total: number; other: { kind: string; count: number }[] }; events: unknown[] };
+      expect(body.sent).toMatchObject({ total: 1, other: [{ kind: "capture", count: 1 }] });
+      expect(body.events).toEqual([]);
+    },
+  },
+  {
+    key: "GET /api/me/time",
+    call: () => ({ url: "/api/me/time?from=2026-10-01&to=2026-10-16&userId=priya" }),
+    otherOrg: "skip",
+    member: async (res) => {
+      expect(res.status).toBe(200);
+      expect((await res.json()) as { userId: string }).toMatchObject({ userId: "devon", entries: [] });
+    },
+  },
   {
     key: "GET /api/orgs",
     otherOrg: async (res) => expect(((await res.json()) as { orgs: { id: string }[] }).orgs.map((o) => o.id)).toEqual(["other"]),
@@ -503,6 +524,28 @@ describe("cross-cutting route behavior", () => {
       ["boss", "src-p", { what: "screenshot", kind: "mac", author: "priya", calls: 1 }],
       ["boss", "src-p", { what: "text", kind: "mac", author: "priya", calls: 1 }],
     ]);
+  });
+
+  it("shows a person the audit events about them on /api/me/privacy, not their own actions or a colleague's", async () => {
+    resetAuditThrottle();
+    getStore(ORG).db.prepare("UPDATE sources SET kind = 'mac' WHERE id IN ('src-p', 'src-d')").run();
+    await invoke({ key: "GET /api/feed" }, "admin", f, { url: q("/api/feed", "&userId=priya") });
+    await invoke({ key: "GET /api/feed" }, "admin", f, { url: q("/api/feed", "&userId=devon") });
+    await invoke({ key: "GET /api/sources/[id]" }, "admin", f, { url: q("/api/sources/src-p"), params: { id: "src-p" } });
+    await invoke({ key: "GET /api/me/export" }, "member", f);
+    const privacy = async (token: string) =>
+      (await (await invoke({ key: "GET /api/me/privacy" }, "member", { ...f, tokens: { ...f.tokens, member: token } })).json()) as {
+        events: { actor: string; action: string; what?: string }[];
+        settings: { retentionDays: number; macBrowserPageText: boolean };
+      };
+    const priya = await privacy(f.tokens.priya);
+    expect(priya.events.map((e) => [e.actor, e.action, e.what])).toEqual([
+      ["boss", "source_opened", "text"],
+      ["boss", "viewed_as", undefined],
+    ]);
+    expect(priya.settings).toMatchObject({ retentionDays: 90, macBrowserPageText: false });
+    const devon = await privacy(f.tokens.member);
+    expect(devon.events.map((e) => [e.actor, e.action])).toEqual([["boss", "viewed_as"]]);
   });
 
   it("audits org profile changes with the field names only", async () => {
