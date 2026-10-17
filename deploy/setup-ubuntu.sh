@@ -89,6 +89,8 @@ fi
 say "User and directories"
 id orion >/dev/null 2>&1 || useradd --system --home-dir "$state" --create-home --shell /usr/sbin/nologin orion
 install -d -o orion -g orion -m 0700 "$state" "$state/data" "$state/models" "$state/backups"
+# Mac app releases (DOWNLOADS_DIR defaults to $DATA_DIR/downloads); see docs/deploy.md, Mac app releases.
+install -d -o orion -g orion -m 0755 "$state/data/downloads" "$state/data/downloads/mac"
 install -d -o root -g orion -m 0750 "$etc"
 install -d -o orion -g orion -m 0755 "$app"
 

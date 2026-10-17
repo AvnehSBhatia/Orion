@@ -25,7 +25,8 @@ The day-2 work (updates, logs, backups, incidents) is in [runbook.md](runbook.md
 |---|---|---|
 | 1 GB | `EMBED_PROVIDER=openrouter`, 2 GB swap | Works for a pilot team. `next build` swaps, so a deploy takes a few minutes. Page text goes to the embedding provider. |
 | 2 GB | `EMBED_PROVIDER=openrouter`, 2 GB swap | Comfortable for most small teams. |
-| 4 GB+ | `EMBED_PROVIDER=gemma` allowed | Embeddings run in the API process: about 1 GB resident, peaking near 2 GB during an image embed. Text doesn't leave the box for embedding. |
+| 2 GB | `EMBED_PROVIDER=gemma`, `GEMMA_DTYPE=q4`, `EMBED_SCREENSHOTS=never`, 2 GB swap | Local embeddings at about 1 GB peak, a few points worse than q8. |
+| 6-8 GB | `EMBED_PROVIDER=gemma`, `GEMMA_DTYPE=q8`, `EMBED_SCREENSHOTS=auto` (the example defaults), `SERVER_MEM_LIMIT=5g` | About 1.4 GB resident, near 4.5 GB peak during a screenshot embed. Text doesn't leave the box for embedding. |
 
 Other numbers to plan for:
 
@@ -42,8 +43,12 @@ On any Linux host with Docker Engine and the compose plugin (`curl -fsSL https:/
 ```sh
 git clone <repo-url> /opt/orion && cd /opt/orion
 cp deploy/.env.example deploy/.env && chmod 600 deploy/.env
-$EDITOR deploy/.env                          # ORION_DOMAIN, ACME_EMAIL, OPENROUTER_API_KEY, EXTENSION_IDS
+$EDITOR deploy/.env                          # ORION_DOMAIN, ACME_EMAIL, OPENROUTER_API_KEY
 mkdir -p deploy/backups && sudo chown 1000:1000 deploy/backups && chmod 700 deploy/backups
+mkdir -p deploy/downloads/mac                 # Mac app releases, see "Mac app releases" below
+# Swap, so a deploy's build and a screenshot embed don't OOM the box (setup-ubuntu.sh does this for systemd):
+[ "$(swapon --show --noheadings | wc -l)" -eq 0 ] && sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile \
+  && sudo mkswap /swapfile && sudo swapon /swapfile && echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 export ORION_VERSION=$(git rev-parse --short HEAD)
 docker compose -f deploy/docker-compose.yml up -d --build
 docker compose -f deploy/docker-compose.yml ps   # server should turn "healthy" once /api/health answers
@@ -56,7 +61,7 @@ What the compose setup does:
 - Data lives on the `orion-data` volume (`/data`) and models on `orion-models` (`/models`). The model downloads on first use and then persists.
 - Containers run as the unprivileged `node` user (uid 1000), and only the volumes and `.next/cache` are writable.
 - Forces `COOKIE_SECURE=true`, `TRUST_PROXY=true`, `AUTH_DISABLED=false` and `UI_ORIGIN=https://app.<domain>`.
-- The server container has a memory limit (`SERVER_MEM_LIMIT`, default 3g) and restarts if it is OOM-killed. On a 1-2 GB box, set it to about `900m` with `EMBED_PROVIDER=openrouter`.
+- The server container has a memory limit (`SERVER_MEM_LIMIT`, default 5g for q8 with screenshot embeds) and restarts if it is OOM-killed. With `GEMMA_DTYPE=q4` and `EMBED_SCREENSHOTS=never` use 3g; on a 1-2 GB box with `EMBED_PROVIDER=openrouter`, about `900m`.
 - Firewall: open only 22, 80 and 443 (`ufw allow OpenSSH; ufw allow 80/tcp; ufw allow 443`). Docker publishes only Caddy's ports.
 
 Backups on a Docker host: add the cron line from the top of `deploy/backup/orion-backup.sh`, with `ORION_BACKUP_MODE=docker` and the `RCLONE_*` settings (see [runbook.md](runbook.md#backups)).
@@ -130,10 +135,10 @@ Notes:
 
 ## Mac app releases
 
-The download page is `https://app.<domain>/download`. It is public, and Settings, Connect your Mac links to it. The API serves the files from `deploy/downloads/mac/` (mounted read only at `/downloads`); they are not in git or the image.
+The download page is `https://app.<domain>/download`. It is public, and Settings, Connect your Mac links to it. The API serves the files from a folder on the box; they are not in git or the image: `deploy/downloads/mac/` with Docker (mounted read only at `/downloads`), `/var/lib/orion/data/downloads/mac/` with systemd.
 
 1. On a Mac, from `mac/Constellation`: `scripts/package.sh 0.7.0` (add `SWIFT=scripts/swift-clt.sh` on a Mac with stale Command Line Tools). It builds a universal `Orion.app`, signs it, and writes `dist/Orion-0.7.0.zip` and `dist/latest.json`.
-2. Copy the zip first, then `latest.json`, so the page never points at a missing file: `scp dist/Orion-0.7.0.zip dist/latest.json <box>:<repo>/deploy/downloads/mac/`.
+2. Copy the zip first, then `latest.json`, so the page never points at a missing file: `scp dist/Orion-0.7.0.zip dist/latest.json <box>:/opt/orion/deploy/downloads/mac/` (Docker; for systemd, copy to `/var/lib/orion/data/downloads/mac/` and `chown orion`).
 3. Check `https://api.<domain>/api/downloads/mac/latest` shows the new version.
 
 People install and update with `curl -fsSL https://api.<domain>/api/downloads/mac/install.sh | bash`, which checks the zip's SHA-256. The app is not notarized: a zip downloaded in a browser needs System Settings, Privacy & Security, Open Anyway on first launch; the curl install doesn't.

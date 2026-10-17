@@ -38,6 +38,8 @@ echo "deploying $old -> $new"
 # Build while the old version keeps serving. npm ci replaces node_modules, so there is a short window
 # (a minute or two) where a lazily loaded module can fail; the restart below ends it.
 as_orion bash -c "cd server && npm ci --no-audit --no-fund && NEXT_TELEMETRY_DISABLED=1 node_modules/.bin/next build"
+# The codebase agent as one file, served to customers' GitHub Actions (CODEBASE_AGENT_BUNDLE defaults to it).
+as_orion bash -c "cd codebase-agent && npm ci --no-audit --no-fund && npm run build"
 as_orion bash -c "cd web && npm ci --no-audit --no-fund && NEXT_PUBLIC_ORION_API=https://api.$domain NEXT_TELEMETRY_DISABLED=1 node_modules/.bin/next build"
 
 systemctl restart orion-server orion-web

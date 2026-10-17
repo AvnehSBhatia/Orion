@@ -6,7 +6,8 @@ import { randomInt, randomUUID } from "node:crypto";
 import { hashPassword, newId, newRawToken, sha256 } from "./crypto";
 
 /** session: the web app's cookie. api: MCP, the extension, CI. device: a connected Mac, valid only on /v1. */
-export type TokenKind = "session" | "api" | "device";
+/** session: web sign-in. api: MCP and scripts, acts as the person. device: a Mac, /v1 only. ci: GitHub sync, code ingest only. */
+export type TokenKind = "session" | "api" | "device" | "ci";
 
 export type Account = {
   username: string;
@@ -98,19 +99,19 @@ function addColumns(db: Database.Database, table: string, cols: Record<string, s
 }
 
 /**
- * Files made before device tokens existed have a CHECK that refuses kind 'device'. SQLite cannot alter a CHECK,
+ * Files made before device and CI tokens existed have a CHECK that refuses those kinds. SQLite cannot alter a CHECK,
  * so the table is rebuilt once, in one transaction, keeping every row (nothing references tokens).
  */
-function allowDeviceTokens(db: Database.Database): void {
+function allowTokenKinds(db: Database.Database): void {
   const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tokens'").get() as { sql: string } | undefined;
-  if (!row || row.sql.includes("'device'")) return;
+  if (!row || row.sql.includes("'ci'")) return;
   db.transaction(() => {
     db.exec(`
       CREATE TABLE tokens_new (
         id TEXT PRIMARY KEY,
         hash TEXT NOT NULL UNIQUE,
         username TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
-        kind TEXT NOT NULL CHECK (kind IN ('session', 'api', 'device')),
+        kind TEXT NOT NULL CHECK (kind IN ('session', 'api', 'device', 'ci')),
         label TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         expires_at TEXT,
@@ -147,7 +148,7 @@ export class AuthDb {
         id TEXT PRIMARY KEY,
         hash TEXT NOT NULL UNIQUE,
         username TEXT NOT NULL REFERENCES accounts(username) ON DELETE CASCADE,
-        kind TEXT NOT NULL CHECK (kind IN ('session', 'api', 'device')),
+        kind TEXT NOT NULL CHECK (kind IN ('session', 'api', 'device', 'ci')),
         label TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         expires_at TEXT,
@@ -199,7 +200,7 @@ export class AuthDb {
       consent_version: "INTEGER NOT NULL DEFAULT 0",
       consent_at: "TEXT",
     });
-    allowDeviceTokens(db);
+    allowTokenKinds(db);
   }
 
   static open(file: string): AuthDb {
@@ -289,13 +290,13 @@ export class AuthDb {
 
   // Tokens
 
-  /** Returns the raw token; only its hash is stored. Sessions expire after 30 days, API tokens never. */
-  issueToken(username: string, kind: TokenKind, label = ""): { token: string; info: TokenInfo } {
+  /** Returns the raw token; only its hash is stored. Sessions expire after 30 days; other kinds at `expiresAt`, if given. */
+  issueToken(username: string, kind: TokenKind, label = "", expiresAt: string | null = null): { token: string; info: TokenInfo } {
     const raw = newRawToken();
     // A device's token id is its device_id, a UUID as the Mac contract says.
     const id = kind === "device" ? randomUUID() : newId();
     const now = new Date();
-    const expires = kind === "session" ? new Date(now.getTime() + SESSION_DAYS * DAY).toISOString() : null;
+    const expires = kind === "session" ? new Date(now.getTime() + SESSION_DAYS * DAY).toISOString() : expiresAt;
     this.db
       .prepare("INSERT INTO tokens (id, hash, username, kind, label, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(id, sha256(raw), normalizeUsername(username), kind, label.slice(0, 80), now.toISOString(), expires);

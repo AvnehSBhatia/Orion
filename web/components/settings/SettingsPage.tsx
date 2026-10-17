@@ -214,6 +214,9 @@ function MacPanel() {
               <ol className="mt-3 list-decimal space-y-1 pl-5 text-[14px] text-muted">
                 <li>Open Orion on your Mac.</li>
                 <li>Go to Outbox and choose Connect.</li>
+                <li>
+                  Check the server is <code className="font-mono text-ink">{API}</code> (the install command sets it; change it if not).
+                </li>
                 <li>Paste this code. It works once, for 15 minutes.</li>
               </ol>
             </>
@@ -260,6 +263,7 @@ export const mcpCommand = (token: string) => `claude mcp add --transport http or
 function ClaudeCodePanel() {
   const [tokens, setTokens] = useState<TokenInfo[] | null>(null);
   const [label, setLabel] = useState("Claude Code");
+  const [days, setDays] = useState("365");
   const [created, setCreated] = useState<CreatedToken | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -293,7 +297,7 @@ function ClaudeCodePanel() {
     setBusy(true);
     setError("");
     try {
-      setCreated(await api.tokens.create(label.trim() || "Claude Code"));
+      setCreated(await api.tokens.create(label.trim() || "Claude Code", { expiresInDays: days === "never" ? undefined : Number(days) }));
       await load();
     } catch (err) {
       setError(settingsError(err, "create a token"));
@@ -323,6 +327,14 @@ function ClaudeCodePanel() {
         <label className="block min-w-[220px] flex-1 text-sm text-muted">
           Token name
           <input className={field} value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder="Claude Code on my laptop" />
+        </label>
+        <label className="block w-36 text-sm text-muted">
+          Expires
+          <select className={field} value={days} onChange={(e) => setDays(e.target.value)}>
+            <option value="90">In 90 days</option>
+            <option value="365">In a year</option>
+            <option value="never">Never</option>
+          </select>
         </label>
         <PrimaryButton type="submit" disabled={busy}>
           {busy ? "Creating…" : "Create token"}
@@ -385,6 +397,7 @@ function ClaudeCodePanel() {
  */
 function GitHubPanel() {
   const { me } = useSession();
+  const [tokens, setTokens] = useState<TokenInfo[]>([]);
   const [repo, setRepo] = useState("");
   const [branch, setBranch] = useState("main");
   const [created, setCreated] = useState<CreatedToken | null>(null);
@@ -396,11 +409,35 @@ function GitHubPanel() {
     setBusy(true);
     setError("");
     try {
-      setCreated(await api.tokens.create(`GitHub: ${repo.trim() || "repo"}`));
+      // A CI token may only send commits, so a leaked repo secret cannot read or change anything.
+      setCreated(await api.tokens.create(`GitHub: ${repo.trim() || "repo"}`, { kind: "ci", expiresInDays: 365 }));
+      await load();
     } catch (err) {
       setError(settingsError(err, "create a token"));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const load = useCallback(async () => {
+    try {
+      setTokens((await api.tokens.list()).tokens.filter((t) => t.kind === "ci"));
+    } catch {
+      // The list is a convenience; creating still works.
+    }
+  }, []);
+  useEffect(() => {
+    if (me.admin) void load();
+  }, [me.admin, load]);
+
+  const revoke = async (token: TokenInfo) => {
+    if (!window.confirm(`Revoke "${token.label}"? That repo stops syncing to Orion right away.`)) return;
+    try {
+      await api.tokens.revoke(token.id);
+      if (created?.id === token.id) setCreated(null);
+      await load();
+    } catch (err) {
+      setError(settingsError(err, "revoke this token"));
     }
   };
 
@@ -433,7 +470,8 @@ function GitHubPanel() {
             <ol className="mt-5 min-w-0 list-decimal space-y-4 rounded-xl border border-ink/40 bg-bg p-4 pl-9 text-[14px] text-muted" role="status">
               <li className="min-w-0">
                 In the repo on GitHub, open Settings, Secrets and variables, Actions, and add a repository secret named{" "}
-                <code className="font-mono text-ink">ORION_TOKEN</code> with this value. It is shown only once.
+                <code className="font-mono text-ink">ORION_TOKEN</code> with this value. It is shown only once, can only send commits, and expires
+                in a year.
                 <div className="mt-2">
                   <CopyField value={created.token} label="Copy the token" />
                 </div>
@@ -453,6 +491,28 @@ function GitHubPanel() {
                 <code className="font-mono text-ink">.gitignore</code>.
               </li>
             </ol>
+          )}
+
+          {tokens.length > 0 && (
+            <>
+              <h3 className="mt-6 text-[13px] font-medium text-muted">Connected repos</h3>
+              <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
+                {tokens.map((t) => (
+                  <li key={t.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px] text-ink">{t.label.replace(/^GitHub: /, "")}</p>
+                      <p className="text-[12px] text-faint">
+                        {t.lastUsedAt ? `Last sync ${ago(t.lastUsedAt)}` : "No sync yet"}
+                        {t.expiresAt ? ` · expires ${shortDate(t.expiresAt)}` : ""}
+                      </p>
+                    </div>
+                    <SecondaryButton type="button" onClick={() => revoke(t)}>
+                      Revoke
+                    </SecondaryButton>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </>
       )}
@@ -487,7 +547,7 @@ function DataPanel() {
     <Panel
       id="data"
       title="Your captured data"
-      description="Delete every page and screenshot the extension captured from you. Work items already built from them stay, without the raw text. This can't be undone."
+      description="Delete everything Orion captured from you, on your Mac or in the browser. Work items already built from them stay, without the raw text. This can't be undone."
     >
       <div className="flex flex-wrap items-end gap-3">
         <label className="block min-w-[220px] flex-1 text-sm text-muted">

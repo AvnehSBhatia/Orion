@@ -195,7 +195,8 @@ export type InviteLookup = { orgName: string; expiresAt: string };
 export type TokenInfo = {
   id: string;
   /** "device": a connected Mac; `label` is its model name. */
-  kind: "session" | "api" | "device";
+  /** "ci": a repo's GitHub sync, which may only send commits. */
+  kind: "session" | "api" | "device" | "ci";
   label: string;
   createdAt: string;
   expiresAt: string | null;

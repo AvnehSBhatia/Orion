@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, team-a/extension, avneh]
+    branches: [main, orion, team-a/extension, avneh]
   workflow_dispatch:
 
 permissions:
@@ -114,6 +114,7 @@ jobs:
 
   mac:
     runs-on: macos-15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: mac/Constellation

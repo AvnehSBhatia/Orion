@@ -82,7 +82,8 @@ curl -s https://api.<domain>/api/health | jq
 
 - **`embedder: loading`** right after a start is normal (the Gemma model loads or downloads). It stays `loading` or `error` if the model cache volume is full or unwritable.
 - **`llmKey: false`** means `OPENROUTER_API_KEY` is missing.
-- **Monitor it:** point an uptime monitor (Better Stack, UptimeRobot, healthchecks.io) at `/api/health` every minute. Also alert on disk above 80% and on a missed backup ping (`HEALTHCHECK_URL`).
+- **Monitor it:** point an uptime monitor (Better Stack, UptimeRobot, healthchecks.io) at `/api/health` every minute; a box that is down cannot report itself. Also alert on a missed backup ping (`HEALTHCHECK_URL`).
+- **Alerts from the server:** set `ALERT_WEBHOOK_URL` to a Slack or Discord incoming webhook. Every 5 minutes the server checks the data disk (alert at `ALERT_DISK_PERCENT`, default 85) and the health check, and it alerts on `ALERT_ERROR_BURST` (default 10) server errors within 10 minutes. Each alert is sent at most once an hour and names counts and route paths only, never captured text.
 - **Quick box checks:** `df -h /var/lib/orion` (or `docker system df`), `free -m`, and `journalctl -k | grep -i oom` (OOM kills).
 
 ## Backups

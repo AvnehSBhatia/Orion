@@ -208,7 +208,7 @@ export const api = {
   },
   tokens: {
     list: () => request<{ tokens: TokenInfo[] }>("/api/auth/tokens"),
-    create: (label: string) => post<CreatedToken>("/api/auth/tokens", { label }),
+    create: (label: string, opts: { kind?: "api" | "ci"; expiresInDays?: number } = {}) => post<CreatedToken>("/api/auth/tokens", { label, ...opts }),
     revoke: (id: string) => del<{ ok: true }>(`/api/auth/tokens/${seg(id)}`),
   },
   /** A one-time code the Mac app exchanges for its device token (POST /v1/devices/register). */

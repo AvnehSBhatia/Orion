@@ -55,7 +55,7 @@ export function CapturePolicyPanel({ orgId }: { orgId: string }) {
     };
   }, [orgId]);
 
-  const save = async (change: Partial<OrgSettings>, done = "Saved. Extensions pick this up within a few minutes.") => {
+  const save = async (change: Partial<OrgSettings>, done = "Saved. Macs pick this up within a few minutes.") => {
     setBusy(true);
     setMsg(null);
     try {
@@ -102,7 +102,7 @@ export function CapturePolicyPanel({ orgId }: { orgId: string }) {
 
   return (
     <>
-      <Panel title="Capture policy" description="What the extension may record for everyone in your org, how long Orion keeps it, and what it may spend.">
+      <Panel title="Capture policy" description="What Orion may record for everyone in your org, how long Orion keeps it, and what it may spend.">
         <form onSubmit={submit} className="grid gap-5">
           <label className="flex items-start gap-3 rounded-lg border border-line bg-bg p-3 text-[14px]">
             <input
@@ -113,7 +113,7 @@ export function CapturePolicyPanel({ orgId }: { orgId: string }) {
             />
             <span>
               <span className="text-ink">Capture is on</span>
-              <span className={help}>Turn this off to stop every extension in the org from recording.</span>
+              <span className={help}>Turn this off to stop every Mac in the org from recording.</span>
             </span>
           </label>
 

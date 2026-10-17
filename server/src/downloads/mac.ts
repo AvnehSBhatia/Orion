@@ -57,8 +57,8 @@ export function publicOrigin(req: Request): string {
 
 /**
  * `curl -fsSL <api>/api/downloads/mac/install.sh | bash`: downloads the latest zip, checks its SHA-256, quits a
- * running copy, and puts Orion.app in /Applications (~/Applications when that is not writable). Running it
- * again is how a Mac updates.
+ * running copy, puts Orion.app in /Applications (~/Applications when that is not writable), and points the app at
+ * this server. Running it again is how a Mac updates.
  */
 export function installScript(origin: string): string {
   return `#!/bin/bash
@@ -82,6 +82,10 @@ pkill -x Constellation >/dev/null 2>&1 || true
 rm -rf "$dest/Orion.app" "$dest/Constellation.app"
 /usr/bin/ditto "$tmp/app/Orion.app" "$dest/Orion.app"
 /usr/bin/xattr -dr com.apple.quarantine "$dest/Orion.app" 2>/dev/null || true
+# Point the app at this server, unless the person already chose another one (Settings.swift reads this key).
+prefs=com.traxrobotics.constellation
+current=$(/usr/bin/defaults read "$prefs" backendURL 2>/dev/null || true)
+case "$current" in ""|*localhost*|*127.0.0.1*) /usr/bin/defaults write "$prefs" backendURL "$API" ;; esac
 echo "Installed Orion $version in $dest."
 [ -n "\${CONSTELLATION_NO_OPEN:-}" ] || open "$dest/Orion.app"
 `;

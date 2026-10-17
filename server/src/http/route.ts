@@ -9,6 +9,7 @@ import { authenticate, clientIp, rawToken } from "@/auth/request";
 import { SIGN_IN_REQUIRED, assertActingAs, assertAdmin, assertOrg, scopeInput } from "@/auth/scope";
 import { DEFAULT_MAX_BODY, checkContentLength, readJsonCapped } from "./body";
 import { allowedOrigin, checkCsrf } from "./csrf";
+import { noteServerError } from "@/jobs/alerts";
 import { HttpError, tooManyRequests } from "./error";
 import { rateLimiter, type LimitClass } from "./ratelimit";
 
@@ -168,6 +169,7 @@ export function route<T, C = unknown>(handler: (req: NextRequest, ctx: C) => Pro
       const { status, body, headers: extra } = errorStatus(err);
       res = NextResponse.json(body, { status, headers: { ...headers, ...extra } });
     }
+    if (res.status >= 500) noteServerError(req.nextUrl.pathname);
     const p = principals.get(req) ?? null;
     logRequest({ reqId, method: req.method, path: req.nextUrl.pathname, status: res.status, ms: Date.now() - t0, org: p?.orgId ?? null, user: p?.userId ?? null });
     return res;

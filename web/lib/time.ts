@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 
 const DAY = 86_400_000;
 
-export function shortDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+/** "Oct 16", with the year when it is not this year ("Oct 16, 2027"), so a date a year out never reads as today. */
+export function shortDate(iso: string, now = new Date()) {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", ...(d.getFullYear() !== now.getFullYear() && { year: "numeric" }) });
 }
 
 /** Sentence form: "4s ago", "3 min ago", "yesterday", "Oct 2". `now` is passed in so callers can tick it. */

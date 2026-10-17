@@ -5,6 +5,7 @@ import path from "node:path";
 import type { Store } from "@/db/store";
 import { duePendingCount } from "@/ingest/extraction";
 import { runRetention } from "@/retention";
+import { watchdogPass } from "./alerts";
 import { logJson, safely } from "./log";
 
 export type JobDeps = {
@@ -14,6 +15,8 @@ export type JobDeps = {
   store: (orgId: string) => Store;
   /** Schedules org maintenance, which retries due extractions first. */
   maintain: (store: Store) => void;
+  /** The /api/health check, for the alert watchdog. Without it only the disk is watched. */
+  healthy?: () => { ok: boolean; failing: string[] };
 };
 
 const num = (v: string | undefined, fallback: number) => {
@@ -31,6 +34,9 @@ export const jobEnv = {
   /** Delay after boot before the first pass, so startup is not slowed. */
   get firstRunDelayMs(): number {
     return num(process.env.JOBS_FIRST_RUN_MS, 2 * 60_000);
+  },
+  get watchdogEveryMs(): number {
+    return num(process.env.WATCHDOG_INTERVAL_MS, 5 * 60_000);
   },
 };
 
@@ -92,11 +98,17 @@ export function startScheduler(deps: JobDeps): () => void {
   if (g.__orionJobs) return () => stopScheduler();
   const retention = serial("retention", () => retentionPass(deps));
   const retries = serial("extraction retry", () => extractionRetryPass(deps));
+  const watchdog = serial("watchdog", () => watchdogPass(deps.healthy ?? (() => ({ ok: true, failing: [] }))));
   const timers: NodeJS.Timeout[] = [];
   const first = setTimeout(() => {
     void retention();
     void retries();
-    timers.push(setInterval(retention, jobEnv.retentionEveryMs), setInterval(retries, jobEnv.extractionRetryEveryMs));
+    void watchdog();
+    timers.push(
+      setInterval(retention, jobEnv.retentionEveryMs),
+      setInterval(retries, jobEnv.extractionRetryEveryMs),
+      setInterval(watchdog, jobEnv.watchdogEveryMs),
+    );
     timers.forEach((t) => t.unref?.());
   }, jobEnv.firstRunDelayMs);
   first.unref?.();

@@ -78,6 +78,11 @@ export const config = {
   get modelCacheDir(): string {
     return process.env.MODEL_CACHE_DIR || ".cache/models";
   },
+  /** The seeded "demo" org: on in development and tests, off in production unless DEMO_ORG=on. */
+  get demoOrg(): boolean {
+    const v = process.env.DEMO_ORG;
+    return v === "on" || (v !== "off" && process.env.NODE_ENV !== "production");
+  },
   /** One SQLite file per org: `${dataDir}/orgs/${orgId}.db`. */
   get dataDir(): string {
     return process.env.DATA_DIR || "data";

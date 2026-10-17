@@ -40,7 +40,7 @@ describe("OpenRouterClient", () => {
     fetchMock.mockResolvedValue(completion("hello"));
     await new OpenRouterClient().complete({ ...req, purpose: "extract" });
     const body = sentBody();
-    expect(body.provider).toEqual({ data_collection: "deny", require_parameters: true });
+    expect(body.provider).toEqual({ data_collection: "deny", require_parameters: true, zdr: true });
     expect(body.purpose).toBeUndefined();
     expect(body.usage).toEqual({ include: true });
     expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
@@ -68,12 +68,27 @@ describe("OpenRouterClient", () => {
     expect(out.map((c) => c.choices[0].message.content)).toEqual(["hello", "hello", "hello"]);
   });
 
+  it("pins each model family to its hosts, and OPENROUTER_PROVIDERS or OPENROUTER_PINS=off override that", async () => {
+    fetchMock.mockImplementation(async () => completion("hello"));
+    const client = new OpenRouterClient();
+    await client.complete({ ...req, model: "deepseek/deepseek-v4.1-flash" });
+    expect(sentBody(0).provider.only).toEqual(["deepinfra", "together", "fireworks", "baseten", "cloudflare"]);
+    await client.complete({ ...req, model: "anthropic/claude-haiku-5.5" });
+    expect(sentBody(1).provider.only).toContain("amazon-bedrock");
+    await client.complete({ ...req, model: "nace-ai/drex-v2.0" });
+    expect(sentBody(2).provider.only).toBeUndefined();
+    process.env.OPENROUTER_PINS = "off";
+    await client.complete({ ...req, model: "deepseek/deepseek-v4.1-flash" });
+    expect(sentBody(3).provider.only).toBeUndefined();
+    delete process.env.OPENROUTER_PINS;
+  });
+
   it("sends the provider allow and deny lists", async () => {
     process.env.OPENROUTER_PROVIDERS = "google-vertex, openai";
     process.env.OPENROUTER_IGNORE_PROVIDERS = "deepinfra";
     fetchMock.mockResolvedValue(completion("hello"));
     await new OpenRouterClient().complete(req);
-    expect(sentBody().provider).toEqual({ data_collection: "deny", require_parameters: true, only: ["google-vertex", "openai"], ignore: ["deepinfra"] });
+    expect(sentBody().provider).toEqual({ data_collection: "deny", require_parameters: true, zdr: true, only: ["google-vertex", "openai"], ignore: ["deepinfra"] });
   });
 
   it("retries 429 and 5xx with backoff, honoring Retry-After", async () => {

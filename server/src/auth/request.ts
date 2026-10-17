@@ -55,11 +55,22 @@ export function deviceMayCall(req: Request): boolean {
   }
 }
 
-/** The signed-in account, or null. Disabled accounts, expired tokens, and device tokens off /v1 are null. */
+/** The one call a CI token may make: sending a commit. A leaked repo secret can then neither read nor administer. */
+export function ciMayCall(req: Request): boolean {
+  try {
+    return req.method === "POST" && new URL(req.url).pathname === "/api/ingest/code";
+  } catch {
+    return false;
+  }
+}
+
+/** The signed-in account, or null. Disabled accounts, expired tokens, device tokens off /v1, and CI tokens off code ingest are null. */
 export function authenticate(req: Request): Principal | null {
   const raw = rawToken(req);
   const p = raw ? getAuthDb().resolveToken(raw) : null;
-  return p && p.kind === "device" && !deviceMayCall(req) ? null : p;
+  if (p?.kind === "device" && !deviceMayCall(req)) return null;
+  if (p?.kind === "ci" && !ciMayCall(req)) return null;
+  return p;
 }
 
 const attrs = (maxAge: number) => ["Path=/", "HttpOnly", "SameSite=Lax", `Max-Age=${maxAge}`, ...(config.cookieSecure ? ["Secure"] : [])];
