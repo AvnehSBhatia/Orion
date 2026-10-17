@@ -16,13 +16,15 @@ The contract the server, web, and extension build against. Existing endpoints ar
 ## Accounts, invites, resets (admin unless noted)
 
 - `GET /api/auth/accounts` → `{ accounts: [{ username, userId, name, email, admin, disabled, createdAt, lastSeenAt, consentAt }] }`
-- `PATCH /api/auth/accounts/:username { admin?, disabled?, email? }` → `{ account }`. Disabling revokes every session and token. An admin cannot disable or demote themselves if they are the last admin.
-- `POST /api/auth/accounts/:username/reset` → `{ resetUrl, expiresAt }` (one-time, 24h). The admin shares the link.
+- `PATCH /api/auth/accounts/:username { admin?, disabled?, email? }` → `{ account }`. Disabling revokes every session and token. An admin cannot disable or demote themselves if they are the last admin. `409` when another account already uses the email (emails are unique, any case).
+- `POST /api/auth/login { username, password }`: `username` takes the account's email too (any case).
+- `POST /api/auth/accounts/:username/reset` → `{ resetUrl, expiresAt, emailStatus }` (one-time, 24h). Emailed to the person when they have an email; `emailStatus` is `"sent" | "failed" | "not_configured"`, or `null` without an email. The link always comes back to share by hand.
 - `POST /api/auth/reset { token, password }` (public) → `204`.
-- `POST /api/auth/invites { admin?: boolean, role?: string }` → `{ id, inviteUrl, expiresAt }` (7 days, one use).
-- `GET /api/auth/invites` → `{ invites: [{ id, admin, role, createdBy, createdAt, expiresAt, usedBy }] }`; `DELETE /api/auth/invites/:id` → `204`.
-- `GET /api/auth/invites/:token` (public) → `{ orgName, expiresAt }` or 404.
-- `POST /api/auth/accept-invite { token, username, password, name, role, email? }` (public) → same body and cookie as login.
+- `POST /api/auth/forgot { email }` (public, `account` rate limit) → always `200 { sent: true, message }` whether or not an account uses the email, or `{ sent: "not_configured", message }` when the server has no SMTP_URL. Emails the account a one-time reset link (24h); at most 3 an hour per account.
+- `POST /api/auth/invites { admin?: boolean, role?: string, email?: string, name?: string }` → `{ id, inviteUrl, expiresAt, emailStatus }` (7 days, one use). Emailed to `email` when given (`emailStatus` as for reset links); `409` when an account already uses the email.
+- `GET /api/auth/invites` → `{ invites: [{ id, admin, role, email, name, createdBy, createdAt, expiresAt, usedBy }] }`; `DELETE /api/auth/invites/:id` → `204`.
+- `GET /api/auth/invites/:token` (public) → `{ orgName, expiresAt, email, name }` or 404.
+- `POST /api/auth/accept-invite { token, username, password, name, role, email? }` (public) → same body and cookie as login. `email` defaults to the one the invite was sent to.
 
 Links point at the web app: `${UI_ORIGIN}/invite/<token>` and `${UI_ORIGIN}/reset/<token>`.
 

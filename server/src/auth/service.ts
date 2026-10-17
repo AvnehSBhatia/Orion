@@ -4,10 +4,11 @@ import type { Store } from "@/db/store";
 import { HttpError, tooManyRequests } from "@/http/error";
 import { titleFromId } from "@/lib/text";
 import { dummyHash, verifyPassword } from "./crypto";
-import { MIN_PASSWORD, normalizeUsername, type Account, type AuthDb } from "./db";
+import { MIN_PASSWORD, normalizeEmail, normalizeUsername, type Account, type AuthDb } from "./db";
 import type { LoginLimiter } from "./ratelimit";
 
-export const loginRequest = z.object({ username: z.string().trim().min(1).max(40), password: z.string().min(1).max(200) });
+/** `username` takes an email too (any case); the field keeps its name so existing clients keep working. */
+export const loginRequest = z.object({ username: z.string().trim().min(1).max(200), password: z.string().min(1).max(200) });
 
 export const userIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/, "userId must be lowercase letters, digits, and dashes");
 export const passwordSchema = z.string().min(MIN_PASSWORD, `password must be at least ${MIN_PASSWORD} characters`).max(200);
@@ -28,22 +29,32 @@ export type LoginResult = { token: string; orgId: string; userId: string; admin:
 /** The login response body (the same token is set as the session cookie). */
 export const loginBody = (r: LoginResult) => ({ token: r.token, orgId: r.orgId, userId: r.userId, admin: r.admin, username: r.username });
 
+/** 409 when another account (in any org) already uses the email. Emails are unique so they can sign in. */
+export function assertEmailFree(db: AuthDb, email: string | null | undefined, username?: string): void {
+  if (!email) return;
+  const holder = db.accountByEmail(email);
+  if (holder && holder.username !== username) throw new HttpError(409, "another account already uses that email");
+}
+
 /**
- * Checks the password and issues a session token. 429 after 10 failures per ip+username in 15 minutes; 403 for a
- * disabled account (only once the password is right, so the status leaks nothing to a guesser).
+ * Checks the password and issues a session token. `username` is a username or an email (anything with an @). 429
+ * after 10 failures per ip+name in 15 minutes; 403 for a disabled account (only once the password is right, so the
+ * status leaks nothing to a guesser).
  */
 export async function login(db: AuthDb, limiter: LoginLimiter, input: { username: string; password: string; ip: string }): Promise<LoginResult> {
-  const username = normalizeUsername(input.username);
-  const key = `${input.ip}|${username}`;
+  const typed = input.username.includes("@") ? normalizeEmail(input.username) : normalizeUsername(input.username);
+  // An unknown email resolves to nothing and takes the dummy-hash path, like an unknown username.
+  const username = input.username.includes("@") ? (db.accountByEmail(typed)?.username ?? "") : typed;
+  const key = `${input.ip}|${typed}`;
   const wait = limiter.blockedFor(key);
   if (wait) throw tooManyRequests(wait, `too many failed sign-ins. Try again in ${Math.ceil(wait / 60)} minute(s).`);
-  const stored = db.passwordHash(username);
+  const stored = username ? db.passwordHash(username) : null;
   const ok = await verifyPassword(input.password, stored ?? (await dummyHash()));
   const account = stored ? db.getAccount(username) : null;
   if (!account || !ok) {
     limiter.fail(key);
-    audit(db, { orgId: account?.orgId ?? null, actor: null, action: "login_failed", target: username });
-    throw new HttpError(401, "wrong username or password");
+    audit(db, { orgId: account?.orgId ?? null, actor: null, action: "login_failed", target: username || typed.slice(0, 200) });
+    throw new HttpError(401, "wrong email, username, or password");
   }
   limiter.reset(key);
   if (account.disabled) {
@@ -83,6 +94,7 @@ export async function createAccountIn(
 ): Promise<{ account: Account; created: boolean }> {
   const username = normalizeUsername(body.username);
   if (db.getAccount(username)) throw new HttpError(409, `username "${username}" is taken`);
+  assertEmailFree(db, body.email);
   const userId = body.userId ?? freeUserId(db, store, orgId, username);
   let account: Account;
   try {

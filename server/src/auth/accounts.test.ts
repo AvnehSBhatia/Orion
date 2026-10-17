@@ -91,10 +91,10 @@ describe("accounts", () => {
   it("issues a one-time 24h reset link that signs out every session", async () => {
     const boss = asPrincipal(db, "boss");
     const s = db.issueToken("devon", "session");
-    const { resetUrl, expiresAt } = issueResetLink(db, boss, "devon");
+    const { resetUrl, expiresAt } = await issueResetLink(db, boss, "devon");
     expect(resetUrl).toMatch(/^http:\/\/localhost:3000\/reset\/[\w-]{43}$/);
     expect(Date.parse(expiresAt) - Date.now()).toBeGreaterThan(23 * 3_600_000);
-    expect(() => issueResetLink(db, boss, "zed")).toThrow(expect.objectContaining({ status: 404 }));
+    await expect(issueResetLink(db, boss, "zed")).rejects.toMatchObject({ status: 404 });
     const token = resetUrl.split("/").pop()!;
     await resetPassword(db, { token, password: "brandnew1" });
     expect(db.resolveToken(s.token)).toBeNull();
@@ -126,6 +126,8 @@ describe("accounts", () => {
   });
 });
 
+const NAMES = { orgName: "Acme", inviterName: "Boss" };
+
 describe("invites", () => {
   let db: AuthDb;
   const store = memoryStore();
@@ -136,11 +138,11 @@ describe("invites", () => {
 
   it("creates a 7-day one-use link that makes an account in the org and signs in", async () => {
     const boss = asPrincipal(db, "boss");
-    const inv = createInviteAs(db, boss, { admin: false, role: "Designer" });
+    const inv = await createInviteAs(db, boss, { admin: false, role: "Designer" }, NAMES);
     expect(inv.inviteUrl).toMatch(/^http:\/\/localhost:3000\/invite\/[\w-]{43}$/);
     expect(Date.parse(inv.expiresAt) - Date.now()).toBeGreaterThan(6.9 * 86_400_000);
     const token = inv.inviteUrl.split("/").pop()!;
-    expect(inviteInfo(db, token, () => "Acme")).toEqual({ orgName: "Acme", expiresAt: inv.expiresAt });
+    expect(inviteInfo(db, token, () => "Acme")).toEqual({ orgName: "Acme", expiresAt: inv.expiresAt, email: null, name: null });
 
     const r = await acceptInvite(db, () => store, { token, username: "new.person", password: "password1", name: "New Person", email: "n@acme.test" });
     expect(r).toMatchObject({ orgId: "acme", userId: "new-person", admin: false, username: "new.person" });
@@ -158,18 +160,18 @@ describe("invites", () => {
     const boss = asPrincipal(db, "boss");
     await db.createAccount({ username: "zed", password: "password1", orgId: "other", userId: "zed", admin: true });
     const zed = asPrincipal(db, "zed");
-    const inv = createInviteAs(db, boss, { admin: true });
+    const inv = await createInviteAs(db, boss, { admin: true }, NAMES);
     expect(() => revokeInviteAs(db, zed, inv.id)).toThrow(expect.objectContaining({ status: 404 }));
     revokeInviteAs(db, boss, inv.id);
     expect(db.listInvites("acme")).toHaveLength(0);
-    const old = createInviteAs(db, boss, { admin: false });
+    const old = await createInviteAs(db, boss, { admin: false }, NAMES);
     db.db.prepare("UPDATE invites SET expires_at = ?").run(new Date(Date.now() - 1).toISOString());
     expect(() => inviteInfo(db, old.inviteUrl.split("/").pop()!, () => "x")).toThrow(expect.objectContaining({ status: 404 }));
   });
 
   it("refuses a taken username without spending the invite", async () => {
     const boss = asPrincipal(db, "boss");
-    const token = createInviteAs(db, boss, { admin: false }).inviteUrl.split("/").pop()!;
+    const token = (await createInviteAs(db, boss, { admin: false }, NAMES)).inviteUrl.split("/").pop()!;
     await expect(acceptInvite(db, () => store, { token, username: "boss", password: "password1", name: "B" })).rejects.toMatchObject({ status: 409 });
     expect(db.openInvite(token)).not.toBeNull();
   });
