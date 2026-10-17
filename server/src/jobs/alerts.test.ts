@@ -1,3 +1,4 @@
+import os from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { alert, noteServerError, watchdogPass } from "./alerts";
 
@@ -44,7 +45,12 @@ describe("alerts", () => {
     const post = vi.fn(async () => new Response("ok"));
     vi.stubGlobal("fetch", post);
     process.env.ALERT_DISK_PERCENT = "1";
+    // A folder that exists everywhere (CI has no data dir).
+    const dataDir = process.env.DATA_DIR;
+    process.env.DATA_DIR = os.tmpdir();
     await watchdogPass(() => ({ ok: false, failing: ["authDb"] }), T0);
+    if (dataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = dataDir;
     const texts = post.mock.calls.map((c) => JSON.parse((c as unknown as [string, RequestInit])[1].body as string).text as string);
     expect(texts.some((t) => t.includes("health check is failing: authDb"))).toBe(true);
     expect(texts.some((t) => /data disk is \d+% full/.test(t))).toBe(true);
