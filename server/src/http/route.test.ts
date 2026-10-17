@@ -230,8 +230,14 @@ describe("config check", () => {
     process.env.EXTENSION_IDS = "abc";
     process.env.UI_ORIGIN = "https://app.example.com";
     process.env.OPENROUTER_API_KEY = "k";
+    process.env.SMTP_URL = "smtps://u:p@smtp.example.com:465";
+    process.env.MAIL_FROM = "Orion <no-reply@example.com>";
     delete process.env.AUTH_DISABLED;
   };
+  afterEach(() => {
+    delete process.env.SMTP_URL;
+    delete process.env.MAIL_FROM;
+  });
 
   it("refuses unsafe production settings", () => {
     safe();
@@ -261,5 +267,14 @@ describe("config check", () => {
     const dev = checkConfig({ NODE_ENV: "development" } as NodeJS.ProcessEnv);
     expect(dev.errors).toEqual([]);
     expect(dev.warnings.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("only warns without email, and refuses SMTP_URL without MAIL_FROM in production", () => {
+    safe();
+    delete process.env.SMTP_URL;
+    expect(checkConfig(prod)).toMatchObject({ errors: [], warnings: [expect.stringContaining("SMTP_URL")] });
+    process.env.SMTP_URL = "smtps://u:p@smtp.example.com:465";
+    delete process.env.MAIL_FROM;
+    expect(checkConfig(prod).errors).toEqual([expect.stringContaining("MAIL_FROM")]);
   });
 });

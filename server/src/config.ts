@@ -154,4 +154,16 @@ export const config = {
   get appUrl(): string {
     return (this.uiOrigins[0] ?? "http://localhost:3000").replace(/\/+$/, "");
   },
+  /** Outgoing mail for invites and password resets, like smtps://user:pass@smtp.resend.com:465. Unset: no email. */
+  get smtpUrl(): string | undefined {
+    return process.env.SMTP_URL || undefined;
+  },
+  /** The From of every email, like "Orion <no-reply@acme.com>". The domain must be verified with the SMTP provider. */
+  get mailFrom(): string {
+    return process.env.MAIL_FROM || "Orion <no-reply@localhost>";
+  },
+  /** Invites and resets go out by email. Off: admins copy the links by hand and people ask them for resets. */
+  get mailOn(): boolean {
+    return !!this.smtpUrl;
+  },
 };

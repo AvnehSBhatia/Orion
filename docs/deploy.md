@@ -105,6 +105,24 @@ Keep the dashboard and the API on sibling subdomains of one registrable domain (
 
 `UI_ORIGIN` must be exactly `https://app.<domain>`, because it drives CORS and the CSRF origin check.
 
+## Email
+
+Orion emails invite links and password reset links, and people can reset their own password from the sign-in page. It sends through any SMTP provider. Without email the app still works: admins copy invite and reset links by hand, and "Forgot your password?" tells people to ask their admin.
+
+1. Pick a provider. Resend's free tier (3,000 emails a month) is plenty; Postmark, Amazon SES, and a Google Workspace account work too.
+2. Verify your domain with the provider: add the SPF and DKIM DNS records it gives you (and a DMARC record if it suggests one). Without them most mail lands in spam or is refused.
+3. Set two values in `deploy/.env` (or `/etc/orion/orion.env`) and restart the server:
+
+```sh
+# Resend: the username is "resend", the password is an API key.
+SMTP_URL=smtps://resend:re_xxxxxxxx@smtp.resend.com:465
+MAIL_FROM="Orion <no-reply@acme.com>"
+```
+
+Use `smtps://` with port 465 (TLS from the start) or `smtp://` with port 587 (STARTTLS). URL-encode special characters in the password (`@` is `%40`). `MAIL_FROM` must be on the verified domain; the server refuses to start with `SMTP_URL` set and no `MAIL_FROM`.
+
+To check it, invite yourself at a second address from Admin, People. The panel says whether the email was sent; when it was not, the server log has a `[mail]` line with the reason. Links and tokens are never logged in production.
+
 ## First admin
 
 Accounts are created with `server/scripts/account.ts` on the box. It writes `auth.db` and the org file directly, so run it where the server's `DATA_DIR` is.
@@ -131,7 +149,7 @@ Notes:
 
 - Wrap the password in single quotes and clear your shell history afterwards (`history -d`), or prefix the command with a space if `HISTCONTROL=ignorespace` is set.
 - To issue an API token for CI or MCP, run `account.ts token --username mina --label "ci"`. The token is shown once.
-- Then sign in at `https://app.<domain>`. Invite the rest of the team from the dashboard once the invite flow ships; until then, use `account.ts create` without `--admin`.
+- Then sign in at `https://app.<domain>` and invite the rest of the team from Admin, People (by email once [Email](#email) is set up, or by copying the link).
 
 ## Mac app releases
 

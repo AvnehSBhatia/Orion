@@ -14,6 +14,7 @@ import type {
   ChatResponse,
   ChatTurn,
   CreatedInvite,
+  ForgotAnswer,
   CreatedToken,
   DashboardResponse,
   DashboardSpec,
@@ -30,6 +31,7 @@ import type {
   OrgSettings,
   OrgSummary,
   PilotPerson,
+  ResetLink,
   SourceDetail,
   TokenInfo,
   Usage,
@@ -190,6 +192,8 @@ export const api = {
     changePassword: (current: string, next: string) => post<void>("/api/auth/password", { current, next }),
     /** Public: set a new password from a reset link. */
     resetPassword: (token: string, password: string) => post<void>("/api/auth/reset", { token, password }),
+    /** Public: email a reset link to the account with this email, if there is one. */
+    forgot: (email: string) => post<ForgotAnswer>("/api/auth/forgot", { email }),
     acceptInvite: (body: { token: string; username: string; password: string; name: string; role: string; email?: string }) =>
       post<LoginResponse>("/api/auth/accept-invite", body),
   },
@@ -197,11 +201,11 @@ export const api = {
     list: () => request<{ accounts: Account[] }>("/api/auth/accounts"),
     update: (username: string, change: Partial<Pick<Account, "admin" | "disabled" | "email">>) =>
       patch<{ account: Account }>(`/api/auth/accounts/${seg(username)}`, change),
-    resetLink: (username: string) => post<{ resetUrl: string; expiresAt: string }>(`/api/auth/accounts/${seg(username)}/reset`),
+    resetLink: (username: string) => post<ResetLink>(`/api/auth/accounts/${seg(username)}/reset`),
   },
   invites: {
     list: () => request<{ invites: Invite[] }>("/api/auth/invites"),
-    create: (body: { admin?: boolean; role?: string }) => post<CreatedInvite>("/api/auth/invites", body),
+    create: (body: { admin?: boolean; role?: string; email?: string; name?: string }) => post<CreatedInvite>("/api/auth/invites", body),
     revoke: (id: string) => del<void>(`/api/auth/invites/${seg(id)}`),
     /** Public: which org an invite link is for. */
     lookup: (token: string) => request<InviteLookup>(`/api/auth/invites/${seg(token)}`),

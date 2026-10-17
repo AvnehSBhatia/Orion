@@ -114,6 +114,8 @@ const CASES: Case[] = [
   { key: "POST /api/auth/invites", call: () => ({ body: { admin: false } }), adminOnly: true, otherOrg: 200 },
   { key: "GET /api/auth/invites/[key]", call: (f) => ({ params: { key: f.inviteToken } }), anon: 200, otherOrg: "skip" },
   { key: "DELETE /api/auth/invites/[key]", call: (f) => ({ params: { key: f.inviteId } }), adminOnly: true, otherOrg: 404, admin: 204 },
+  // Public, and the same 200 for every email (no SMTP in tests: sent is "not_configured").
+  { key: "POST /api/auth/forgot", call: () => ({ body: { email: "priya@acme.test" } }), anon: 200, otherOrg: "skip", member: 200, admin: 200 },
   { key: "POST /api/auth/login", call: () => ({ body: { username: "devon", password: "password1" } }), anon: 200, otherOrg: "skip" },
   { key: "POST /api/auth/logout", anon: 200, otherOrg: "skip" },
   { key: "GET /api/auth/me", otherOrg: "skip", member: 200 },

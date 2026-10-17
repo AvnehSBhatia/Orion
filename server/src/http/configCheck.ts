@@ -28,6 +28,9 @@ export function checkConfig(env: NodeJS.ProcessEnv = process.env): ConfigReport 
     if (config.embedProvider === "gemma") warnings.push("OPENROUTER_API_KEY is not set: extraction and chat will fail (embeddings still run on Gemma)");
     else problem(`OPENROUTER_API_KEY is required (EMBED_PROVIDER=${config.embedProvider}, extraction, and chat)`);
   }
+  if (!config.mailOn) {
+    if (production) warnings.push("SMTP_URL is not set: invites and password resets are not emailed (admins copy the links by hand)");
+  } else if (!process.env.MAIL_FROM) problem("MAIL_FROM must be set when SMTP_URL is, to an address on a domain verified with the SMTP provider");
   return { errors, warnings };
 }
 
